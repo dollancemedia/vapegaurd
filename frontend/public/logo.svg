@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="50" fill="#282c34"/>
+  <g transform="translate(56, 56) scale(0.78)">
+    <!-- Sensor icon -->
+    <circle cx="256" cy="256" r="150" fill="none" stroke="#61dafb" stroke-width="20" stroke-dasharray="30 15" />
+    
+    <!-- Vapor waves -->
+    <path d="M150,300 C150,240 362,240 362,180" stroke="white" stroke-width="15" fill="none" stroke-linecap="round"/>
+    <path d="M170,330 C170,270 342,270 342,210" stroke="white" stroke-width="12" fill="none" stroke-linecap="round"/>
+    <path d="M190,350 C190,290 322,290 322,230" stroke="white" stroke-width="9" fill="none" stroke-linecap="round"/>
+    
+    <!-- Center dot -->
+    <circle cx="256" cy="256" r="30" fill="#61dafb"/>
+  </g>
+</svg>
