@@ -1,3 +1,4 @@
+#skibidi test 123
 import pandas as pd
 import numpy as np
 import xgboost as xgb
@@ -36,7 +37,7 @@ fire_data = {
     'volume_spike': np.random.normal(70, 12, n_fire).clip(40, 100),
     'result': np.ones(n_fire)
 }
-
+ # Ensure fire data has some overlap with normal data
 # Combine and shuffle
 df_realistic = pd.concat([
     pd.DataFrame(normal_data),
