@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+motor
+python-dotenv
+xgboost
+scikit-learn
+joblib
+pandas
+numpy
+category_encoders
+
