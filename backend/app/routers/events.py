@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Body
 from app.database import db
 from app.inference import predict
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from bson import ObjectId
 
 router = APIRouter()
@@ -63,3 +63,33 @@ async def verify_event(event_id: str, verified: bool = Body(...)):
         return updated_doc
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating event: {str(e)}")
+
+@router.post("/{event_id}/feedback", response_model=dict)
+async def add_event_feedback(event_id: str, feedback: Dict[str, Any] = Body(...)):
+    """Add user feedback for an event"""
+    try:
+        # Ensure the event exists
+        event = await db.events.find_one({"_id": ObjectId(event_id)})
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        # Add timestamp to feedback
+        feedback["timestamp"] = datetime.utcnow().isoformat()
+        
+        # Add event reference to feedback
+        feedback["event_id"] = event_id
+        
+        # Insert feedback into feedback collection
+        result = await db.feedback.insert_one(feedback)
+        
+        # Update the event with a reference to this feedback
+        await db.events.update_one(
+            {"_id": ObjectId(event_id)},
+            {"$push": {"feedback_ids": str(result.inserted_id)}}
+        )
+        
+        # Return the feedback with string ID
+        feedback["_id"] = str(result.inserted_id)
+        return feedback
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error adding feedback: {str(e)}")

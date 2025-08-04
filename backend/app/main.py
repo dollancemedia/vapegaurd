@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from app.routers.events import router as events_router
+from app.routers.devices import router as devices_router
 
 app = FastAPI(title="Vape/Fire Detection API")
 
@@ -14,3 +15,4 @@ app.add_middleware(
 )
 
 app.include_router(events_router, prefix="/api/events", tags=["events"])
+app.include_router(devices_router, prefix="/api/devices", tags=["devices"])
