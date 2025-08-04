@@ -78,3 +78,6 @@ coverage.xml
 # Database
 *.sqlite3
 *.db
+
+#mongo
+backend/.env

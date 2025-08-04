@@ -33,7 +33,7 @@ const Dashboard = () => {
       socket.close();
     }
     
-    const newSocket = io('http://localhost:5000', {
+    const newSocket = io('http://localhost:8000', {
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 5000,
@@ -170,14 +170,14 @@ const Dashboard = () => {
       console.log('Fetching data from backend...');
       
       // Fetch recent events
-      console.log('Fetching events from http://localhost:5000/api/events?limit=10');
-      const eventsResponse = await axios.get('http://localhost:5000/api/events?limit=10');
+      console.log('Fetching events from http://localhost:8000/api/events?limit=10');
+      const eventsResponse = await axios.get('http://localhost:8000/api/events?limit=10');
       console.log('Events response:', eventsResponse.data);
       setEvents(eventsResponse.data);
 
       // Fetch recent sensor data
-      console.log('Fetching sensor data from http://localhost:5000/api/sensor-data');
-      const sensorResponse = await axios.get('http://localhost:5000/api/sensor-data');
+      console.log('Fetching sensor data from http://localhost:8000/api/sensor-data');
+      const sensorResponse = await axios.get('http://localhost:8000/api/sensor-data');
       console.log('Sensor data response:', sensorResponse.data);
       
       if (sensorResponse.data && Array.isArray(sensorResponse.data)) {
@@ -276,6 +276,21 @@ const Dashboard = () => {
 
   // Loading state for UI components
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Handle event updates (like verification status changes)
+  const handleEventUpdate = (updatedEvent) => {
+    setEvents(prevEvents => {
+      return prevEvents.map(event => {
+        // Match by _id if available, otherwise by id or timestamp
+        if ((event._id && event._id === updatedEvent._id) || 
+            (event.id && event.id === updatedEvent.id) || 
+            (event.timestamp === updatedEvent.timestamp)) {
+          return updatedEvent;
+        }
+        return event;
+      });
+    });
+  };
 
   return (
     <div className="dashboard">
@@ -322,7 +337,11 @@ const Dashboard = () => {
         
         <div className="row mt-4">
           <div className="col-12">
-            <EventsTable events={events} isLoading={isLoading} />
+            <EventsTable 
+              events={events} 
+              isLoading={isLoading} 
+              onEventUpdate={handleEventUpdate} 
+            />
           </div>
         </div>
       </div>

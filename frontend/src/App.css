@@ -407,6 +407,25 @@ main {
   text-transform: capitalize;
 }
 
+/* Event Verification */
+.form-check {
+  display: flex;
+  align-items: center;
+}
+
+.form-check-input {
+  margin-right: 0.5rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  cursor: pointer;
+}
+
+.form-check-label {
+  margin-bottom: 0;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
 .alert-warning .event-type-badge {
   background-color: #fff7ed;
   color: #b45309;

@@ -1,6 +1,7 @@
 import React from 'react';
+import axios from 'axios';
 
-const EventsTable = ({ events, isLoading }) => {
+const EventsTable = ({ events, isLoading, onEventUpdate }) => {
   // Helper function to determine alert class based on event type
   const getAlertClass = (type) => {
     switch (type) {
@@ -24,6 +25,32 @@ const EventsTable = ({ events, isLoading }) => {
         return '✓';
     }
   };
+  
+  // Handle verification checkbox change
+  const handleVerificationChange = async (event, verified) => {
+    try {
+      // If we have an _id, this is from the backend
+      if (event._id) {
+        const response = await axios.put(`http://localhost:8000/api/events/${event._id}/verify`, {
+          verified: verified
+        });
+        
+        // If we have an onEventUpdate callback, call it with the updated event
+        if (onEventUpdate && response.data) {
+          onEventUpdate(response.data);
+        }
+      } else {
+        // For sample data or events without an ID, just update the local state
+        const updatedEvent = { ...event, verified };
+        if (onEventUpdate) {
+          onEventUpdate(updatedEvent);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating event verification:', error);
+      alert('Failed to update verification status. Please try again.');
+    }
+  };
 
   return (
     <div className="card">
@@ -42,6 +69,7 @@ const EventsTable = ({ events, isLoading }) => {
                   <th>Confidence</th>
                   <th>Location</th>
                   <th>Device ID</th>
+                  <th>Verified</th>
                 </tr>
               </thead>
               <tbody>
@@ -65,6 +93,23 @@ const EventsTable = ({ events, isLoading }) => {
                     </td>
                     <td>{event.location}</td>
                     <td>{event.device_id}</td>
+                    <td>
+                      <div className="form-check">
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          id={`verified-${event._id || event.id || event.timestamp}`}
+                          checked={event.verified || false}
+                          onChange={(e) => handleVerificationChange(event, e.target.checked)}
+                        />
+                        <label 
+                          className="form-check-label" 
+                          htmlFor={`verified-${event._id || event.id || event.timestamp}`}
+                        >
+                          {event.verified ? 'Verified' : 'Not verified'}
+                        </label>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
