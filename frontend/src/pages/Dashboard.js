@@ -7,6 +7,7 @@ import io from 'socket.io-client';
 import SensorReadings from '../components/SensorReadings';
 import LatestReading from '../components/LatestReading';
 import EventsTable from '../components/EventsTable';
+import DeviceSummary from '../components/DeviceSummary';
 import StatusIndicator from '../components/StatusIndicator';
 import ConnectionErrorMessage from '../components/ConnectionErrorMessage';
 import DataSourceIndicator from '../components/DataSourceIndicator';
@@ -342,6 +343,12 @@ const Dashboard = () => {
               isLoading={isLoading} 
               onEventUpdate={handleEventUpdate} 
             />
+          </div>
+        </div>
+        
+        <div className="row mt-4">
+          <div className="col-12">
+            <DeviceSummary />
           </div>
         </div>
       </div>

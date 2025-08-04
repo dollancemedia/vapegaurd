@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import axios from 'axios';
+import EventFeedback from './EventFeedback';
 
 const EventsTable = ({ events, isLoading, onEventUpdate }) => {
   // Helper function to determine alert class based on event type
@@ -70,6 +71,7 @@ const EventsTable = ({ events, isLoading, onEventUpdate }) => {
                   <th>Location</th>
                   <th>Device ID</th>
                   <th>Verified</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -109,6 +111,15 @@ const EventsTable = ({ events, isLoading, onEventUpdate }) => {
                           {event.verified ? 'Verified' : 'Not verified'}
                         </label>
                       </div>
+                    </td>
+                    <td>
+                      <EventFeedback 
+                        event={event} 
+                        onFeedbackSubmitted={(feedback) => {
+                          console.log('Feedback submitted:', feedback);
+                          // You could update the event here if needed
+                        }} 
+                      />
                     </td>
                   </tr>
                 ))}
