@@ -29,7 +29,7 @@
     }
   ],
   "env": {
-    "MONGODB_URI": "@mongodb_uri",
-    "DATABASE_NAME": "@database_name"
+    "MONGODB_URI": "mongodb+srv://vape_user:00i4UfE7eNQg3MeF@vape-alert.xntahp3.mongodb.net/?retryWrites=true&w=majority&appName=vape-alert",
+    "DATABASE_NAME": "vape-alert"
   }
 }
