@@ -32,7 +32,8 @@ const EventsTable = ({ events, isLoading, onEventUpdate }) => {
     try {
       // If we have an _id, this is from the backend
       if (event._id) {
-        const response = await axios.put(`http://localhost:8000/api/events/${event._id}/verify`, {
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+        const response = await axios.put(`${apiUrl}/events/${event._id}/verify`, {
           verified: verified
         });
         
@@ -49,7 +50,7 @@ const EventsTable = ({ events, isLoading, onEventUpdate }) => {
       }
     } catch (error) {
       console.error('Error updating event verification:', error);
-      alert('Failed to update verification status. Please try again.');
+      console.error('Failed to update verification status. Please try again.'); // Removed popup alert
     }
   };
 

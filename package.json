@@ -1,0 +1,18 @@
+{
+  "name": "vape-detection-system",
+  "version": "1.0.0",
+  "description": "IoT-based vape detection system with ESP32-C6, FastAPI backend, XGBoost ML model, and React frontend",
+  "scripts": {
+    "build": "node build.js",
+    "start": "cd frontend && npm start",
+    "install-frontend": "cd frontend && npm install",
+    "install-backend": "cd backend && pip install -r requirements.txt",
+    "vercel-build": "cd frontend && npm install && npm run build"
+  },
+  "keywords": ["iot", "vape-detection", "esp32", "fastapi", "react", "xgboost", "mongodb"],
+  "author": "Your Name",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

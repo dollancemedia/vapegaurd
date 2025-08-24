@@ -16,7 +16,7 @@ from datetime import datetime
 import requests
 
 # Default configuration
-DEFAULT_API_URL = "http://localhost:5000/api/sensors/data"
+DEFAULT_API_URL = "http://localhost:8000/api/sensors/data"
 DEFAULT_INTERVAL = 5  # seconds
 DEFAULT_DEVICE_ID = str(uuid.uuid4())[:8]  # Generate a random device ID
 

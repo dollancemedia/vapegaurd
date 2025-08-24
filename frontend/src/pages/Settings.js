@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import TestAlertButton from '../components/TestAlertButton';
-import SchoolNotificationSystem from '../components/SchoolNotificationSystem';
+// import SchoolNotificationSystem from '../components/SchoolNotificationSystem'; // DISABLED - removed popup notifications
 
 const Settings = () => {
   const [events, setEvents] = useState([]);
@@ -11,7 +11,7 @@ const Settings = () => {
     smsAlerts: false,
     alertThreshold: 70
   });
-  const notificationSystemRef = useRef(null);
+  // const notificationSystemRef = useRef(null); // DISABLED - removed popup notifications
 
   // Handle test alerts for demonstration
   const handleTestAlert = useCallback((testEvent) => {
@@ -20,12 +20,13 @@ const Settings = () => {
     setEvents(prevEvents => [testEvent, ...prevEvents.slice(0, 4)]); // Keep only 5 test events
   }, []);
 
-  // Handle direct alert notifications (bypassing events array)
+  // Handle direct alert notifications (bypassing events array) - DISABLED
   const handleDirectAlert = useCallback((testEvent) => {
-    console.log('Direct alert triggered:', testEvent);
-    if (notificationSystemRef.current) {
-      notificationSystemRef.current.triggerAlert(testEvent);
-    }
+    console.log('Direct alert triggered (DISABLED):', testEvent);
+    // Notification system disabled - no popup alerts will be shown
+    // if (notificationSystemRef.current) {
+    //   notificationSystemRef.current.triggerAlert(testEvent);
+    // }
   }, []);
 
   const handleSettingChange = (setting, value) => {
@@ -41,12 +42,12 @@ const Settings = () => {
 
   return (
     <div className="settings-page">
-      {/* School Notification System for testing */}
-      <SchoolNotificationSystem 
+      {/* School Notification System - DISABLED to remove popup notifications */}
+      {/* <SchoolNotificationSystem 
         ref={notificationSystemRef}
         events={events} 
         isConnected={true} 
-      />
+      /> */}
       
       <div className="container">
         <div className="settings-header">

@@ -19,8 +19,9 @@ const EventFeedback = ({ event, onFeedbackSubmitted }) => {
         throw new Error('Invalid event data');
       }
 
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
       const response = await axios.post(
-        `http://localhost:8000/api/events/${event._id}/feedback`,
+        `${apiUrl}/events/${event._id}/feedback`,
         { feedback_type: feedbackType, notes }
       );
 

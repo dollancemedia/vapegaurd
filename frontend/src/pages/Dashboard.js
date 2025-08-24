@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 import io from 'socket.io-client';
@@ -7,12 +7,11 @@ import io from 'socket.io-client';
 import SensorReadings from '../components/SensorReadings';
 import LatestReading from '../components/LatestReading';
 import EventsTable from '../components/EventsTable';
-import DeviceSummary from '../components/DeviceSummary';
 import StatusIndicator from '../components/StatusIndicator';
 import ConnectionErrorMessage from '../components/ConnectionErrorMessage';
 import DataSourceIndicator from '../components/DataSourceIndicator';
 import RefreshButton from '../components/RefreshButton';
-import SchoolNotificationSystem from '../components/SchoolNotificationSystem';
+// import SchoolNotificationSystem from '../components/SchoolNotificationSystem'; // DISABLED - removed popup notifications
 
 
 // Register ChartJS components
@@ -25,7 +24,7 @@ const Dashboard = () => {
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isUsingSampleData, setIsUsingSampleData] = useState(false);
-  const notificationSystemRef = useRef(null);
+  // const notificationSystemRef = useRef(null); // DISABLED - removed popup notifications
 
   // Function to initialize Socket.IO connection
   const initializeSocket = useCallback(() => {
@@ -34,7 +33,7 @@ const Dashboard = () => {
       socket.close();
     }
     
-    const newSocket = io('http://localhost:8000', {
+    const newSocket = io(process.env.REACT_APP_WS_URL || 'http://localhost:8000', {
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 5000,
@@ -295,12 +294,12 @@ const Dashboard = () => {
 
   return (
     <div className="dashboard">
-      {/* School Notification System - Fixed position overlay */}
-      <SchoolNotificationSystem 
+      {/* School Notification System - DISABLED to remove popup notifications */}
+      {/* <SchoolNotificationSystem 
         ref={notificationSystemRef}
         events={events} 
         isConnected={isConnected} 
-      />
+      /> */}
       
       <div className="container">
         <div className="dashboard-header">
@@ -343,12 +342,6 @@ const Dashboard = () => {
               isLoading={isLoading} 
               onEventUpdate={handleEventUpdate} 
             />
-          </div>
-        </div>
-        
-        <div className="row mt-4">
-          <div className="col-12">
-            <DeviceSummary />
           </div>
         </div>
       </div>

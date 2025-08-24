@@ -10,7 +10,8 @@ const DeviceSummary = () => {
     const fetchDevices = async () => {
       setIsLoading(true);
       try {
-        const response = await axios.get('http://localhost:8000/api/devices');
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+        const response = await axios.get(`${apiUrl}/devices`);
         setDevices(response.data);
         setError(null);
       } catch (err) {

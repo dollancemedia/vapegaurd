@@ -31,16 +31,47 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
     }
     
     // Check if this is a new high-confidence vape or fire event
-    if (latestEvent.id !== lastEventId && 
+    // Use a more reliable way to track if we've processed this event
+    const eventIdentifier = latestEvent.id || latestEvent.timestamp;
+    
+    // Check if we've already processed this event
+    const alreadyProcessed = activeAlerts.some(alert => {
+      const alertEventId = alert.event.id || alert.event.timestamp;
+      return alertEventId === eventIdentifier && alert.event.type === latestEvent.type;
+    });
+    
+    if (!alreadyProcessed && 
+        eventIdentifier !== lastEventId && 
         (latestEvent.type === 'vape' || latestEvent.type === 'fire') &&
         latestEvent.confidence >= 70) {
       
       triggerSchoolAlert(latestEvent);
-      setLastEventId(latestEvent.id);
+      setLastEventId(eventIdentifier);
     }
-  }, [events, lastEventId]);
+  }, [events, lastEventId, activeAlerts]);
 
   const triggerSchoolAlert = (event) => {
+    // More robust duplicate detection
+    const eventIdentifier = event.id || event.timestamp;
+    
+    // Check if we already have an alert for this event to prevent duplicates
+    const existingAlertIndex = activeAlerts.findIndex(alert => {
+      const alertEventId = alert.event.id || alert.event.timestamp;
+      return alertEventId === eventIdentifier && alert.event.type === event.type;
+    });
+    
+    // If this event already has an alert, don't create a new one
+    if (existingAlertIndex >= 0) {
+      console.log('Alert already exists for this event, not creating duplicate');
+      return;
+    }
+    
+    // Also check if this is the same as lastEventId to prevent duplicates
+    if (eventIdentifier === lastEventId) {
+      console.log('This event was just processed, not creating duplicate');
+      return;
+    }
+    
     const alertId = `alert-${Date.now()}`;
     const newAlert = {
       id: alertId,
@@ -60,16 +91,6 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
     alertTimeoutRef.current[alertId] = setTimeout(() => {
       dismissAlert(alertId);
     }, 30000);
-
-    // Show browser notification if supported
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(`🚨 ${event.type.toUpperCase()} DETECTED`, {
-        body: `Location: ${event.location}\nConfidence: ${event.confidence}%\nTime: ${new Date(event.timestamp).toLocaleTimeString()}`,
-        icon: '/favicon.svg',
-        tag: alertId,
-        requireInteraction: true
-      });
-    }
   };
 
   const playAlertSound = (eventType) => {
@@ -109,9 +130,18 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
       clearTimeout(alertTimeoutRef.current[alertId]);
       delete alertTimeoutRef.current[alertId];
     }
+    
+    // Set a timeout to automatically dismiss the acknowledged alert after 5 seconds
+    alertTimeoutRef.current[alertId] = setTimeout(() => {
+      dismissAlert(alertId);
+    }, 5000);
   };
 
   const dismissAlert = (alertId) => {
+    // Find the alert we're dismissing to get its event info
+    const alertToDismiss = activeAlerts.find(alert => alert.id === alertId);
+    
+    // Remove the alert from state
     setActiveAlerts(prev => prev.filter(alert => alert.id !== alertId));
     
     // Clear timeout if exists
@@ -119,13 +149,23 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
       clearTimeout(alertTimeoutRef.current[alertId]);
       delete alertTimeoutRef.current[alertId];
     }
-  };
-
-  const requestNotificationPermission = async () => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      await Notification.requestPermission();
+    
+    // If this was the last alert for this event, reset lastEventId to allow new alerts for this event
+    if (alertToDismiss && alertToDismiss.event && alertToDismiss.event.id === lastEventId) {
+      // Check if there are no other alerts for this event
+      const otherAlertsForSameEvent = activeAlerts.filter(alert => 
+        alert.id !== alertId && 
+        alert.event.id === alertToDismiss.event.id
+      );
+      
+      if (otherAlertsForSameEvent.length === 0) {
+        // Reset lastEventId to allow new alerts for this event
+        setLastEventId(null);
+      }
     }
   };
+
+  // No longer needed since we're only using in-app notifications
 
   const getAlertIcon = (eventType) => {
     switch (eventType) {
@@ -156,15 +196,6 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
             />
             <span>🔊 Sound Alerts</span>
           </label>
-          
-          {('Notification' in window && Notification.permission !== 'granted') && (
-            <button 
-              className="btn btn-sm btn-outline"
-              onClick={requestNotificationPermission}
-            >
-              📱 Enable Browser Notifications
-            </button>
-          )}
         </div>
       </div>
 
@@ -177,7 +208,8 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
               className={`school-alert ${alert.event.type}-alert ${alert.acknowledged ? 'acknowledged' : 'active'}`}
               style={{
                 borderLeftColor: getAlertColor(alert.event.type),
-                backgroundColor: alert.acknowledged ? '#f9fafb' : '#ffffff'
+                backgroundColor: alert.acknowledged ? '#f9fafb' : '#ffffff',
+                zIndex: alert.acknowledged ? 1 : 2 // Ensure unacknowledged alerts appear on top
               }}
             >
               <div className="alert-header">
@@ -190,14 +222,22 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
                   {!alert.acknowledged && (
                     <button
                       className="btn-acknowledge"
-                      onClick={() => acknowledgeAlert(alert.id)}
+                      onClick={(e) => {
+                        e.stopPropagation(); // Stop event propagation
+                        acknowledgeAlert(alert.id);
+                      }}
+                      style={{ position: 'relative', zIndex: 10 }} // Ensure button is clickable
                     >
                       ✓ Acknowledge
                     </button>
                   )}
                   <button
                     className="btn-dismiss"
-                    onClick={() => dismissAlert(alert.id)}
+                    onClick={(e) => {
+                      e.stopPropagation(); // Stop event propagation
+                      dismissAlert(alert.id);
+                    }}
+                    style={{ position: 'relative', zIndex: 10 }} // Ensure button is clickable
                   >
                     ✕
                   </button>
