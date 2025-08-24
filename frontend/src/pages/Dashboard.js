@@ -95,77 +95,78 @@ const Dashboard = () => {
     };
   }, [socket]);
 
-  // Sample data for when backend is not available
-  const sampleSensorData = [
-    {
-      device_id: 'sample-device-01',
-      humidity: 45.5,
-      pm25: 26.9,
-      particle_size: 282.5,
-      volume_spike: 46.9,
-      timestamp: new Date().toISOString(),
-      prediction: { type: 'normal', confidence: 55 }
-    },
-    {
-      device_id: 'sample-device-01',
-      humidity: 48.2,
-      pm25: 28.4,
-      particle_size: 290.1,
-      volume_spike: 48.3,
-      timestamp: new Date(Date.now() - 5000).toISOString(),
-      prediction: { type: 'normal', confidence: 60 }
-    },
-    {
-      device_id: 'sample-device-01',
-      humidity: 52.7,
-      pm25: 35.6,
-      particle_size: 310.8,
-      volume_spike: 55.2,
-      timestamp: new Date(Date.now() - 10000).toISOString(),
-      prediction: { type: 'vape', confidence: 75 }
-    },
-    {
-      device_id: 'sample-device-01',
-      humidity: 50.1,
-      pm25: 32.3,
-      particle_size: 300.5,
-      volume_spike: 52.1,
-      timestamp: new Date(Date.now() - 15000).toISOString(),
-      prediction: { type: 'fire', confidence: 85 }
-    },
-    {
-      device_id: 'sample-device-01',
-      humidity: 47.8,
-      pm25: 27.5,
-      particle_size: 285.3,
-      volume_spike: 47.5,
-      timestamp: new Date(Date.now() - 20000).toISOString(),
-      prediction: { type: 'normal', confidence: 58 }
-    }
-  ];
-
-  const sampleEvents = [
-    {
-      id: 'sample-event-01',
-      device_id: 'sample-device-01',
-      type: 'vape',
-      confidence: 75,
-      location: 'Bathroom',
-      timestamp: new Date(Date.now() - 10000).toISOString()
-    },
-    {
-      id: 'sample-event-02',
-      device_id: 'sample-device-01',
-      type: 'fire',
-      confidence: 85,
-      location: 'Kitchen',
-      timestamp: new Date(Date.now() - 15000).toISOString()
-    }
-  ];
-
   // Function to fetch data from the backend
   const fetchData = useCallback(async () => {
     setIsLoading(true);
+    
+    // Sample data for when backend is not available
+    const sampleSensorData = [
+      {
+        device_id: 'sample-device-01',
+        humidity: 45.5,
+        pm25: 26.9,
+        particle_size: 282.5,
+        volume_spike: 46.9,
+        timestamp: new Date().toISOString(),
+        prediction: { type: 'normal', confidence: 55 }
+      },
+      {
+        device_id: 'sample-device-01',
+        humidity: 48.2,
+        pm25: 28.4,
+        particle_size: 290.1,
+        volume_spike: 48.3,
+        timestamp: new Date(Date.now() - 5000).toISOString(),
+        prediction: { type: 'normal', confidence: 60 }
+      },
+      {
+        device_id: 'sample-device-01',
+        humidity: 52.7,
+        pm25: 35.6,
+        particle_size: 310.8,
+        volume_spike: 55.2,
+        timestamp: new Date(Date.now() - 10000).toISOString(),
+        prediction: { type: 'vape', confidence: 75 }
+      },
+      {
+        device_id: 'sample-device-01',
+        humidity: 50.1,
+        pm25: 32.3,
+        particle_size: 300.5,
+        volume_spike: 52.1,
+        timestamp: new Date(Date.now() - 15000).toISOString(),
+        prediction: { type: 'fire', confidence: 85 }
+      },
+      {
+        device_id: 'sample-device-01',
+        humidity: 47.8,
+        pm25: 27.5,
+        particle_size: 285.3,
+        volume_spike: 47.5,
+        timestamp: new Date(Date.now() - 20000).toISOString(),
+        prediction: { type: 'normal', confidence: 58 }
+      }
+    ];
+
+    const sampleEvents = [
+      {
+        id: 'sample-event-01',
+        device_id: 'sample-device-01',
+        type: 'vape',
+        confidence: 75,
+        location: 'Bathroom',
+        timestamp: new Date(Date.now() - 10000).toISOString()
+      },
+      {
+        id: 'sample-event-02',
+        device_id: 'sample-device-01',
+        type: 'fire',
+        confidence: 85,
+        location: 'Kitchen',
+        timestamp: new Date(Date.now() - 15000).toISOString()
+      }
+    ];
+    
     try {
       // console.log('Fetching data from backend...');
       
@@ -205,7 +206,7 @@ const Dashboard = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [sampleSensorData, sampleEvents]); // Include dependencies
+  }, []); // No external dependencies needed
 
 
 

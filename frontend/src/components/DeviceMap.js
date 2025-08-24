@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 
 const DeviceMap = ({ devices, selectedDevice, onDeviceSelect }) => {
 
@@ -59,19 +59,7 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect }) => {
     setHoveredDevice(null);
   };
 
-  // Update map dimensions on resize
-  useEffect(() => {
-    const updateDimensions = () => {
-      if (mapContainerRef.current) {
-        const { width, height } = mapContainerRef.current.getBoundingClientRect();
-        setMapDimensions({ width, height });
-      }
-    };
-
-    updateDimensions();
-    window.addEventListener('resize', updateDimensions);
-    return () => window.removeEventListener('resize', updateDimensions);
-  }, []);
+  // Map dimensions update removed - was unused
 
   return (
     <div 
