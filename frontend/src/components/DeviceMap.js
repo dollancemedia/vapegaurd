@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 const DeviceMap = ({ devices, selectedDevice, onDeviceSelect }) => {
-  const [mapDimensions, setMapDimensions] = useState({ width: 800, height: 600 });
+
   const [hoveredDevice, setHoveredDevice] = useState(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const mapContainerRef = useRef(null);

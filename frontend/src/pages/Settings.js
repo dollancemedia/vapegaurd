@@ -15,14 +15,14 @@ const Settings = () => {
 
   // Handle test alerts for demonstration
   const handleTestAlert = useCallback((testEvent) => {
-    console.log('Test alert triggered:', testEvent);
+    // console.log('Test alert triggered:', testEvent);
     // Add the test event to the events list for display
     setEvents(prevEvents => [testEvent, ...prevEvents.slice(0, 4)]); // Keep only 5 test events
   }, []);
 
   // Handle direct alert notifications (bypassing events array) - DISABLED
   const handleDirectAlert = useCallback((testEvent) => {
-    console.log('Direct alert triggered (DISABLED):', testEvent);
+    // console.log('Direct alert triggered (DISABLED):', testEvent);
     // Notification system disabled - no popup alerts will be shown
     // if (notificationSystemRef.current) {
     //   notificationSystemRef.current.triggerAlert(testEvent);

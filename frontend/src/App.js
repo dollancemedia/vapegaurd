@@ -14,7 +14,7 @@ function App() {
           <div className="container">
             <div className="header-content">
               <div className="logo-container">
-                <img src="/logo.svg" dalt="Vape Detection System Logo" className="app-logo" />
+                <img src="/logo.svg" alt="Vape Detection System Logo" className="app-logo" />
                 <h1>VapeGuard</h1>
               </div>
               <nav className="main-nav">

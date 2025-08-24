@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import DeviceMap from '../components/DeviceMap';
 import DeviceList from '../components/DeviceList';
 import DeviceDetailPanel from '../components/DeviceDetailPanel';
@@ -15,7 +15,7 @@ const Devices = () => {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   
   const { devices, loading, error, refreshDevices, pingDevice } = useDevices();
-  const { isConnected, lastMessage } = useWebSocket('/ws/devices/status');
+  const { isConnected } = useWebSocket('/ws/devices/status');
 
   // Handle device selection from map or list
   const handleDeviceSelect = (device) => {

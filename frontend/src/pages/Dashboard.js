@@ -41,17 +41,17 @@ const Dashboard = () => {
     });
     
     newSocket.on('connect', () => {
-      console.log('Connected to Socket.IO server');
+      // console.log('Connected to Socket.IO server');
       setIsConnected(true);
     });
     
     newSocket.on('connect_error', (err) => {
-      console.error('Socket.IO connection error:', err);
+      // console.error('Socket.IO connection error:', err);
       setIsConnected(false);
     });
     
     newSocket.on('disconnect', () => {
-      console.log('Disconnected from Socket.IO server');
+      // console.log('Disconnected from Socket.IO server');
       setIsConnected(false);
     });
     
@@ -167,18 +167,18 @@ const Dashboard = () => {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      console.log('Fetching data from backend...');
+      // console.log('Fetching data from backend...');
       
       // Fetch recent events
-      console.log('Fetching events from http://localhost:8000/api/events?limit=10');
+      // console.log('Fetching events from http://localhost:8000/api/events?limit=10');
       const eventsResponse = await axios.get('http://localhost:8000/api/events?limit=10');
-      console.log('Events response:', eventsResponse.data);
+      // console.log('Events response:', eventsResponse.data);
       setEvents(eventsResponse.data);
 
       // Fetch recent sensor data
-      console.log('Fetching sensor data from http://localhost:8000/api/sensor-data');
+      // console.log('Fetching sensor data from http://localhost:8000/api/sensor-data');
       const sensorResponse = await axios.get('http://localhost:8000/api/sensor-data');
-      console.log('Sensor data response:', sensorResponse.data);
+      // console.log('Sensor data response:', sensorResponse.data);
       
       if (sensorResponse.data && Array.isArray(sensorResponse.data)) {
         setSensorData(sensorResponse.data.reverse());
@@ -187,15 +187,15 @@ const Dashboard = () => {
         }
         setIsUsingSampleData(false);
       } else {
-        console.error('Invalid sensor data format:', sensorResponse.data);
+        // console.error('Invalid sensor data format:', sensorResponse.data);
         throw new Error('Invalid sensor data format');
       }
       
-      console.log('Data fetched successfully');
+      // console.log('Data fetched successfully');
       return true; // Successful fetch
     } catch (error) {
-      console.error('Error fetching data:', error);
-      console.log('Using sample data instead');
+      // console.error('Error fetching data:', error);
+      // console.log('Using sample data instead');
       // Use sample data if backend is not available
       setSensorData(sampleSensorData);
       setLatestReading(sampleSensorData[0]);
@@ -205,7 +205,7 @@ const Dashboard = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []); // Empty dependency array since sampleSensorData and sampleEvents are constants
+  }, [sampleSensorData, sampleEvents]); // Include dependencies
 
 
 
@@ -215,64 +215,9 @@ const Dashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Prepare chart data
-  const chartData = {
-    labels: sensorData.map((data) => {
-      const date = new Date(data.timestamp);
-      return date.toLocaleTimeString();
-    }).reverse(),
-    datasets: [
-      {
-        label: 'PM2.5',
-        data: sensorData.map((data) => data.pm25).reverse(),
-        borderColor: 'rgb(255, 99, 132)',
-        backgroundColor: 'rgba(255, 99, 132, 0.5)',
-      },
-      {
-        label: 'Humidity',
-        data: sensorData.map((data) => data.humidity).reverse(),
-        borderColor: 'rgb(53, 162, 235)',
-        backgroundColor: 'rgba(53, 162, 235, 0.5)',
-      },
-      {
-        label: 'Particle Size',
-        data: sensorData.map((data) => data.particle_size / 10).reverse(), // Scale down for better visualization
-        borderColor: 'rgb(75, 192, 192)',
-        backgroundColor: 'rgba(75, 192, 192, 0.5)',
-      },
-      {
-        label: 'Volume Spike',
-        data: sensorData.map((data) => data.volume_spike).reverse(),
-        borderColor: 'rgb(255, 159, 64)',
-        backgroundColor: 'rgba(255, 159, 64, 0.5)',
-      },
-    ],
-  };
+  // Chart data removed - was unused
 
-  const chartOptions = {
-    responsive: true,
-    plugins: {
-      legend: {
-        position: 'top',
-      },
-      title: {
-        display: true,
-        text: 'Sensor Readings Over Time',
-      },
-    },
-  };
-
-  // Helper function to determine alert class based on event type
-  const getAlertClass = (type) => {
-    switch (type) {
-      case 'vape':
-        return 'alert-warning';
-      case 'fire':
-        return 'alert-danger';
-      default:
-        return 'alert-info';
-    }
-  };
+  // Chart options and alert class helper removed - were unused
 
   // Loading state for UI components
   const [isLoading, setIsLoading] = useState(true);
