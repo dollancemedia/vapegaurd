@@ -1,0 +1,191 @@
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .title { font: bold 16px Arial; fill: #333; }
+      .label { font: 12px Arial; fill: #333; }
+      .pin-label { font: 10px Arial; fill: #666; }
+      .wire { stroke-width: 2; fill: none; }
+      .red-wire { stroke: #ff0000; }
+      .black-wire { stroke: #000000; }
+      .blue-wire { stroke: #0066cc; }
+      .green-wire { stroke: #00cc00; }
+      .yellow-wire { stroke: #ffcc00; }
+      .purple-wire { stroke: #9900cc; }
+      .orange-wire { stroke: #ff6600; }
+      .brown-wire { stroke: #8B4513; }
+    </style>
+  </defs>
+  
+  <!-- Title -->
+  <text x="400" y="25" class="title" text-anchor="middle">ESP32-C6 Vape Detection System Wiring Diagram</text>
+  
+  <!-- ESP32-C6 DevKitC-1 -->
+  <rect x="300" y="200" width="200" height="120" fill="#2E8B57" stroke="#000" stroke-width="2" rx="5"/>
+  <text x="400" y="220" class="label" text-anchor="middle" fill="white">ESP32-C6 DevKitC-1</text>
+  
+  <!-- ESP32 Pins -->
+  <circle cx="320" cy="240" r="3" fill="#FFD700"/>
+  <text x="325" y="245" class="pin-label">3V3</text>
+  
+  <circle cx="320" cy="260" r="3" fill="#000"/>
+  <text x="325" y="265" class="pin-label">GND</text>
+  
+  <circle cx="320" cy="280" r="3" fill="#4169E1"/>
+  <text x="325" y="285" class="pin-label">GPIO0</text>
+  
+  <circle cx="480" cy="240" r="3" fill="#4169E1"/>
+  <text x="470" y="245" class="pin-label">GPIO4</text>
+  
+  <circle cx="480" cy="260" r="3" fill="#4169E1"/>
+  <text x="470" y="265" class="pin-label">GPIO5</text>
+  
+  <circle cx="480" cy="280" r="3" fill="#4169E1"/>
+  <text x="470" y="285" class="pin-label">GPIO5</text>
+  
+  <circle cx="480" cy="300" r="3" fill="#4169E1"/>
+  <text x="470" y="305" class="pin-label">GPIO6</text>
+  
+  <circle cx="320" cy="300" r="3" fill="#4169E1"/>
+  <text x="325" y="305" class="pin-label">GPIO16</text>
+  
+  <circle cx="380" cy="320" r="3" fill="#4169E1"/>
+  <text x="385" y="325" class="pin-label">GPIO17</text>
+  
+  <circle cx="400" cy="320" r="3" fill="#4169E1"/>
+  <text x="405" y="325" class="pin-label">GPIO8</text>
+  
+
+  
+  <!-- BME680 Sensor -->
+  <rect x="50" y="80" width="160" height="80" fill="#8A2BE2" stroke="#000" stroke-width="2" rx="5"/>
+  <text x="130" y="105" class="label" text-anchor="middle" fill="white">BME680</text>
+  <text x="130" y="120" class="pin-label" text-anchor="middle" fill="white">Temp/Humidity/Gas (I2C)</text>
+  
+  <!-- BME680 Pins -->
+  <circle cx="60" cy="140" r="3" fill="#FFD700"/>
+  <text x="35" y="145" class="pin-label">VIN</text>
+  
+  <circle cx="80" cy="140" r="3" fill="#000"/>
+  <text x="55" y="145" class="pin-label">GND</text>
+  
+  <circle cx="100" cy="140" r="3" fill="#4169E1"/>
+  <text x="75" y="145" class="pin-label">SDI</text>
+  
+  <circle cx="120" cy="140" r="3" fill="#4169E1"/>
+  <text x="95" y="145" class="pin-label">SCK</text>
+  
+  <circle cx="140" cy="140" r="3" fill="#FFD700"/>
+  <text x="115" y="145" class="pin-label">CS</text>
+  
+  <circle cx="160" cy="140" r="3" fill="#000"/>
+  <text x="135" y="145" class="pin-label">SDO</text>
+  
+  <!-- PMS5003 Sensor -->
+  <rect x="600" y="80" width="150" height="100" fill="#FF6347" stroke="#000" stroke-width="2" rx="5"/>
+  <text x="675" y="105" class="label" text-anchor="middle" fill="white">PMS5003</text>
+  <text x="675" y="120" class="pin-label" text-anchor="middle" fill="white">Particulate Matter</text>
+  
+  <!-- PMS5003 Pins -->
+  <circle cx="600" cy="140" r="3" fill="#FFD700"/>
+  <text x="575" y="145" class="pin-label">VCC</text>
+  
+  <circle cx="600" cy="160" r="3" fill="#000"/>
+  <text x="575" y="165" class="pin-label">GND</text>
+  
+  <circle cx="750" cy="140" r="3" fill="#9900cc"/>
+  <text x="755" y="145" class="pin-label">TX</text>
+  
+  <circle cx="750" cy="160" r="3" fill="#ff6600"/>
+  <text x="755" y="165" class="pin-label">RX</text>
+  
+  <!-- MAX4466 Microphone -->
+  <rect x="50" y="400" width="120" height="60" fill="#32CD32" stroke="#000" stroke-width="2" rx="5"/>
+  <text x="110" y="425" class="label" text-anchor="middle" fill="white">MAX4466</text>
+  <text x="110" y="440" class="pin-label" text-anchor="middle" fill="white">Microphone</text>
+  
+  <!-- MAX4466 Pins -->
+  <circle cx="170" cy="430" r="3" fill="#FFD700"/>
+  <text x="175" y="435" class="pin-label">VCC</text>
+  
+  <circle cx="170" cy="450" r="3" fill="#000"/>
+  <text x="175" y="455" class="pin-label">GND</text>
+  
+  <circle cx="50" cy="430" r="3" fill="#8B4513"/>
+  <text x="25" y="435" class="pin-label">OUT</text>
+  
+  <!-- LED -->
+  <circle cx="600" cy="400" r="15" fill="#FFD700" stroke="#000" stroke-width="2"/>
+  <text x="600" y="425" class="label" text-anchor="middle">LED</text>
+  
+  <!-- LED Pins -->
+  <circle cx="600" cy="385" r="3" fill="#4169E1"/>
+  <text x="605" y="390" class="pin-label">+</text>
+  
+  <circle cx="600" cy="415" r="3" fill="#000"/>
+  <text x="605" y="420" class="pin-label">-</text>
+  
+
+  
+  <!-- Power Rails -->
+  <line x1="250" y1="50" x2="550" y2="50" stroke="#ff0000" stroke-width="4"/>
+  <text x="400" y="45" class="label" text-anchor="middle" fill="#ff0000">3.3V Rail</text>
+  
+  <line x1="250" y1="550" x2="550" y2="550" stroke="#000" stroke-width="4"/>
+  <text x="400" y="545" class="label" text-anchor="middle">GND Rail</text>
+  
+  <!-- Wiring Connections -->
+  
+  <!-- BME680 Power -->
+  <path d="M 60 140 Q 60 100 250 50 Q 300 50 320 240" class="wire red-wire"/>
+  <path d="M 80 140 Q 80 180 250 550 Q 300 550 320 260" class="wire black-wire"/>
+  
+  <!-- BME680 I2C -->
+  <path d="M 100 140 Q 100 200 480 280" class="wire blue-wire"/>
+  <path d="M 120 140 Q 120 220 480 300" class="wire blue-wire"/>
+  
+  <!-- BME680 CS to 3.3V and SDO to GND -->
+  <path d="M 140 140 Q 140 100 250 50 Q 300 50 320 240" class="wire red-wire"/>
+  <path d="M 160 140 Q 160 180 250 550 Q 300 550 320 260" class="wire black-wire"/>
+  
+  <!-- PMS5003 Power -->
+  <path d="M 600 140 Q 570 140 550 50 Q 500 50 320 240" class="wire red-wire"/>
+  <path d="M 600 160 Q 570 160 550 550 Q 500 550 320 260" class="wire black-wire"/>
+  
+  <!-- PMS5003 UART -->
+  <path d="M 750 140 Q 780 140 780 240 Q 780 200 480 240" class="wire purple-wire"/>
+  <path d="M 750 160 Q 790 160 790 260 Q 790 220 480 260" class="wire orange-wire"/>
+  
+  <!-- MAX4466 Power -->
+  <path d="M 170 430 Q 200 430 250 50 Q 280 50 320 240" class="wire red-wire"/>
+  <path d="M 170 450 Q 200 450 250 550 Q 280 550 320 260" class="wire black-wire"/>
+  
+  <!-- MAX4466 Signal -->
+  <path d="M 50 430 Q 20 430 20 280 Q 20 240 320 280" class="wire brown-wire"/>
+  
+  <!-- LED -->
+  <path d="M 600 385 Q 600 350 400 320" class="wire yellow-wire"/>
+  <path d="M 600 415 Q 600 500 400 550 Q 350 550 320 260" class="wire black-wire"/>
+  
+
+  
+  <!-- Legend -->
+  <rect x="20" y="500" width="200" height="80" fill="#f0f0f0" stroke="#000" stroke-width="1" rx="5"/>
+  <text x="30" y="515" class="label">Wire Color Legend:</text>
+  <line x1="30" y1="525" x2="50" y2="525" class="wire red-wire"/>
+  <text x="55" y="530" class="pin-label">Power (3.3V)</text>
+  <line x1="30" y1="535" x2="50" y2="535" class="wire black-wire"/>
+  <text x="55" y="540" class="pin-label">Ground</text>
+  <line x1="30" y1="545" x2="50" y2="545" class="wire green-wire"/>
+  <text x="55" y="550" class="pin-label">I2C SDA</text>
+  <line x1="30" y1="555" x2="50" y2="555" class="wire blue-wire"/>
+  <text x="55" y="560" class="pin-label">I2C SCL</text>
+  <line x1="120" y1="525" x2="140" y2="525" class="wire purple-wire"/>
+  <text x="145" y="530" class="pin-label">UART TX</text>
+  <line x1="120" y1="535" x2="140" y2="535" class="wire orange-wire"/>
+  <text x="145" y="540" class="pin-label">UART RX</text>
+  <line x1="120" y1="545" x2="140" y2="545" class="wire brown-wire"/>
+  <text x="145" y="550" class="pin-label">Analog</text>
+  <line x1="120" y1="555" x2="140" y2="555" class="wire yellow-wire"/>
+  <text x="145" y="560" class="pin-label">Digital Out</text>
+  
+</svg>

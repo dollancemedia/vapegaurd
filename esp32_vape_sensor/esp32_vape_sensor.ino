@@ -11,30 +11,28 @@
 #include <SPI.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
-#include <SoftwareSerial.h>
 
 // WiFi Configuration
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid = "sweethome";  // Replace with your WiFi network name
+const char* password = "rahul2008";  // Replace with your WiFi password
 
 // API Configuration
-const char* apiEndpoint = "https://your-vercel-app.vercel.app/api/sensors/data";
+const char* apiEndpoint = "https://vapegaurd-x6wi.vercel.app/api/sensors/data";
 // For local testing: "http://localhost:8000/api/sensors/data"
 
-// Pin Definitions
-#define BME_SCK 13
-#define BME_MISO 12
-#define BME_MOSI 11
-#define BME_CS 10
-#define PMS_RX 4            // PMS5003 RX pin
-#define PMS_TX 5            // PMS5003 TX pin
-#define MIC_PIN A0          // MAX4466 microphone (analog)
+// Pin Definitions for ESP32-C6 DevKitC-1
+#define PMS_RX 17           // PMS5003 RX (connect to PMS TX) - Hardware UART
+#define PMS_TX 16           // PMS5003 TX (connect to PMS RX) - Hardware UART
+#define MIC_PIN 0           // MAX4466 microphone (GPIO0 - ADC capable)
 #define LED_PIN 8           // Status LED
-#define BUZZER_PIN 9        // Alert buzzer
+
+// I2C pins for BME680
+#define I2C_SDA 6           // BME680 SDI (I2C SDA)
+#define I2C_SCL 7           // BME680 SCK (I2C SCL)
 
 // Sensor Configuration
 Adafruit_BME680 bme; // I2C
-SoftwareSerial pmsSerial(PMS_RX, PMS_TX);
+HardwareSerial pmsSerial(1); // Use Hardware UART1
 
 // PMS5003 data structure
 struct pms5003data {
@@ -60,6 +58,7 @@ const unsigned long HTTP_TIMEOUT = 5000;     // HTTP request timeout
 // Global Variables
 unsigned long lastSensorRead = 0;
 bool wifiConnected = false;
+bool bme680Available = false;
 int consecutiveFailures = 0;
 const int MAX_FAILURES = 5;
 
@@ -73,23 +72,59 @@ void setup() {
   
   // Initialize pins
   pinMode(LED_PIN, OUTPUT);
-  pinMode(BUZZER_PIN, OUTPUT);
   
-  // Initialize BME680
-  if (!bme.begin()) {
-    Serial.println("Could not find a valid BME680 sensor, check wiring!");
-    while (1);
+  // Initialize I2C for BME680
+  Wire.begin(I2C_SDA, I2C_SCL);
+  
+  // Scan for I2C devices
+  Serial.println("Scanning for I2C devices...");
+  byte error, address;
+  int nDevices = 0;
+  for(address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+    if (error == 0) {
+      Serial.print("I2C device found at address 0x");
+      if (address < 16) Serial.print("0");
+      Serial.println(address, HEX);
+      nDevices++;
+    }
+  }
+  if (nDevices == 0) {
+    Serial.println("No I2C devices found");
+  } else {
+    Serial.println("I2C scan complete");
   }
   
-  // Set up BME680 oversampling and filter initialization
-  bme.setTemperatureOversampling(BME680_OS_8X);
-  bme.setHumidityOversampling(BME680_OS_2X);
-  bme.setPressureOversampling(BME680_OS_4X);
-  bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
-  bme.setGasHeater(320, 150); // 320*C for 150 ms
+  // Initialize BME680 - try both common I2C addresses
+  Serial.println("Attempting BME680 initialization...");
+  if (bme.begin(0x77)) {
+    Serial.println("BME680 sensor found at address 0x77!");
+    bme680Available = true;
+  } else if (bme.begin(0x76)) {
+    Serial.println("BME680 sensor found at address 0x76!");
+    bme680Available = true;
+  } else {
+    Serial.println("Could not find a valid BME680 sensor!");
+    Serial.println("Check wiring: SDA->GPIO6, SCL->GPIO7");
+    Serial.println("Common BME680 I2C addresses: 0x76, 0x77");
+    Serial.println("Continuing without BME680...");
+    bme680Available = false;
+  }
   
-  // Initialize PMS5003
-  pmsSerial.begin(9600);
+  if (bme680Available) {
+    Serial.println("BME680 sensor initialized successfully!");
+    // Set up BME680 oversampling and filter initialization
+    bme.setTemperatureOversampling(BME680_OS_8X);
+    bme.setHumidityOversampling(BME680_OS_2X);
+    bme.setPressureOversampling(BME680_OS_4X);
+    bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+    bme.setGasHeater(320, 150); // 320*C for 150 ms
+  }
+  
+  // Initialize PMS5003 on Hardware UART1 (GPIO16=TX, GPIO17=RX)
+  pmsSerial.begin(9600, SERIAL_8N1, PMS_RX, PMS_TX);
+  Serial.println("PMS5003 initialized on Hardware UART1");
   
   // Initialize WiFi
   connectToWiFi();
@@ -131,12 +166,39 @@ void loop() {
 void connectToWiFi() {
   Serial.println("Connecting to WiFi: " + String(ssid));
   
+  // Simple WiFi reset approach to avoid event queue issues
+  WiFi.disconnect(true);     // Disconnect and clear stored credentials
+  WiFi.mode(WIFI_OFF);       // Turn off WiFi completely
+  delay(3000);               // Extended wait for complete reset
+  
+  // Restart WiFi in station mode
+  WiFi.mode(WIFI_STA);
+  delay(1000);
+  
+  // Set WiFi to use WPA2 only to avoid CCMP replay issues
+  WiFi.setAutoReconnect(false);
+  
+  // Begin connection
   WiFi.begin(ssid, password);
   
   unsigned long startTime = millis();
-  while (WiFi.status() != WL_CONNECTED && (millis() - startTime) < WIFI_TIMEOUT) {
-    delay(500);
-    Serial.print(".");
+  int attempts = 0;
+  const int maxAttempts = 3;
+  
+  while (WiFi.status() != WL_CONNECTED && attempts < maxAttempts) {
+    unsigned long attemptStart = millis();
+    while (WiFi.status() != WL_CONNECTED && (millis() - attemptStart) < 10000) {
+      delay(500);
+      Serial.print(".");
+    }
+    
+    if (WiFi.status() != WL_CONNECTED) {
+      attempts++;
+      Serial.println("\nAttempt " + String(attempts) + " failed. Retrying...");
+      WiFi.disconnect();
+      delay(2000);
+      WiFi.begin(ssid, password);
+    }
   }
   
   if (WiFi.status() == WL_CONNECTED) {
@@ -144,9 +206,11 @@ void connectToWiFi() {
     Serial.println("\nWiFi connected successfully!");
     Serial.println("IP address: " + WiFi.localIP().toString());
     Serial.println("Signal strength: " + String(WiFi.RSSI()) + " dBm");
+    WiFi.setAutoReconnect(true);
   } else {
     wifiConnected = false;
-    Serial.println("\nWiFi connection failed!");
+    Serial.println("\nWiFi connection failed after " + String(maxAttempts) + " attempts!");
+    Serial.println("Check WiFi credentials and router settings.");
   }
 }
 
@@ -155,7 +219,13 @@ void readAndSendSensorData() {
   
   // Read BME680
   float temperature, humidity, pressure, gasResistance;
-  if (!bme.performReading()) {
+  if (!bme680Available) {
+    Serial.println("BME680 not available - using default values");
+    temperature = -999;
+    humidity = -999;
+    pressure = -999;
+    gasResistance = -999;
+  } else if (!bme.performReading()) {
     Serial.println("Failed to perform BME680 reading");
     temperature = -999;
     humidity = -999;
@@ -293,9 +363,8 @@ void checkAlertConditions(float gasResistance, float temperature, float pm25) {
     if (tempAlert) Serial.println("  - High temperature detected!");
     if (pmAlert) Serial.println("  - High particulate matter detected!");
     
-    // Visual and audio alert
+    // Visual alert
     blinkLED(5, 100);  // Fast blinking
-    soundBuzzer(3, 200);  // 3 beeps
   }
 }
 
@@ -360,13 +429,8 @@ void triggerVapeAlert() {
     delay(100);
   }
   
-  // Audio alert - urgent beeping pattern
-  for (int i = 0; i < 5; i++) {
-    digitalWrite(BUZZER_PIN, HIGH);
-    delay(200);
-    digitalWrite(BUZZER_PIN, LOW);
-    delay(100);
-  }
+  // Additional visual alert for vape detection
+  blinkLED(10, 50);  // Very fast blinking
 }
 
 void blinkLED(int times, int delayMs) {
@@ -378,14 +442,7 @@ void blinkLED(int times, int delayMs) {
   }
 }
 
-void soundBuzzer(int times, int delayMs) {
-  for (int i = 0; i < times; i++) {
-    digitalWrite(BUZZER_PIN, HIGH);
-    delay(delayMs);
-    digitalWrite(BUZZER_PIN, LOW);
-    delay(delayMs);
-  }
-}
+// Buzzer function removed - no buzzer component available
 
 String getTimestamp() {
   // Simple timestamp - in production, you might want to use NTP

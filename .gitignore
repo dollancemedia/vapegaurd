@@ -81,3 +81,5 @@ coverage.xml
 
 #mongo
 backend/.env
+
+.vercel
