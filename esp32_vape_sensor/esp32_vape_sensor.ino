@@ -13,16 +13,30 @@
 #include <Adafruit_BME680.h>
 
 // WiFi Configuration
-const char* ssid = "sweethome";  // Replace with your WiFi network name
-const char* password = "rahul2008";  // Replace with your WiFi password
+const char* ssid = "SPG-net";  // Replace with your WiFi network name
+const char* password = "Satya1975#";  // Replace with your WiFi password
 
 // API Configuration
-const char* apiEndpoint = "https://vapegaurd-x6wi.vercel.app/api/sensors/data";
-// For local testing: "http://localhost:8000/api/sensors/data"
+// Local FastAPI backend on your PC (LAN testing)
+const char* apiEndpoint = "http://192.168.1.47:8000/api/sensors/data";
+// Vercel endpoint (requires auth): "https://vapegaurd-x6wi-4iihr8nqn-rahuls-projects-d9f10f54.vercel.app/api/sensors/data"
+
+// Error code definitions for better debugging
+#define HTTP_ERROR_CONNECTION_REFUSED -1
+#define HTTP_ERROR_SEND_HEADER_FAILED -2
+#define HTTP_ERROR_SEND_PAYLOAD_FAILED -3
+#define HTTP_ERROR_NOT_CONNECTED -4
+#define HTTP_ERROR_CONNECTION_LOST -5
+#define HTTP_ERROR_NO_STREAM -6
+#define HTTP_ERROR_NO_HTTP_SERVER -7
+#define HTTP_ERROR_TOO_LESS_RAM -8
+#define HTTP_ERROR_ENCODING -9
+#define HTTP_ERROR_STREAM_WRITE -10
+#define HTTP_ERROR_READ_TIMEOUT -11
 
 // Pin Definitions for ESP32-C6 DevKitC-1
-#define PMS_RX 17           // PMS5003 RX (connect to PMS TX) - Hardware UART
-#define PMS_TX 16           // PMS5003 TX (connect to PMS RX) - Hardware UART
+#define PMS_RX 4          // PMS5003 RX (connect to PMS TX) - Hardware UART
+#define PMS_TX 5         // PMS5003 TX (connect to PMS RX) - Hardware UART
 #define MIC_PIN 0           // MAX4466 microphone (GPIO0 - ADC capable)
 #define LED_PIN 8           // Status LED
 
@@ -62,8 +76,17 @@ bool bme680Available = false;
 int consecutiveFailures = 0;
 const int MAX_FAILURES = 5;
 
+// Function declarations
+void blinkLED(int times, int delayMs);
+boolean readPMSdata(Stream *serial);
+String getTimestamp();
+float calculateAQI(float pm25, float pm10);
+void triggerVapeAlert();
+
 void setup() {
   Serial.begin(115200);
+  // Removed while (!Serial) to avoid blocking on ESP32-C6 native USB; can cause watchdog resets if the host isn't attached
+  Serial.println("[Init] Serial started at 115200");
   delay(1000);
   
   Serial.println("\n=== ESP32-C6 Vape Detection Sensor ===");
@@ -89,6 +112,7 @@ void setup() {
       Serial.println(address, HEX);
       nDevices++;
     }
+    delay(1); // avoid long tight loop triggering WDT
   }
   if (nDevices == 0) {
     Serial.println("No I2C devices found");
@@ -126,16 +150,17 @@ void setup() {
   pmsSerial.begin(9600, SERIAL_8N1, PMS_RX, PMS_TX);
   Serial.println("PMS5003 initialized on Hardware UART1");
   
-  // Initialize WiFi
-  connectToWiFi();
-  
   // Initial sensor calibration
   Serial.println("Calibrating sensors...");
   delay(2000);
   
   // Status indication
-  blinkLED(3, 200);  // 3 quick blinks to indicate ready
+   blinkLED(3, 200);  // 3 quick blinks to indicate ready
   Serial.println("System ready!");
+  
+  // Defer WiFi connection until after setup completes to avoid early resets
+  Serial.println("Starting WiFi connection...");
+  connectToWiFi();
 }
 
 void loop() {
@@ -245,9 +270,52 @@ void readAndSendSensorData() {
     pm10 = data.pm10_env;
   }
   
-  // Read MAX4466 microphone
-  int micRaw = analogRead(MIC_PIN);
-  float soundLevel = (micRaw / 4095.0) * 100.0; // Convert to percentage
+  // Check if microphone is connected and handle sound level
+float soundLevel = 0.0; // Default to zero if no microphone
+
+// Check if microphone is connected by testing for floating pin
+// A truly disconnected pin will show highly variable readings
+int readings[10];
+bool isConnected = false;
+int consistentReadings = 0;
+
+// Take 10 quick readings
+for (int i = 0; i < 10; i++) {
+  readings[i] = analogRead(MIC_PIN);
+  delay(1);
+}
+
+// Check if readings are stable (indicating a connected device)
+// A floating pin will have highly variable readings
+for (int i = 1; i < 10; i++) {
+  if (abs(readings[i] - readings[i-1]) < 50) {
+    consistentReadings++;
+  }
+}
+
+// If we have mostly consistent readings, consider the mic connected
+isConnected = (consistentReadings >= 7);
+
+if (isConnected) {
+  // Process microphone readings only if connected
+  int micTotal = 0;
+  for (int i = 0; i < 5; i++) {
+    micTotal += analogRead(MIC_PIN);
+    delay(1);
+  }
+  int micRaw = micTotal / 5;
+  
+  // Apply threshold to filter out low-level noise
+  if (micRaw < 100) {
+    micRaw = 0;
+  }
+  
+  soundLevel = (micRaw / 4095.0) * 100.0; // Convert to percentage
+}
+
+// Debug output
+Serial.print("Microphone connected: ");
+Serial.println(isConnected ? "YES" : "NO");
   
   // Print sensor readings
   Serial.println("Gas Resistance: " + String(gasResistance) + " KOhms");
@@ -262,22 +330,45 @@ void readAndSendSensorData() {
   DynamicJsonDocument doc(1024);
   doc["device_id"] = DEVICE_ID;
   doc["location"] = LOCATION;
-  doc["timestamp"] = getTimestamp();
-  doc["gas_resistance"] = gasResistance;
-  doc["temperature"] = temperature;
-  doc["humidity"] = humidity;
-  doc["pressure"] = pressure;
-  doc["pm25"] = pm25;
-  doc["pm10"] = pm10;
+  // doc["timestamp"] = getTimestamp();
+  
+  // Ensure valid numeric values for all sensor readings
+  doc["gas_resistance"] = (gasResistance > -999) ? gasResistance : 0;
+  doc["temperature"] = (temperature > -999) ? temperature : 0;
+  doc["humidity"] = (humidity > -999) ? humidity : 0;
+  doc["pressure"] = (pressure > -999) ? pressure : 0;
+  doc["pm25"] = (pm25 > -999) ? pm25 : 0;
+  doc["pm10"] = (pm10 > -999) ? pm10 : 0;
   doc["sound_level"] = soundLevel;
   doc["wifi_rssi"] = WiFi.RSSI();
   doc["sensor_type"] = "multi_sensor";
+  doc["mic_available"] = isConnected;
   
-  // Add derived features for ML model
-  doc["temp_humidity_ratio"] = (humidity > 0) ? temperature / humidity : 0;
-  doc["gas_temp_interaction"] = gasResistance * temperature;
-  doc["pm_ratio"] = (pm10 > 0) ? pm25 / pm10 : 0;
-  doc["air_quality_index"] = calculateAQI(pm25, pm10);
+  // Add derived features for ML model - ensure valid calculations
+  float tempHumidityRatio = 0;
+  if (humidity > 0 && humidity > -999 && temperature > -999) {
+    tempHumidityRatio = temperature / humidity;
+  }
+  doc["temp_humidity_ratio"] = tempHumidityRatio;
+  
+  float gasTemp = 0;
+  if (gasResistance > -999 && temperature > -999) {
+    gasTemp = gasResistance * temperature;
+  }
+  doc["gas_temp_interaction"] = gasTemp;
+  
+  float pmRatio = 0;
+  if (pm10 > 0 && pm10 > -999 && pm25 > -999) {
+    pmRatio = pm25 / pm10;
+  }
+  doc["pm_ratio"] = pmRatio;
+  
+  // Only calculate AQI if we have valid PM values
+  float aqi = 0;
+  if (pm25 > -999 && pm10 > -999) {
+    aqi = calculateAQI(pm25, pm10);
+  }
+  doc["air_quality_index"] = aqi;
   
   String jsonString;
   serializeJson(doc, jsonString);
@@ -286,9 +377,6 @@ void readAndSendSensorData() {
   
   // Send data to API
   sendDataToAPI(jsonString);
-  
-  // Check for alert conditions
-  checkAlertConditions(gasResistance, temperature, pm25);
 }
 
 void sendDataToAPI(String jsonData) {
@@ -303,6 +391,7 @@ void sendDataToAPI(String jsonData) {
   http.setTimeout(HTTP_TIMEOUT);
   
   Serial.println("Sending data to: " + String(apiEndpoint));
+  Serial.println("Payload: " + jsonData);
   
   int httpResponseCode = http.POST(jsonData);
   
@@ -311,29 +400,41 @@ void sendDataToAPI(String jsonData) {
     Serial.println("HTTP Response Code: " + String(httpResponseCode));
     Serial.println("Response: " + response);
     
-    if (httpResponseCode == 201) {
+    // Accept both 200 and 201 as success codes
+    if (httpResponseCode == 200 || httpResponseCode == 201) {
       Serial.println("✓ Data sent successfully!");
       consecutiveFailures = 0;
       
       // Parse response to check for vape detection
       DynamicJsonDocument responseDoc(1024);
-      deserializeJson(responseDoc, response);
+      DeserializationError error = deserializeJson(responseDoc, response);
       
-      if (responseDoc.containsKey("prediction")) {
+      if (!error && responseDoc.containsKey("prediction")) {
         String predictedClass = responseDoc["prediction"]["predicted_class"];
         float confidence = responseDoc["prediction"]["confidence"];
         
         Serial.println("Prediction: " + predictedClass + " (" + String(confidence) + "% confidence)");
         
-        // Trigger alert if vape detected with high confidence
-        if (predictedClass == "vape" && confidence > 70) {
-          triggerVapeAlert();
-        }
+        // Local alert disabled per request; keeping alert off
+        // if (predictedClass == "vape" && confidence > 70) {
+        //   // triggerVapeAlert();
+        // }
       }
-    } else {
-      Serial.println("✗ Server error: " + String(httpResponseCode));
+    } else if (httpResponseCode == 500) {
+      // Handle 500 error specifically
+      Serial.println("✗ Server error 500 - The server encountered an internal error");
+      Serial.println("Retrying with delay...");
+      delay(5000); // Wait 5 seconds before retrying
       consecutiveFailures++;
     }
+  } else if (httpResponseCode == HTTP_ERROR_READ_TIMEOUT) {
+    // Handle timeout error specifically
+    Serial.println("✗ HTTP request timed out (Error -11)");
+    Serial.println("The server is taking too long to respond. Check your network or server status.");
+    Serial.println("Increasing timeout and retrying...");
+    http.setTimeout(HTTP_TIMEOUT * 2); // Double the timeout for the next attempt
+    delay(3000); // Wait 3 seconds before retrying
+    consecutiveFailures++;
   } else {
     Serial.println("✗ HTTP request failed: " + String(httpResponseCode));
     consecutiveFailures++;
@@ -351,22 +452,7 @@ void sendDataToAPI(String jsonData) {
   }
 }
 
-void checkAlertConditions(float gasResistance, float temperature, float pm25) {
-  // Local alert conditions (independent of ML model)
-  bool gasAlert = gasResistance < 50.0;  // Low gas resistance indicates VOCs
-  bool tempAlert = temperature > 35;     // High temperature alert
-  bool pmAlert = pm25 > 35.0;           // High PM2.5 alert
-  
-  if (gasAlert || tempAlert || pmAlert) {
-    Serial.println("⚠️ LOCAL ALERT TRIGGERED!");
-    if (gasAlert) Serial.println("  - High VOC level detected!");
-    if (tempAlert) Serial.println("  - High temperature detected!");
-    if (pmAlert) Serial.println("  - High particulate matter detected!");
-    
-    // Visual alert
-    blinkLED(5, 100);  // Fast blinking
-  }
-}
+// Local alert function removed as requested
 
 float calculateAQI(float pm25, float pm10) {
   // Simplified AQI calculation based on PM2.5 and PM10
@@ -376,45 +462,76 @@ float calculateAQI(float pm25, float pm10) {
 }
 
 boolean readPMSdata(Stream *s) {
+  // Clear any stale data in buffer first
+  while (s->available() > 32) {
+    s->read();
+  }
+  
+  // Wait for data with timeout
+  unsigned long timeout = millis() + 2000; // 2 second timeout
+  while (!s->available() && millis() < timeout) {
+    delay(10);
+  }
+  
   if (!s->available()) {
     return false;
   }
   
-  // Read a byte at a time until we get to the special '0x42' start-byte
-  if (s->peek() != 0x42) {
-    s->read();
-    return false;
+  // Find the start bytes 0x42 0x4d
+  while (s->available()) {
+    if (s->read() == 0x42) {
+      if (s->available() && s->read() == 0x4d) {
+        break; // Found start sequence
+      }
+    }
+    // Timeout check
+    if (millis() > timeout) {
+      return false;
+    }
   }
 
-  // Now read all 32 bytes
-  if (s->available() < 32) {
+  // Wait for full frame (30 more bytes after start)
+  timeout = millis() + 1000;
+  while (s->available() < 30 && millis() < timeout) {
+    delay(10);
+  }
+  
+  if (s->available() < 30) {
     return false;
   }
     
-  uint8_t buffer[32];    
+  uint8_t buffer[32];
+  buffer[0] = 0x42;
+  buffer[1] = 0x4d;
+  
+  // Read remaining 30 bytes
+  s->readBytes(&buffer[2], 30);
+  
   uint16_t sum = 0;
-  s->readBytes(buffer, 32);
-
-  // get checksum ready
+  // Calculate checksum (first 30 bytes)
   for (uint8_t i=0; i<30; i++) {
     sum += buffer[i];
   }
   
-  // The data comes in endian'd, this solves it so it works on all platforms
+  // Convert to 16-bit values
   uint16_t buffer_u16[15];
   for (uint8_t i=0; i<15; i++) {
     buffer_u16[i] = buffer[2 + i*2 + 1];
     buffer_u16[i] += (buffer[2 + i*2] << 8);
   }
 
-  // put it into a nice struct :)
+  // Copy to data struct
   memcpy((void *)&data, (void *)buffer_u16, 30);
 
+  // Verify checksum
   if (sum != data.checksum) {
-    Serial.println("Checksum failure");
+    Serial.print("Checksum failure: calculated=");
+    Serial.print(sum);
+    Serial.print(", received=");
+    Serial.println(data.checksum);
     return false;
   }
-  // success!
+  
   return true;
 }
 

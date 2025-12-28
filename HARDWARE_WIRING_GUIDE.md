@@ -53,14 +53,15 @@ PMS5003 Pin   →    ESP32-C6 Pin    →    Description
 Pin 1 (VCC)   →    5V              →    Power Supply (5V preferred)
 Pin 2 (GND)   →    GND             →    Ground
 Pin 3 (SET)   →    3V3             →    Set Pin (High = Active)
-Pin 4 (RX)    →    GPIO16 (TX)     →    PMS RX ← ESP TX (Hardware UART)
-Pin 5 (TX)    →    GPIO17 (RX)     →    PMS TX → ESP RX (Hardware UART)
+Pin 4 (RX)    →    GPIO27 (TX)     →    PMS RX ← ESP TX (Safe GPIO)
+Pin 5 (TX)    →    GPIO33 (RX)     →    PMS TX → ESP RX (Safe GPIO)
 Pin 6 (RESET) →    3V3             →    Reset Pin (High = Normal)
 Pin 7 (NC)    →    Not Connected   →    No Connection
 Pin 8 (NC)    →    Not Connected   →    No Connection
 ```
 
 **Important Notes for PMS5003:**
+- **Pin Change:** Moved to GPIO 33/27 to avoid Feather V2 PSRAM conflict on 16/17
 - The PMS5003 prefers 5V power but can work with 3.3V
 - SET pin should be connected to 3.3V to keep sensor active
 - RESET pin should be connected to 3.3V for normal operation

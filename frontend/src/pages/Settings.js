@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import RawDataCard from '../components/RawDataCard';
 import TestAlertButton from '../components/TestAlertButton';
 // import SchoolNotificationSystem from '../components/SchoolNotificationSystem'; // DISABLED - removed popup notifications
 
@@ -167,6 +168,13 @@ const Settings = () => {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Raw Data live feed under System Testing */}
+        <div className="row mt-4">
+          <div className="col-12">
+            <RawDataCard />
           </div>
         </div>
 

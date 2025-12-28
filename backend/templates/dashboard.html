@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 Real-Time Vape Detection Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        .events-section {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .section-title {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .event-item {
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #4CAF50;
+        }
+        .event-item.vape {
+            border-left-color: #f44336;
+            background: rgba(244, 67, 54, 0.1);
+        }
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .event-prediction {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        .event-confidence {
+            background: rgba(255,255,255,0.2);
+            padding: 4px 8px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        .event-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4CAF50;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .last-updated {
+            text-align: center;
+            margin-top: 20px;
+            opacity: 0.7;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Real-Time Vape Detection Dashboard</h1>
+            <p>Live monitoring of ESP32 sensor data and ML predictions</p>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="total-events">-</div>
+                <div class="stat-label">Total Events</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="recent-vapes">-</div>
+                <div class="stat-label">Vapes (Last Hour)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="latest-confidence">-</div>
+                <div class="stat-label">Latest Confidence</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="system-status">🟢</div>
+                <div class="stat-label">System Status</div>
+            </div>
+        </div>
+
+        <div class="events-section">
+            <div class="section-title">
+                📊 Recent Events
+                <span class="status-indicator"></span>
+            </div>
+            <div id="events-container">
+                <p>Loading events...</p>
+            </div>
+        </div>
+
+        <div class="last-updated">
+            Last updated: <span id="last-updated">-</span>
+        </div>
+    </div>
+
+    <script>
+        let eventCount = 0;
+        
+        async function fetchRecentEvents() {
+            try {
+                const response = await fetch('/api/dashboard/recent-events');
+                const data = await response.json();
+                
+                // Update stats
+                document.getElementById('total-events').textContent = data.stats.total_events;
+                document.getElementById('recent-vapes').textContent = data.stats.recent_vapes;
+                document.getElementById('last-updated').textContent = new Date(data.stats.last_updated).toLocaleString();
+                
+                // Update events
+                const container = document.getElementById('events-container');
+                if (data.events.length === 0) {
+                    container.innerHTML = '<p>No events yet. Send some sensor data!</p>';
+                    return;
+                }
+                
+                container.innerHTML = data.events.map(event => {
+                    const predClass = event.prediction?.predicted_class ?? event.predicted_class ?? 'unknown';
+                    const isVape = predClass === 'vape';
+                    const confidenceVal = event.prediction?.confidence ?? event.confidence ?? 0;
+
+                    const temperature = event.sensor_data?.temperature ?? event.temperature ?? 'N/A';
+                    const humidity = event.sensor_data?.humidity ?? event.humidity ?? 'N/A';
+                    const pm25 = event.sensor_data?.pm25 ?? event.pm25 ?? 'N/A';
+                    const sound = event.sensor_data?.sound_level ?? event.sound_level ?? 'N/A';
+
+                    return `
+                        <div class="event-item ${isVape ? 'vape' : ''}">
+                            <div class="event-header">
+                                <div class="event-prediction">
+                                    ${isVape ? '🚨 VAPE DETECTED' : '✅ NORMAL'}
+                                </div>
+                                <div class="event-confidence">
+                                    ${Number(confidenceVal).toFixed(1)}%
+                                </div>
+                            </div>
+                            <div class="event-details">
+                                <div>📱 ${event.device_id ?? 'Unknown device'}</div>
+                                <div>🌡️ ${temperature}°C</div>
+                                <div>💧 ${humidity}%</div>
+                                <div>🫧 PM2.5: ${pm25}</div>
+                                <div>🔊 ${sound} dB</div>
+                                <div>⏰ ${event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : 'N/A'}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+                // Update latest confidence
+                if (data.events.length > 0) {
+                    const latestConfidence = data.events[0].prediction?.confidence ?? data.events[0].confidence ?? 0;
+                    document.getElementById('latest-confidence').textContent = Number(latestConfidence).toFixed(1) + '%';
+                }
+                
+            } catch (error) {
+                console.error('Error fetching events:', error);
+                document.getElementById('system-status').textContent = '🔴';
+            }
+        }
+        
+        // Initial load
+        fetchRecentEvents();
+        
+        // Auto-refresh every 2 seconds
+        setInterval(fetchRecentEvents, 2000);
+        
+        // Show connection status
+        document.getElementById('system-status').textContent = '🟢';
+    </script>
+</body>
+</html>

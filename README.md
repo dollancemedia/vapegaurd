@@ -79,188 +79,45 @@ vape-project/
 └── README.md               # This file
 ```
 
-## 🛠️ Quick Start
+## 🛠️ Quick Start & Run Commands
 
 ### Prerequisites
 - Node.js 16+ and npm
 - Python 3.8+
 - Arduino IDE with ESP32 support
-- MongoDB Atlas account
-- Vercel account (for deployment)
+- MongoDB (Running locally or via Atlas)
 
-### Local Development
+### 1. Start the Database
+Ensure MongoDB is running.
+- **Windows Service**: Usually runs automatically.
+- **Manual**: Run `mongod` in a separate terminal.
 
-1. **Clone the repository**
-   ```bash
-   git clone <your-repo-url>
-   cd vape-project
-   ```
+### 2. Start the Backend
+The backend **must** listen on `0.0.0.0` to accept connections from the ESP32.
 
-2. **Setup Backend**
-   ```bash
-   cd backend
-   pip install -r requirements.txt
-   cp .env.example .env
-   # Edit .env with your MongoDB connection string
-   python -m uvicorn app.main:app --reload
-   ```
-
-3. **Setup Frontend**
-   ```bash
-   cd frontend
-   npm install
-   cp .env.example .env.local
-   # Edit .env.local with your backend URL
-   npm start
-   ```
-
-4. **Setup ESP32**
-   - Install required Arduino libraries
-   - Update WiFi credentials and API endpoint in the code
-   - Upload to ESP32-C6
-
-### Production Deployment
-
-See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for detailed deployment instructions.
-
-## 🔧 Configuration
-
-### Environment Variables
-
-**Backend (.env)**
+```powershell
+cd backend
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
-MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/
-DATABASE_NAME=vape-alert
+*   **Success Indicator**: Logs show `Uvicorn running on http://0.0.0.0:8000`.
+
+### 3. Start the Frontend
+Open a **new terminal**.
+
+```powershell
+cd frontend
+$env:PORT=3002; npm start
 ```
+*   **Success Indicator**: Browser opens to `http://localhost:3002`.
 
-**Frontend (.env.local)**
-```
-REACT_APP_API_URL=http://localhost:8000/api
-```
-
-**ESP32 (in code)**
-```cpp
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
-const char* apiEndpoint = "https://your-backend.vercel.app/api/sensors/data";
-```
-
-## 📊 API Endpoints
-
-### Sensor Data
-- `POST /api/sensors/data` - Submit sensor readings
-- `GET /api/sensor-data` - Get recent sensor data
-
-### Events
-- `GET /api/events` - Get detection events
-- `PUT /api/events/{id}/verify` - Verify event
-- `POST /api/events/{id}/feedback` - Submit feedback
-
-### Devices
-- `GET /api/devices` - Get device list
-- `GET /api/devices/{id}` - Get device details
-- `POST /api/devices/{id}/ping` - Ping device
-
-## 🧠 Machine Learning
-
-The system uses XGBoost for vape detection with the following features:
-
-- **Sensor Readings**: Smoke level, temperature, humidity, air quality
-- **Derived Features**: Temperature-humidity ratio, smoke-temperature interaction
-- **Temporal Features**: Rate of change, moving averages
-- **Environmental Context**: Time of day, location metadata
-
-### Model Performance
-- **Accuracy**: >95% on test data
-- **False Positive Rate**: <2%
-- **Response Time**: <100ms
-- **Confidence Threshold**: 70% for alerts
-
-## 🔒 Security
-
-- **Environment Variables**: All sensitive data in environment variables
-- **HTTPS**: All communications encrypted
-- **Input Validation**: Comprehensive data validation
-- **Rate Limiting**: API rate limiting implemented
-- **CORS**: Proper cross-origin resource sharing
-
-## 📱 Hardware Setup
-
-### ESP32-C6 Connections
-```
-MQ-2 Sensor     → A0 (Analog)
-DHT22 Sensor    → Pin 2 (Digital)
-Air Quality     → A1 (Analog)
-Status LED      → Pin 8 (Digital)
-Buzzer          → Pin 9 (Digital)
-Power           → 3.3V/5V
-Ground          → GND
-```
-
-### Required Libraries
-- WiFi (built-in)
-- HTTPClient (built-in)
-- ArduinoJson
-- DHT sensor library
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **ESP32 won't connect**
-   - Check WiFi credentials
-   - Verify signal strength
-   - Check firewall settings
-
-2. **Backend errors**
-   - Verify MongoDB connection
-   - Check environment variables
-   - Review server logs
-
-3. **Frontend issues**
-   - Verify API URL
-   - Check CORS settings
-   - Clear browser cache
-
-### Debug Mode
-
-Enable debug logging:
-```bash
-# Backend
-export LOG_LEVEL=DEBUG
-
-# ESP32
-// Uncomment debug lines in Arduino code
-```
-
-## 🚀 Future Enhancements
-
-- **Zigbee Mesh Networking**: Extended range and reliability
-- **Advanced ML Models**: Deep learning for improved accuracy
-- **Mobile App**: iOS/Android companion app
-- **Multi-tenant Support**: Support multiple organizations
-- **Advanced Analytics**: Detailed reporting and insights
-- **Integration APIs**: Connect with existing school systems
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## 📞 Support
-
-For support and questions:
-- Check the troubleshooting section
-- Review the deployment guide
-- Open an issue on GitHub
+### 4. Power the ESP32
+Plug in your ESP32. It is pre-configured to connect to your WiFi and send data to `10.0.0.43:8000`.
 
 ---
 
-**⚠️ Important**: This system is designed for educational and safety purposes. Ensure compliance with local regulations and privacy laws when deploying in school environments.
+## 🔧 Hardware Setup
+1. **Board**: Adafruit ESP32 Feather V2
+2. **Connections**:
+   - PMS5003 TX → ESP32 RX (GPIO 16)
+   - PMS5003 RX → ESP32 TX (GPIO 17)
+   - Power & Ground

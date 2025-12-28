@@ -1,341 +1,347 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import deviceService from '../services/deviceService';
 
-const DeviceMap = ({ devices, selectedDevice, onDeviceSelect }) => {
+// Icons
+const Icons = {
+  Edit: () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+    </svg>
+  ),
+  Check: () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+    </svg>
+  ),
+  Drag: () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+    </svg>
+  ),
+  Info: () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  )
+};
 
+const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
   const [hoveredDevice, setHoveredDevice] = useState(null);
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const mapContainerRef = useRef(null);
+  const [isEditing, setIsEditing] = useState(false);
+  
+  // Dragging State
+  const [draggingId, setDraggingId] = useState(null);
+  const [localLocations, setLocalLocations] = useState({}); // Stores temporary positions while dragging/editing
   const svgRef = useRef(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 }); // For tooltip
 
-  // Hard-coded device coordinates (adjust these based on your campus map)
-  // These coordinates are relative to the SVG viewBox
-  const deviceCoordinates = {
-    'detector-1': { x: 150, y: 200 }, // Building A, Floor 1
-    'detector-2': { x: 300, y: 180 }, // Building A, Floor 2
-    'detector-3': { x: 450, y: 220 }, // Building B, Floor 1
-    'detector-4': { x: 600, y: 160 }, // Building B, Floor 2
-    'detector-5': { x: 350, y: 350 }, // Building C, Floor 1
-    'admin-console': { x: 400, y: 100 } // Admin Building
+  // Fallback coordinates
+  const defaultCoordinates = {
+    'detector-1': { x: 150, y: 200 }, 
+    'ESP32_C6_001': { x: 150, y: 200 }, 
+    'detector-2': { x: 350, y: 180 }, 
+    'ESP32_C6_002': { x: 350, y: 180 }, 
+    'detector-3': { x: 200, y: 350 }, 
+    'detector-4': { x: 400, y: 320 }, 
+    'detector-5': { x: 100, y: 100 }, 
   };
 
-  // Get device status color
-  const getDeviceColor = (status) => {
-    switch (status) {
-      case 'online': return '#10B981'; // Green
-      case 'offline': return '#6B7280'; // Gray
-      case 'alarm': return '#EF4444'; // Red
-      default: return '#6B7280';
-    }
-  };
-
-  // Get device icon based on type
-  const getDeviceIcon = (type) => {
-    return type === 'admin' ? '🖥️' : '📡';
-  };
-
-  // Handle mouse move for tooltip positioning
-  const handleMouseMove = (e) => {
-    const rect = mapContainerRef.current?.getBoundingClientRect();
-    if (rect) {
-      setMousePosition({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
+  // Sync local locations with props when not editing
+  useEffect(() => {
+    if (!isEditing) {
+      const initialLocs = {};
+      devices.forEach(d => {
+        initialLocs[d.id] = d.mapLocation || defaultCoordinates[d.id] || { x: 50, y: 50 };
       });
+      setLocalLocations(initialLocs);
+    }
+  }, [devices, isEditing]);
+
+  // Get device visual props
+  const getDeviceVisuals = (device) => {
+    const isVape = device.sensorData?.predictedClass === 'vape';
+    const isAlarm = device.status === 'alarm';
+    
+    if (isVape) return { color: '#EF4444', pulse: true, icon: '⚠️' }; // Red
+    if (isAlarm) return { color: '#EF4444', pulse: true, icon: '🚨' }; // Red
+    if (device.status === 'online') return { color: '#10B981', pulse: false, icon: '📡' }; // Green
+    if (device.status === 'offline') return { color: '#9CA3AF', pulse: false, icon: '💤' }; // Gray
+    
+    return { color: '#9CA3AF', pulse: false, icon: '?' };
+  };
+
+  // Convert client coordinates to SVG viewBox coordinates
+  const getSVGPoint = (clientX, clientY) => {
+    if (!svgRef.current) return { x: 0, y: 0 };
+    const pt = svgRef.current.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    return pt.matrixTransform(svgRef.current.getScreenCTM().inverse());
+  };
+
+  const handleMouseDown = (e, deviceId) => {
+    if (!isEditing) return;
+    e.stopPropagation();
+    e.preventDefault(); // Prevent text selection
+    setDraggingId(deviceId);
+  };
+
+  const handleMouseMove = (e) => {
+    // Tooltip positioning
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+
+    // Dragging Logic
+    if (isEditing && draggingId) {
+      e.preventDefault();
+      const point = getSVGPoint(e.clientX, e.clientY);
+      
+      // Constrain to map bounds (0-800, 0-600)
+      const x = Math.max(20, Math.min(780, point.x));
+      const y = Math.max(20, Math.min(580, point.y));
+
+      setLocalLocations(prev => ({
+        ...prev,
+        [draggingId]: { x, y }
+      }));
     }
   };
 
-  // Handle device marker click
-  const handleDeviceClick = (device) => {
-    onDeviceSelect(device);
+  const handleMouseUp = async () => {
+    if (draggingId) {
+      // Save the new location
+      const { x, y } = localLocations[draggingId];
+      try {
+        await deviceService.updateDeviceLocation(draggingId, Math.round(x), Math.round(y));
+        if (onRefresh) onRefresh();
+      } catch (error) {
+        console.error("Failed to update location:", error);
+        // Optionally revert local state here
+      }
+      setDraggingId(null);
+    }
   };
 
-  // Handle device marker hover
-  const handleDeviceHover = (device) => {
-    setHoveredDevice(device);
+  // Handle entering/exiting edit mode
+  const toggleEditMode = () => {
+    if (isEditing) {
+      // Exiting edit mode
+      setIsEditing(false);
+      setDraggingId(null);
+    } else {
+      // Entering edit mode
+      setIsEditing(true);
+      // Initialize local state just in case
+      const initialLocs = {};
+      devices.forEach(d => {
+        initialLocs[d.id] = d.mapLocation || defaultCoordinates[d.id] || { x: 50, y: 50 };
+      });
+      setLocalLocations(initialLocs);
+      // Close side panel
+      if (onDeviceSelect) onDeviceSelect(null);
+    }
   };
-
-  // Handle mouse leave
-  const handleMouseLeave = () => {
-    setHoveredDevice(null);
-  };
-
-  // Map dimensions update removed - was unused
 
   return (
-    <div 
-      className="device-map-container"
-      ref={mapContainerRef}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-    >
-      {/* Campus Map SVG */}
-      <div className="map-wrapper">
-        <img 
-          src="/campus_map.svg" 
-          alt="Campus Map" 
-          className="campus-map"
-          style={{ width: '100%', height: 'auto' }}
-        />
-        
-        {/* Device Markers Overlay */}
+    <div className="relative w-full h-full bg-gray-100 overflow-hidden group">
+      
+      {/* Controls Bar */}
+      <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
+        <button
+          onClick={toggleEditMode}
+          className={`
+            flex items-center space-x-2 px-4 py-2 rounded-full font-medium text-sm shadow-sm transition-all duration-200
+            ${isEditing 
+              ? 'bg-blue-600 text-white hover:bg-blue-700 ring-2 ring-blue-200' 
+              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+            }
+          `}
+        >
+          {isEditing ? <><Icons.Check /><span>Done Editing</span></> : <><Icons.Edit /><span>Edit Map</span></>}
+        </button>
+      </div>
+
+      {/* Editing Instructions Toast */}
+      {isEditing && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 bg-gray-900/80 backdrop-blur-sm text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg animate-fade-in-down flex items-center space-x-2 pointer-events-none">
+          <Icons.Info />
+          <span>Drag devices to reposition them</span>
+        </div>
+      )}
+
+      {/* Map Container */}
+      <div 
+        className={`w-full h-full relative overflow-hidden transition-cursor duration-200 ${isEditing ? (draggingId ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-default'}`}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={() => {
+          setHoveredDevice(null);
+          handleMouseUp();
+        }}
+      >
         <svg 
           ref={svgRef}
-          className="device-markers-overlay"
-          viewBox="0 0 800 600"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            pointerEvents: 'none'
-          }}
+          viewBox="0 0 800 600" 
+          className="w-full h-full"
+          preserveAspectRatio="xMidYMin meet"
         >
-          {devices.map((device) => {
-            const coords = deviceCoordinates[device.id];
-            if (!coords) return null;
+          {/* Background Map Image - Embedded for perfect coordinate alignment */}
+          <image 
+            href="/campus_map.svg" 
+            width="800" 
+            height="600" 
+            className="opacity-90"
+          />
 
+          {/* Device Markers */}
+          {devices.map((device) => {
+            const coords = isEditing 
+              ? (localLocations[device.id] || { x: 0, y: 0 }) 
+              : (device.mapLocation || defaultCoordinates[device.id] || { x: 50, y: 50 });
+            
+            const visuals = getDeviceVisuals(device);
             const isSelected = selectedDevice?.id === device.id;
             const isHovered = hoveredDevice?.id === device.id;
-            const color = getDeviceColor(device.status);
+            const isDragging = draggingId === device.id;
 
             return (
-              <g key={device.id}>
-                {/* Device marker circle */}
-                <circle
-                  cx={coords.x}
-                  cy={coords.y}
-                  r={isSelected ? 16 : isHovered ? 14 : 12}
-                  fill={color}
-                  stroke={isSelected ? '#1F2937' : '#FFFFFF'}
-                  strokeWidth={isSelected ? 3 : 2}
-                  className={`device-marker ${device.status} ${isSelected ? 'selected' : ''}`}
-                  style={{
-                    pointerEvents: 'all',
-                    cursor: 'pointer',
-                    filter: device.status === 'alarm' ? 'drop-shadow(0 0 8px rgba(239, 68, 68, 0.6))' : 'none',
-                    animation: device.status === 'alarm' ? 'pulse 2s infinite' : 'none'
-                  }}
-                  onClick={() => handleDeviceClick(device)}
-                  onMouseEnter={() => handleDeviceHover(device)}
+              <g 
+                key={device.id}
+                transform={`translate(${coords.x}, ${coords.y})`}
+                onMouseDown={(e) => handleMouseDown(e, device.id)}
+                onClick={(e) => {
+                  if (!isEditing && onDeviceSelect) {
+                    e.stopPropagation();
+                    onDeviceSelect(device);
+                  }
+                }}
+                onMouseEnter={() => setHoveredDevice(device)}
+                onMouseLeave={() => setHoveredDevice(null)}
+                className={`transition-opacity duration-200 ${isEditing && draggingId && !isDragging ? 'opacity-50' : 'opacity-100'}`}
+                style={{ cursor: isEditing ? 'grab' : 'pointer' }}
+              >
+                {/* Interaction Area (Invisible) */}
+                <circle r="30" fill="transparent" />
+
+                {/* Pulse Animation Ring */}
+                {visuals.pulse && (
+                  <circle r="25" fill="none" stroke={visuals.color} strokeWidth="2" className="animate-ping opacity-75" />
+                )}
+
+                {/* Outer Ring (Selection/Hover Highlight) */}
+                <circle 
+                  r={isSelected || isHovered || isDragging ? "18" : "0"} 
+                  fill={visuals.color} 
+                  opacity="0.2"
+                  className="transition-all duration-300"
                 />
-                
-                {/* Device icon */}
-                <text
-                  x={coords.x}
-                  y={coords.y + 1}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize={isSelected ? "10" : "8"}
-                  fill="white"
-                  style={{ pointerEvents: 'none', userSelect: 'none' }}
-                >
-                  {getDeviceIcon(device.type)}
-                </text>
-                
-                {/* Pulse animation for alarm status */}
-                {device.status === 'alarm' && (
-                  <circle
-                    cx={coords.x}
-                    cy={coords.y}
-                    r="20"
-                    fill="none"
-                    stroke={color}
-                    strokeWidth="2"
-                    opacity="0.6"
-                    style={{
-                      animation: 'pulse-ring 2s infinite',
-                      pointerEvents: 'none'
-                    }}
-                  />
+
+                {/* Main Marker */}
+                <circle 
+                  r={isDragging ? "14" : "12"} 
+                  fill={visuals.color} 
+                  stroke="white" 
+                  strokeWidth="2.5"
+                  className="filter drop-shadow-md transition-all duration-200"
+                />
+
+                {/* Device Type Icon inside marker (Optional, might be too small) */}
+                {/* <text y="4" textAnchor="middle" fontSize="10" fill="white">📡</text> */}
+
+                {/* Label Tooltip (Always visible when selected or dragging, or hovered) */}
+                {(isSelected || isHovered || isDragging) && (
+                  <g transform="translate(0, -25)">
+                    <rect 
+                      x="-60" y="-24" width="120" height="24" rx="12" 
+                      fill="white" 
+                      stroke="#E5E7EB"
+                      strokeWidth="1"
+                      className="filter drop-shadow-sm"
+                    />
+                    <text 
+                      y="-8" 
+                      textAnchor="middle" 
+                      fontSize="11" 
+                      fontWeight="600" 
+                      fill="#374151"
+                      dominantBaseline="middle"
+                    >
+                      {device.name}
+                    </text>
+                    {/* Little triangle pointer */}
+                    <path d="M-4 0 L0 4 L4 0 Z" fill="white" stroke="#E5E7EB" strokeWidth="0" />
+                  </g>
                 )}
               </g>
             );
           })}
         </svg>
-      </div>
 
-      {/* Device Tooltip */}
-      {hoveredDevice && (
-        <div 
-          className="device-tooltip"
-          style={{
-            position: 'absolute',
-            left: mousePosition.x + 10,
-            top: mousePosition.y - 10,
-            transform: 'translateY(-100%)',
-            zIndex: 1000
-          }}
-        >
-          <div className="tooltip-content">
-            <div className="tooltip-header">
-              <span className="device-icon">{getDeviceIcon(hoveredDevice.type)}</span>
-              <strong>{hoveredDevice.name}</strong>
-              <span className={`status-badge ${hoveredDevice.status}`}>
-                {hoveredDevice.status}
-              </span>
+        {/* Hover Tooltip (Only in View Mode) */}
+        {hoveredDevice && !isEditing && !draggingId && (
+          <div 
+            className="absolute z-50 pointer-events-none"
+            style={{ 
+              left: mousePos.x, 
+              top: mousePos.y, 
+              transform: 'translate(-50%, -100%)',
+              marginTop: '-40px'
+            }}
+          >
+            <div className="bg-white rounded-lg shadow-xl border border-gray-100 p-3 w-64 animate-in fade-in zoom-in duration-200">
+              <div className="flex items-start justify-between mb-2 pb-2 border-b border-gray-100">
+                <div>
+                  <h4 className="font-bold text-gray-900 text-sm">{hoveredDevice.name}</h4>
+                  <p className="text-xs text-gray-500">{hoveredDevice.type === 'admin' ? 'Admin Console' : 'Vape Detector'}</p>
+                </div>
+                <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
+                  hoveredDevice.status === 'online' ? 'bg-green-100 text-green-700' :
+                  hoveredDevice.status === 'alarm' ? 'bg-red-100 text-red-700' :
+                  'bg-gray-100 text-gray-600'
+                }`}>
+                  {hoveredDevice.status}
+                </span>
+              </div>
+              <div className="space-y-1 text-xs text-gray-600">
+                <div className="flex justify-between">
+                  <span>Location:</span>
+                  <span className="font-medium text-gray-900">{hoveredDevice.location.room}</span>
+                </div>
+                {hoveredDevice.sensorData && (
+                  <>
+                    <div className="flex justify-between">
+                      <span>Status:</span>
+                      <span className={`font-medium ${hoveredDevice.sensorData.predictedClass === 'vape' ? 'text-red-600' : 'text-green-600'}`}>
+                        {hoveredDevice.sensorData.predictedClass === 'vape' ? '⚠️ Vape Detected' : '✅ Normal'}
+                      </span>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-gray-50 grid grid-cols-2 gap-2">
+                      <div className="bg-gray-50 p-1.5 rounded text-center">
+                        <span className="block text-[10px] text-gray-400 uppercase">Humidity</span>
+                        <span className="font-semibold">{hoveredDevice.sensorData.humidity}%</span>
+                      </div>
+                      <div className="bg-gray-50 p-1.5 rounded text-center">
+                        <span className="block text-[10px] text-gray-400 uppercase">PM2.5</span>
+                        <span className="font-semibold">{hoveredDevice.sensorData.pm25}</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-            <div className="tooltip-details">
-              <div>📍 {hoveredDevice.location.building}, {hoveredDevice.location.room}</div>
-              <div>🕒 Last seen: {new Date(hoveredDevice.lastSeen).toLocaleTimeString()}</div>
-              {hoveredDevice.sensorData && (
-                <div>📊 Confidence: {hoveredDevice.sensorData.confidence}%</div>
-              )}
-            </div>
+            {/* Arrow */}
+            <div className="w-3 h-3 bg-white border-r border-b border-gray-100 transform rotate-45 absolute left-1/2 -ml-1.5 -bottom-1.5"></div>
           </div>
-        </div>
-      )}
-
-      {/* Map Legend */}
-      <div className="map-legend">
-        <h4>Device Status</h4>
-        <div className="legend-items">
-          <div className="legend-item">
-            <div className="legend-color" style={{ backgroundColor: '#10B981' }}></div>
-            <span>Online</span>
-          </div>
-          <div className="legend-item">
-            <div className="legend-color" style={{ backgroundColor: '#EF4444' }}></div>
-            <span>Alarm</span>
-          </div>
-          <div className="legend-item">
-            <div className="legend-color" style={{ backgroundColor: '#6B7280' }}></div>
-            <span>Offline</span>
-          </div>
-        </div>
+        )}
       </div>
 
       <style jsx>{`
-        .device-map-container {
-          position: relative;
-          width: 100%;
-          height: 500px;
-          background: #f8f9fa;
-          border-radius: 8px;
-          overflow: hidden;
+        .animate-fade-in-down {
+          animation: fadeInDown 0.3s ease-out;
         }
-
-        .map-wrapper {
-          position: relative;
-          width: 100%;
-          height: 100%;
-        }
-
-        .campus-map {
-          display: block;
-          max-width: 100%;
-          max-height: 100%;
-          object-fit: contain;
-        }
-
-        .device-marker {
-          transition: all 0.2s ease;
-        }
-
-        .device-marker:hover {
-          transform: scale(1.1);
-        }
-
-        .device-tooltip {
-          background: rgba(0, 0, 0, 0.9);
-          color: white;
-          padding: 12px;
-          border-radius: 8px;
-          font-size: 12px;
-          max-width: 250px;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-          pointer-events: none;
-        }
-
-        .tooltip-header {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-bottom: 8px;
-          padding-bottom: 8px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .status-badge {
-          padding: 2px 6px;
-          border-radius: 4px;
-          font-size: 10px;
-          font-weight: bold;
-          text-transform: uppercase;
-        }
-
-        .status-badge.online {
-          background: #10B981;
-          color: white;
-        }
-
-        .status-badge.alarm {
-          background: #EF4444;
-          color: white;
-        }
-
-        .status-badge.offline {
-          background: #6B7280;
-          color: white;
-        }
-
-        .tooltip-details div {
-          margin: 4px 0;
-        }
-
-        .map-legend {
-          position: absolute;
-          bottom: 16px;
-          right: 16px;
-          background: rgba(255, 255, 255, 0.95);
-          padding: 12px;
-          border-radius: 8px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-          font-size: 12px;
-        }
-
-        .map-legend h4 {
-          margin: 0 0 8px 0;
-          font-size: 14px;
-          font-weight: 600;
-        }
-
-        .legend-items {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-
-        .legend-item {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .legend-color {
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-        }
-
-        @keyframes pulse {
-          0%, 100% {
-            opacity: 1;
-          }
-          50% {
-            opacity: 0.5;
-          }
-        }
-
-        @keyframes pulse-ring {
-          0% {
-            transform: scale(0.8);
-            opacity: 1;
-          }
-          100% {
-            transform: scale(2);
-            opacity: 0;
-          }
+        @keyframes fadeInDown {
+          from { opacity: 0; transform: translate(-50%, -10px); }
+          to { opacity: 1; transform: translate(-50%, 0); }
         }
       `}</style>
     </div>

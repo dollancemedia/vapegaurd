@@ -1,0 +1,510 @@
+[{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 9,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 9,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 9,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 10,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 5,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 5,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 9,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 9,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 5,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 9,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 9,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 9,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 9,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 9,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 9,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 9,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 9,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 10,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 8,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 9,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 7,
+  "actual_class": "normal"
+},
+{
+  "device_id": "ESP32_C6_001",
+  "pm25": 6,
+  "actual_class": "normal"
+}]

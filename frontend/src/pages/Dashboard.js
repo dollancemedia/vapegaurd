@@ -1,16 +1,19 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
-import io from 'socket.io-client';
+// Socket.IO client removed; using native WebSocket via hook
+import { useWebSocket } from '../hooks/useWebSocket';
 
 // Import components
 import SensorReadings from '../components/SensorReadings';
+import DeviceMap from '../components/DeviceMap';
 import LatestReading from '../components/LatestReading';
 import EventsTable from '../components/EventsTable';
 import StatusIndicator from '../components/StatusIndicator';
 import ConnectionErrorMessage from '../components/ConnectionErrorMessage';
 import DataSourceIndicator from '../components/DataSourceIndicator';
 import RefreshButton from '../components/RefreshButton';
+import BulkLabelingTool from '../components/BulkLabelingTool';
 // import SchoolNotificationSystem from '../components/SchoolNotificationSystem'; // DISABLED - removed popup notifications
 
 
@@ -18,174 +21,156 @@ import RefreshButton from '../components/RefreshButton';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 const Dashboard = () => {
+  // Treat data as live only when it carries a server timestamp and is fresh
+  const STALE_SECONDS = 300; // Increased to 5 minutes to tolerate latency/clock skew
+  const isFresh = (ts) => {
+    if (!ts) return false;
+    const t = Date.parse(ts);
+    if (Number.isNaN(t)) return false;
+    const diff = Date.now() - t;
+    // Allow data up to STALE_SECONDS old, and up to 60 seconds in the future (clock skew)
+    return diff < STALE_SECONDS * 1000 && diff > -60000;
+  };
+
   const [events, setEvents] = useState([]);
   const [sensorData, setSensorData] = useState([]);
   const [latestReading, setLatestReading] = useState(null);
-  const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [selectedDevice, setSelectedDevice] = useState(null); // Add state for map selection
   const [isUsingSampleData, setIsUsingSampleData] = useState(false);
+  const [lastLiveTs, setLastLiveTs] = useState(null);
+  const [isPaused] = useState(false);
+  const pausedRef = useRef(false);
+  useEffect(() => { pausedRef.current = isPaused; }, [isPaused]);
   // const notificationSystemRef = useRef(null); // DISABLED - removed popup notifications
 
-  // Function to initialize Socket.IO connection
-  const initializeSocket = useCallback(() => {
-    // Close existing socket if it exists
-    if (socket) {
-      socket.close();
-    }
-    
-    const newSocket = io(process.env.REACT_APP_WS_URL || 'http://localhost:8000', {
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      timeout: 5000,
-      transports: ['websocket', 'polling']
-    });
-    
-    newSocket.on('connect', () => {
-      // console.log('Connected to Socket.IO server');
-      setIsConnected(true);
-    });
-    
-    newSocket.on('connect_error', (err) => {
-      // console.error('Socket.IO connection error:', err);
-      setIsConnected(false);
-    });
-    
-    newSocket.on('disconnect', () => {
-      // console.log('Disconnected from Socket.IO server');
-      setIsConnected(false);
-    });
-    
-    setSocket(newSocket);
-    return newSocket;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  
-  // Connect to Socket.IO server
-  useEffect(() => {
-    const newSocket = initializeSocket();
+  // Connect to native WebSocket server via shared hook
+  const { reconnect } = useWebSocket('/ws/events', {
+    reconnectInterval: 3000,
+    maxReconnectAttempts: 5,
+    heartbeatInterval: 30000,
+    onMessage: (data) => {
+      if (pausedRef.current) return;
+      // Handle legacy frontend types
+      if (data && data.type === 'newEvent' && data.event) {
+        setEvents((prevEvents) => [data.event, ...prevEvents].slice(0, 1));
+        return;
+      }
 
-    // Clean up on unmount
-    return () => newSocket.close();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      // Handle backend FastAPI websocket messages: type "sensor_data"
+      if (data && (data.type === 'sensor_data' || data.type === 'newSensorData')) {
+        const payload = data.data || data;
 
-  // Listen for real-time events
-  useEffect(() => {
-    if (!socket) return;
+        // Two possible shapes:
+        // A) { device_id, sensor_data: { ...reading } }
+        // B) { ...reading, predicted_class?, confidence?, prediction? }
+        let reading = payload.sensor_data
+          ? {
+              ...payload.sensor_data,
+              device_id: payload.device_id || payload.sensor_data.device_id,
+              timestamp: payload.sensor_data.timestamp || payload.timestamp || null,
+            }
+          : {
+              ...payload,
+              timestamp: payload.timestamp || null,
+            };
 
-    socket.on('newEvent', (event) => {
-      setEvents((prevEvents) => [event, ...prevEvents]);
-    });
-
-    socket.on('newSensorData', (data) => {
-      setSensorData((prevData) => {
-        // Keep only the last 20 readings for the chart
-        const newData = [data, ...prevData];
-        if (newData.length > 20) {
-          return newData.slice(0, 20);
+        // Only accept readings that carry a server-provided timestamp
+        if (!reading.timestamp) {
+          return;
         }
-        return newData;
-      });
-      setLatestReading(data);
-    });
 
-    return () => {
-      socket.off('newEvent');
-      socket.off('newSensorData');
-    };
-  }, [socket]);
+        // Ignore stale or replayed readings
+        if (!isFresh(reading.timestamp)) {
+          return;
+        }
+
+        // Normalize field names expected by UI components
+        reading = {
+          ...reading,
+          volume_spike:
+            reading.volume_spike ?? reading.sound_level ?? reading.volumeSpike ?? 0,
+          particle_size:
+            reading.particle_size ?? reading.particleSize ?? reading.particle_size_nm ?? 0,
+        };
+
+        // Map predicted_class/confidence into prediction object if present
+        if (!reading.prediction && (payload.predicted_class || payload.confidence !== undefined)) {
+          reading.prediction = {
+            type: payload.predicted_class || 'normal',
+            confidence: payload.confidence ?? 0,
+          };
+        }
+
+        // Update sensor readings state
+        setSensorData((prevData) => {
+          const newData = [reading, ...prevData];
+          return newData.length > 20 ? newData.slice(0, 20) : newData;
+        });
+        setLatestReading(reading);
+        setLastLiveTs(Date.now());
+
+        // Also surface an event row when classification is present
+        const hasEventInfo =
+          (payload.prediction && payload.prediction.type) || payload.predicted_class;
+        if (hasEventInfo) {
+          const event = {
+            _id: payload._id || payload.id,
+            timestamp: reading.timestamp,
+            type: (payload.prediction && payload.prediction.type) || payload.predicted_class || 'normal',
+            confidence:
+              (payload.prediction && payload.prediction.confidence) ?? payload.confidence ?? 0,
+            device_id: payload.device_id || reading.device_id,
+            location: payload.location || reading.location || 'Unknown',
+            verified: payload.verified ?? false,
+          };
+          setEvents((prevEvents) => [event, ...prevEvents].slice(0, 1));
+        }
+      }
+    },
+    onOpen: () => setIsConnected(true),
+    onClose: () => setIsConnected(false),
+    onError: () => setIsConnected(false)
+  });
+
+  // lastMessage is available if needed for debugging
 
   // Function to fetch data from the backend
   const fetchData = useCallback(async () => {
+    if (pausedRef.current) return; // Do not fetch when paused
     setIsLoading(true);
     
-    // Sample data for when backend is not available
-    const sampleSensorData = [
-      {
-        device_id: 'sample-device-01',
-        humidity: 45.5,
-        pm25: 26.9,
-        particle_size: 282.5,
-        volume_spike: 46.9,
-        timestamp: new Date().toISOString(),
-        prediction: { type: 'normal', confidence: 55 }
-      },
-      {
-        device_id: 'sample-device-01',
-        humidity: 48.2,
-        pm25: 28.4,
-        particle_size: 290.1,
-        volume_spike: 48.3,
-        timestamp: new Date(Date.now() - 5000).toISOString(),
-        prediction: { type: 'normal', confidence: 60 }
-      },
-      {
-        device_id: 'sample-device-01',
-        humidity: 52.7,
-        pm25: 35.6,
-        particle_size: 310.8,
-        volume_spike: 55.2,
-        timestamp: new Date(Date.now() - 10000).toISOString(),
-        prediction: { type: 'vape', confidence: 75 }
-      },
-      {
-        device_id: 'sample-device-01',
-        humidity: 50.1,
-        pm25: 32.3,
-        particle_size: 300.5,
-        volume_spike: 52.1,
-        timestamp: new Date(Date.now() - 15000).toISOString(),
-        prediction: { type: 'fire', confidence: 85 }
-      },
-      {
-        device_id: 'sample-device-01',
-        humidity: 47.8,
-        pm25: 27.5,
-        particle_size: 285.3,
-        volume_spike: 47.5,
-        timestamp: new Date(Date.now() - 20000).toISOString(),
-        prediction: { type: 'normal', confidence: 58 }
-      }
-    ];
-
-    const sampleEvents = [
-      {
-        id: 'sample-event-01',
-        device_id: 'sample-device-01',
-        type: 'vape',
-        confidence: 75,
-        location: 'Bathroom',
-        timestamp: new Date(Date.now() - 10000).toISOString()
-      },
-      {
-        id: 'sample-event-02',
-        device_id: 'sample-device-01',
-        type: 'fire',
-        confidence: 85,
-        location: 'Kitchen',
-        timestamp: new Date(Date.now() - 15000).toISOString()
-      }
-    ];
     
     try {
       // console.log('Fetching data from backend...');
       
       // Fetch recent events
       // console.log('Fetching events from http://localhost:8000/api/events?limit=10');
-      const eventsResponse = await axios.get('http://localhost:8000/api/events?limit=10');
-      // console.log('Events response:', eventsResponse.data);
-      setEvents(eventsResponse.data);
+      const apiBase = process.env.REACT_APP_API_URL || '/api';
+      const eventsResponse = await axios.get(`${apiBase}/events?limit=10`);
+      // Keep only the most recent event for display
+      const eventsData = Array.isArray(eventsResponse.data) 
+        ? eventsResponse.data
+            .filter(e => e && e.timestamp && isFresh(e.timestamp))
+            .map(e => ({
+              ...e,
+              type: e.predicted_class || 'normal',
+              confidence: e.confidence ?? 0
+            }))
+            .slice(0, 1)
+        : [];
+      setEvents(eventsData);
 
       // Fetch recent sensor data
       // console.log('Fetching sensor data from http://localhost:8000/api/sensor-data');
-      const sensorResponse = await axios.get('http://localhost:8000/api/sensor-data');
+      const sensorResponse = await axios.get(`${apiBase}/sensor-data`);
       // console.log('Sensor data response:', sensorResponse.data);
       
       if (sensorResponse.data && Array.isArray(sensorResponse.data)) {
-        setSensorData(sensorResponse.data.reverse());
-        if (sensorResponse.data.length > 0) {
-          setLatestReading(sensorResponse.data[0]);
-        }
+        const withTimestamps = sensorResponse.data.filter(d => d && d.timestamp);
+        const freshData = withTimestamps.filter(d => isFresh(d.timestamp)).reverse();
+        setSensorData(freshData);
+        setLatestReading(freshData.length > 0 ? freshData[0] : null);
         setIsUsingSampleData(false);
       } else {
         // console.error('Invalid sensor data format:', sensorResponse.data);
@@ -196,17 +181,18 @@ const Dashboard = () => {
       return true; // Successful fetch
     } catch (error) {
       // console.error('Error fetching data:', error);
-      // console.log('Using sample data instead');
-      // Use sample data if backend is not available
-      setSensorData(sampleSensorData);
-      setLatestReading(sampleSensorData[0]);
-      setEvents(sampleEvents);
-      setIsUsingSampleData(true);
+      // Do not inject sample data; reflect empty state to prove live data
+      setSensorData([]);
+      setLatestReading(null);
+      setEvents([]);
+      setIsUsingSampleData(false);
       return false; // Failed fetch
     } finally {
       setIsLoading(false);
     }
   }, []); // No external dependencies needed
+
+  // Polling disabled temporarily to prevent periodic refreshes
 
 
 
@@ -222,6 +208,12 @@ const Dashboard = () => {
 
   // Loading state for UI components
   const [isLoading, setIsLoading] = useState(true);
+  
+  // derive API data availability from current state (only count fresh data)
+  const hasFreshSensorData = Array.isArray(sensorData) && sensorData.some(d => isFresh(d.timestamp));
+  const hasFreshEvents = Array.isArray(events) && events.some(e => isFresh(e.timestamp));
+  const hasApiData = hasFreshSensorData || hasFreshEvents;
+  const isLive = hasApiData || (lastLiveTs && (Date.now() - lastLiveTs) < STALE_SECONDS * 1000);
   
   // Handle event updates (like verification status changes)
   const handleEventUpdate = (updatedEvent) => {
@@ -257,7 +249,7 @@ const Dashboard = () => {
             <div className="d-flex align-items-center">
               <div className="dashboard-indicators">
                 <DataSourceIndicator isUsingSampleData={isUsingSampleData} />
-                <StatusIndicator isConnected={isConnected} isLoading={isLoading} />
+                <StatusIndicator isConnected={!!isLive} isLoading={isLoading} hasApiData={hasApiData} />
               </div>
               <RefreshButton onRefresh={fetchData} />
             </div>
@@ -268,14 +260,20 @@ const Dashboard = () => {
         
         <div className="row">
             <div className="col-md-12">
-              <ConnectionErrorMessage isConnected={isConnected} retryConnection={initializeSocket} />
+              <ConnectionErrorMessage isConnected={!!isLive} hasApiData={hasApiData} retryConnection={reconnect} />
             </div>
           </div>
          
           <div className="row mt-4">
             <div className="col-md-8">
-            <SensorReadings sensorData={sensorData} isLoading={isLoading} />
-          </div>
+              <DeviceMap 
+                devices={events.map(e => ({...e, id: e.device_id}))} 
+                selectedDevice={selectedDevice}
+                onDeviceSelect={setSelectedDevice}
+                onRefresh={fetchData}
+              />
+              <SensorReadings sensorData={sensorData} isLoading={isLoading} />
+            </div>
           <div className="col-md-4">
             <LatestReading latestReading={latestReading} isLoading={isLoading} />
           </div>
@@ -283,6 +281,16 @@ const Dashboard = () => {
         
         <div className="row mt-4">
           <div className="col-12">
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <h3>Event Management</h3>
+              <BulkLabelingTool 
+                onLabelingComplete={(result) => {
+                  console.log('Bulk labeling completed:', result);
+                  // Refresh events to show updated labels
+                  fetchData();
+                }}
+              />
+            </div>
             <EventsTable 
               events={events} 
               isLoading={isLoading} 

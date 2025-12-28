@@ -1,8 +1,9 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import Dashboard from './pages/Dashboard';
+import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
 import Devices from './pages/Devices';
 import Settings from './pages/Settings';
+import Login from './pages/Login';
+import Analytics from './pages/Analytics';
 import './App.css';
 // No need to import logo from public folder, we'll use the public URL
 
@@ -14,15 +15,29 @@ function App() {
           <div className="container">
             <div className="header-content">
               <div className="logo-container">
-                <img src="/logo.svg" alt="Vape Detection System Logo" className="app-logo" />
-                <h1>VapeGuard</h1>
+                <img src="/logo.png" alt="VapeGuard Logo" className="app-logo" style={{ height: '40px', width: 'auto' }} />
               </div>
               <nav className="main-nav">
                 <ul>
-                  <li><Link to="/" className="active">Dashboard</Link></li>
-                  <li><Link to="/devices">Devices</Link></li>
-                  <li><Link to="/analytics">Analytics</Link></li>
-                  <li><Link to="/settings">Settings</Link></li>
+                  <li>
+                    <NavLink to="/devices" className={({ isActive }) => (isActive ? 'active' : '')}>Devices</NavLink>
+                  </li>
+                  <li>
+                    <NavLink to="/analytics" className={({ isActive }) => (isActive ? 'active' : '')}>Analytics</NavLink>
+                  </li>
+                  <li>
+                    <NavLink to="/settings" className={({ isActive }) => (isActive ? 'active' : '')}>Settings</NavLink>
+                  </li>
+                  <li>
+                    <NavLink to="/login" className="profile-link">
+                      <div className="profile-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                          <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                      </div>
+                    </NavLink>
+                  </li>
                 </ul>
               </nav>
             </div>
@@ -31,10 +46,11 @@ function App() {
         
         <main>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Devices />} />
             <Route path="/devices" element={<Devices />} />
-            <Route path="/analytics" element={<div className="container mt-5"><h2>Analytics - Coming Soon</h2></div>} />
+            <Route path="/analytics" element={<Analytics />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/login" element={<Login />} />
           </Routes>
         </main>
         
@@ -42,19 +58,17 @@ function App() {
           <div className="container">
             <div className="footer-content">
               <div className="footer-logo">
-                <img src="/logo.svg" alt="Vape Detection System Logo" className="footer-logo-img" />
-                <span>VapeGuard</span>
+                <img src="/logo.png" alt="VapeGuard Logo" className="footer-logo-img" style={{ height: '30px', width: 'auto' }} />
               </div>
               <div className="footer-links">
                 <ul>
-                  <li><Link to="/">Home</Link></li>
-                  <li><Link to="/about">About</Link></li>
-                  <li><Link to="/contact">Contact</Link></li>
-                  <li><Link to="/privacy">Privacy Policy</Link></li>
+                  <li><a href="/privacy">Privacy Policy</a></li>
+                  <li><a href="/terms">Terms of Service</a></li>
+                  <li><a href="/contact">Contact Us</a></li>
                 </ul>
               </div>
               <div className="footer-copyright">
-                <p>© {new Date().getFullYear()} VapeGuard - Advanced Vape Detection System</p>
+                &copy; {new Date().getFullYear()} VapeGuard. All rights reserved.
               </div>
             </div>
           </div>

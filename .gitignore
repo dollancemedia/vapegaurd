@@ -83,3 +83,6 @@ coverage.xml
 backend/.env
 
 .vercel
+
+# Trae IDE
+.trae/

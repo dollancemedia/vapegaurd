@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "backend/app/main.py",
+      "src": "api/index.py",
       "use": "@vercel/python"
     },
     {
@@ -15,8 +15,20 @@
   ],
   "routes": [
     {
+      "src": "/health",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/dashboard",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/docs",
+      "dest": "api/index.py"
+    },
+    {
       "src": "/api/(.*)",
-      "dest": "backend/app/main.py"
+      "dest": "api/index.py"
     },
     {
       "src": "/static/(.*)",
