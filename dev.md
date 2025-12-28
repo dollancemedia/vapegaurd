@@ -14,4 +14,4 @@
 ## Deployment
 - **Frontend**: Deploy `frontend/` to Vercel. Use `vercel.json` for rewrite rules.
 - **Landing Page**: Deploy `mistio-web/` to Vercel.
-- **Backend**: Deploy `backend/` to Render/Railway. `Procfile` is ready.
+- **Backend**: Deploy `backend/` to Railway. `Procfile` is ready. User prefers Railway to avoid Render's cold starts.
