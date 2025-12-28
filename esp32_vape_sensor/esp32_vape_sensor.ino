@@ -13,12 +13,12 @@
 #include <Adafruit_BME680.h>
 
 // WiFi Configuration
-const char* ssid = "SPG-net";  // Replace with your WiFi network name
-const char* password = "Satya1975#";  // Replace with your WiFi password
+const char* ssid = "sweethome";  // Replace with your WiFi network name
+const char* password = "rahul2008";  // Replace with your WiFi password
 
 // API Configuration
 // Local FastAPI backend on your PC (LAN testing)
-const char* apiEndpoint = "http://192.168.1.47:8000/api/sensors/data";
+const char* apiEndpoint = "http://10.0.0.43:8000/api/sensors/data";
 // Vercel endpoint (requires auth): "https://vapegaurd-x6wi-4iihr8nqn-rahuls-projects-d9f10f54.vercel.app/api/sensors/data"
 
 // Error code definitions for better debugging

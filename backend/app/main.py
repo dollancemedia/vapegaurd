@@ -27,6 +27,8 @@ app.add_middleware(
         "http://localhost:3002",
         "http://127.0.0.1:3002",
         "http://10.0.0.43:3002",
+        "https://mistio.app",
+        "https://dashboard.mistio.app",
         "https://vapegaurd-x6wi.vercel.app",
         "https://vapegaurd-x6wi-4iihr8nqn-rahuls-projects-d9f10f54.vercel.app"
     ],

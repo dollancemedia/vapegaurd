@@ -44,11 +44,28 @@ const Dashboard = () => {
   useEffect(() => { pausedRef.current = isPaused; }, [isPaused]);
   // const notificationSystemRef = useRef(null); // DISABLED - removed popup notifications
 
+  // Get Clerk token
+  const { getToken } = useAuth();
+  const [token, setToken] = useState(null);
+
+  useEffect(() => {
+    const fetchToken = async () => {
+      try {
+        const t = await getToken();
+        setToken(t);
+      } catch (error) {
+        console.error("Error fetching Clerk token:", error);
+      }
+    };
+    fetchToken();
+  }, [getToken]);
+
   // Connect to native WebSocket server via shared hook
   const { reconnect } = useWebSocket('/ws/events', {
     reconnectInterval: 3000,
     maxReconnectAttempts: 5,
     heartbeatInterval: 30000,
+    queryParams: { token },
     onMessage: (data) => {
       if (pausedRef.current) return;
       // Handle legacy frontend types

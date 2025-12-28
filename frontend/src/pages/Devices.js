@@ -5,6 +5,7 @@ import DeviceDetailPanel from '../components/DeviceDetailPanel';
 import { useDevices } from '../hooks/useDevices';
 import { useWebSocket } from '../hooks/useWebSocket';
 import api from '../services/api';
+import { useAuth } from '@clerk/clerk-react';
 
 const Devices = () => {
   const [selectedDevice, setSelectedDevice] = useState(null);
@@ -19,6 +20,22 @@ const Devices = () => {
   const [notifiedDevices, setNotifiedDevices] = useState({}); // Map of deviceId -> lastNotificationTime
   
   const { devices, loading, error, refreshDevices, pingDevice, updateDeviceStatus } = useDevices();
+
+  // Get Clerk token
+  const { getToken } = useAuth();
+  const [token, setToken] = useState(null);
+
+  useEffect(() => {
+    const fetchToken = async () => {
+      try {
+        const t = await getToken();
+        setToken(t);
+      } catch (error) {
+        console.error("Error fetching Clerk token:", error);
+      }
+    };
+    fetchToken();
+  }, [getToken]);
 
   // Setup silent polling
   useEffect(() => {
@@ -201,7 +218,8 @@ const Devices = () => {
   }, [updateDeviceStatus]);
 
   const { isConnected } = useWebSocket('/ws/events', {
-    onMessage: handleWebSocketMessage
+    onMessage: handleWebSocketMessage,
+    queryParams: { token }
   });
 
   // Handle device selection from map or list

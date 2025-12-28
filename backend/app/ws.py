@@ -1,9 +1,10 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, status
 from typing import List, Dict, Any
 import json
 import asyncio
 from datetime import datetime
 import logging
+from app.auth import validate_token
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -58,12 +59,19 @@ async def broadcast_sensor_reading(device_id: str, sensor_data: Dict[str, Any]) 
     })
 
 @router.websocket("/ws/events")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, token: str = Query(None)):
     """WebSocket endpoint for real-time event streaming
     
     This endpoint allows clients to connect and receive real-time sensor data updates
     from ESP32 devices. It handles client connections and disconnections.
     """
+    # Authenticate connection
+    user = await validate_token(token)
+    if not user:
+        # Close with Policy Violation if no valid token
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
     await websocket.accept()
     client_id = f"client_{len(active_connections) + 1}"
     active_connections[client_id] = websocket

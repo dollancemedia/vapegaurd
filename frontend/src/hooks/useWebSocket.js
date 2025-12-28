@@ -18,25 +18,46 @@ export const useWebSocket = (url, options = {}) => {
     reconnectInterval = 3000,
     maxReconnectAttempts = 5,
     heartbeatInterval = 30000,
-    protocols = []
+    protocols = [],
+    queryParams = null
   } = options;
 
   // Build WebSocket URL
   const buildWebSocketUrl = useCallback(() => {
+    let wsUrl = '';
     // Force using the environment variable in development
     const envBase = (process.env.REACT_APP_WS_URL || '').trim();
     if (envBase) {
       const normalized = envBase.endsWith('/') ? envBase.slice(0, -1) : envBase;
       console.log('Using WebSocket URL:', `${normalized}${url}`);
-      return `${normalized}${url}`;
+      wsUrl = `${normalized}${url}`;
+    } else {
+      // Fallback to using the window location
+      const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      const fallbackUrl = `${wsScheme}://${window.location.host}${url}`;
+      console.log('Using fallback WebSocket URL:', fallbackUrl);
+      wsUrl = fallbackUrl;
+    }
+
+    // Append query parameters if present
+    if (queryParams) {
+      const params = new URLSearchParams(queryParams);
+      // Filter out null/undefined values
+      const keys = Array.from(params.keys());
+      for (const key of keys) {
+        if (params.get(key) === 'null' || params.get(key) === 'undefined') {
+          params.delete(key);
+        }
+      }
+      
+      const queryString = params.toString();
+      if (queryString) {
+        wsUrl += (wsUrl.includes('?') ? '&' : '?') + queryString;
+      }
     }
     
-    // Fallback to using the window location
-    const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const fallbackUrl = `${wsScheme}://${window.location.host}${url}`;
-    console.log('Using fallback WebSocket URL:', fallbackUrl);
-    return fallbackUrl;
-  }, [url]);
+    return wsUrl;
+  }, [url, queryParams]);
 
   // Send message
   const sendMessage = useCallback((message) => {
