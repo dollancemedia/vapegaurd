@@ -41,11 +41,12 @@ const Navbar: React.FC = () => {
             {/* Auth Buttons */}
             <div className="flex items-center space-x-4">
               <SignedOut>
-                <SignInButton mode="modal">
-                  <button className="bg-transparent border border-blue-600 text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg font-medium transition-colors duration-300">
-                    Login
-                  </button>
-                </SignInButton>
+                <a 
+                  href="https://dashboard.mistio.app"
+                  className="bg-transparent border border-blue-600 text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg font-medium transition-colors duration-300"
+                >
+                  Login
+                </a>
                 <Link href="#contact" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-300">
                   Get Started
                 </Link>
