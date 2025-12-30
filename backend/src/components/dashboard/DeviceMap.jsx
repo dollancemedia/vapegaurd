@@ -59,13 +59,15 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
 
   // Get device visual props
   const getDeviceVisuals = (device) => {
+    // Prioritize offline status
+    if (device.status === 'offline') return { color: '#9CA3AF', pulse: false, icon: '💤' }; // Gray
+
     const isVape = device.sensorData?.predictedClass === 'vape';
     const isAlarm = device.status === 'alarm';
     
     if (isVape) return { color: '#EF4444', pulse: true, icon: '⚠️' }; // Red
     if (isAlarm) return { color: '#EF4444', pulse: true, icon: '🚨' }; // Red
     if (device.status === 'online') return { color: '#10B981', pulse: false, icon: '📡' }; // Green
-    if (device.status === 'offline') return { color: '#9CA3AF', pulse: false, icon: '💤' }; // Gray
     
     return { color: '#9CA3AF', pulse: false, icon: '?' };
   };

@@ -59,13 +59,15 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
 
   // Get device visual props
   const getDeviceVisuals = (device) => {
+    // Prioritize offline status
+    if (device.status === 'offline') return { color: '#9CA3AF', pulse: false, icon: '💤' }; // Gray
+
     const isVape = device.sensorData?.predictedClass === 'vape';
     const isAlarm = device.status === 'alarm';
     
     if (isVape) return { color: '#EF4444', pulse: true, icon: '⚠️' }; // Red
     if (isAlarm) return { color: '#EF4444', pulse: true, icon: '🚨' }; // Red
     if (device.status === 'online') return { color: '#10B981', pulse: false, icon: '📡' }; // Green
-    if (device.status === 'offline') return { color: '#9CA3AF', pulse: false, icon: '💤' }; // Gray
     
     return { color: '#9CA3AF', pulse: false, icon: '?' };
   };
@@ -152,7 +154,7 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
           className={`
             flex items-center space-x-2 px-4 py-2 rounded-full font-medium text-sm shadow-sm transition-all duration-200
             ${isEditing 
-              ? 'bg-blue-600 text-white hover:bg-blue-700 ring-2 ring-blue-200' 
+              ? 'bg-[#00C2CB] text-white hover:bg-[#009FA6] ring-2 ring-[#00C2CB]/30' 
               : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
             }
           `}
@@ -311,7 +313,10 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
                   <>
                     <div className="flex justify-between">
                       <span>Status:</span>
-                      <span className={`font-medium ${hoveredDevice.sensorData.predictedClass === 'vape' ? 'text-red-600' : 'text-green-600'}`}>
+                      <span className={`font-medium ${
+                        hoveredDevice.status === 'offline' ? 'text-gray-500' :
+                        hoveredDevice.sensorData.predictedClass === 'vape' ? 'text-red-600' : 'text-[#00C2CB]'
+                      }`}>
                         {hoveredDevice.sensorData.predictedClass === 'vape' ? '⚠️ Vape Detected' : '✅ Normal'}
                       </span>
                     </div>

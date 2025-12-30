@@ -314,36 +314,44 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
            {device.sensorData && (
             <div className={`
               relative overflow-hidden rounded-2xl p-5 border
-              ${device.sensorData.predictedClass === 'vape' 
-                ? 'bg-red-50 border-red-100 ring-1 ring-red-200' 
-                : 'bg-emerald-50 border-emerald-100 ring-1 ring-emerald-200'
+              ${device.status === 'offline'
+                ? 'bg-gray-50 border-gray-200 ring-1 ring-gray-300'
+                : device.sensorData.predictedClass === 'vape' 
+                  ? 'bg-red-50 border-red-100 ring-1 ring-red-200' 
+                  : 'bg-emerald-50 border-emerald-100 ring-1 ring-emerald-200'
               }
             `}>
               <div className="flex justify-between items-center relative z-10">
                 <div className="flex items-center space-x-3">
                   <div className={`
                     p-2 rounded-full
-                    ${device.sensorData.predictedClass === 'vape' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}
+                    ${device.status === 'offline' ? 'bg-gray-200 text-gray-500' :
+                      device.sensorData.predictedClass === 'vape' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}
                   `}>
-                    {device.sensorData.predictedClass === 'vape' ? <Icons.Warning /> : <Icons.Check />}
+                    {device.status === 'offline' ? <Icons.Close /> :
+                     device.sensorData.predictedClass === 'vape' ? <Icons.Warning /> : <Icons.Check />}
                   </div>
                   <div>
                     <h3 className={`text-sm font-semibold uppercase tracking-wide
-                      ${device.sensorData.predictedClass === 'vape' ? 'text-red-800' : 'text-emerald-800'}
+                      ${device.status === 'offline' ? 'text-gray-600' :
+                        device.sensorData.predictedClass === 'vape' ? 'text-red-800' : 'text-emerald-800'}
                     `}>
                       Current Status
                     </h3>
                     <p className={`text-lg font-bold
-                      ${device.sensorData.predictedClass === 'vape' ? 'text-red-700' : 'text-emerald-700'}
+                      ${device.status === 'offline' ? 'text-gray-700' :
+                        device.sensorData.predictedClass === 'vape' ? 'text-red-700' : 'text-emerald-700'}
                     `}>
-                      {device.sensorData.predictedClass === 'vape' ? 'Vape Detected' : 'Normal Atmosphere'}
+                      {device.status === 'offline' ? 'Device Offline' :
+                       device.sensorData.predictedClass === 'vape' ? 'Vape Detected' : 'Normal Atmosphere'}
                     </p>
                   </div>
                 </div>
                 <div className="text-right">
                   <span className="block text-xs font-medium text-gray-500 uppercase">Confidence</span>
                   <span className={`text-2xl font-bold
-                    ${device.sensorData.predictedClass === 'vape' ? 'text-red-700' : 'text-emerald-700'}
+                    ${device.status === 'offline' ? 'text-gray-400' :
+                      device.sensorData.predictedClass === 'vape' ? 'text-red-700' : 'text-emerald-700'}
                   `}>
                     {device.sensorData.confidence}%
                   </span>
@@ -351,7 +359,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
               </div>
               
               {/* Animated Background for Alarm */}
-              {device.sensorData.predictedClass === 'vape' && (
+              {device.status !== 'offline' && device.sensorData.predictedClass === 'vape' && (
                 <div className="absolute inset-0 bg-red-400/5 animate-pulse" />
               )}
             </div>

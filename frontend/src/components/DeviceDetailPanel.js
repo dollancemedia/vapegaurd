@@ -275,15 +275,15 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
 
       {/* Panel */}
       <div className={`
-        fixed top-0 right-0 h-full w-full sm:w-[480px] bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto
+        fixed top-[60px] right-0 h-[calc(100%-60px)] w-full sm:w-[480px] bg-white shadow-2xl z-[900] transform transition-transform duration-300 ease-in-out overflow-y-auto
         ${isOpen ? 'translate-x-0' : 'translate-x-full'}
       `}>
         {/* Panel Header */}
-        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100 px-6 py-5 flex items-start justify-between">
+        <div className="bg-white/95 backdrop-blur border-b border-gray-100 px-6 py-5 flex items-start justify-between">
           <div className="flex items-start space-x-4">
             <div className={`
               p-3 rounded-xl shadow-sm
-              ${device.type === 'admin' ? 'bg-blue-50 text-blue-600' : 'bg-indigo-50 text-indigo-600'}
+              ${device.type === 'admin' ? 'bg-[#00C2CB]/10 text-[#00C2CB]' : 'bg-indigo-50 text-indigo-600'}
             `}>
               {device.type === 'admin' ? <Icons.Admin /> : <Icons.Detector />}
             </div>
@@ -292,12 +292,14 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                 <h2 className="text-xl font-bold text-gray-900">{device.name}</h2>
                 <button 
                   onClick={() => setIsEditing(true)}
-                  className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                  className="p-1 text-gray-400 hover:text-[#00C2CB] hover:bg-[#00C2CB]/10 rounded-full transition-colors"
                 >
                   <Icons.Edit />
                 </button>
               </div>
-              <p className="text-sm text-gray-500 font-medium mt-0.5">{getDeviceTypeName(device.type)}</p>
+              <p className="text-sm text-gray-500 font-medium mt-0.5">
+                {device.location ? `${device.location.building || ''} ${device.location.room ? '• ' + device.location.room : ''}` : ''}
+              </p>
             </div>
           </div>
           <button 
@@ -314,36 +316,44 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
            {device.sensorData && (
             <div className={`
               relative overflow-hidden rounded-2xl p-5 border
-              ${device.sensorData.predictedClass === 'vape' 
-                ? 'bg-red-50 border-red-100 ring-1 ring-red-200' 
-                : 'bg-emerald-50 border-emerald-100 ring-1 ring-emerald-200'
+              ${device.status === 'offline'
+                ? 'bg-gray-50 border-gray-200 ring-1 ring-gray-300'
+                : device.sensorData.predictedClass === 'vape' 
+                  ? 'bg-red-50 border-red-100 ring-1 ring-red-200' 
+                  : 'bg-[#00C2CB]/5 border-[#00C2CB]/20 ring-1 ring-[#00C2CB]/20'
               }
             `}>
               <div className="flex justify-between items-center relative z-10">
                 <div className="flex items-center space-x-3">
                   <div className={`
                     p-2 rounded-full
-                    ${device.sensorData.predictedClass === 'vape' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}
+                    ${device.status === 'offline' ? 'bg-gray-200 text-gray-500' :
+                      device.sensorData.predictedClass === 'vape' ? 'bg-red-100 text-red-600' : 'bg-[#00C2CB]/10 text-[#00C2CB]'}
                   `}>
-                    {device.sensorData.predictedClass === 'vape' ? <Icons.Warning /> : <Icons.Check />}
+                    {device.status === 'offline' ? <Icons.Close /> :
+                     device.sensorData.predictedClass === 'vape' ? <Icons.Warning /> : <Icons.Check />}
                   </div>
                   <div>
                     <h3 className={`text-sm font-semibold uppercase tracking-wide
-                      ${device.sensorData.predictedClass === 'vape' ? 'text-red-800' : 'text-emerald-800'}
+                      ${device.status === 'offline' ? 'text-gray-600' :
+                        device.sensorData.predictedClass === 'vape' ? 'text-red-800' : 'text-[#00C2CB]'}
                     `}>
                       Current Status
                     </h3>
                     <p className={`text-lg font-bold
-                      ${device.sensorData.predictedClass === 'vape' ? 'text-red-700' : 'text-emerald-700'}
+                      ${device.status === 'offline' ? 'text-gray-700' :
+                        device.sensorData.predictedClass === 'vape' ? 'text-red-700' : 'text-[#00C2CB]'}
                     `}>
-                      {device.sensorData.predictedClass === 'vape' ? 'Vape Detected' : 'Normal Atmosphere'}
+                      {device.status === 'offline' ? 'Device Offline' :
+                       device.sensorData.predictedClass === 'vape' ? 'Vape Detected' : 'Normal Atmosphere'}
                     </p>
                   </div>
                 </div>
                 <div className="text-right">
                   <span className="block text-xs font-medium text-gray-500 uppercase">Confidence</span>
                   <span className={`text-2xl font-bold
-                    ${device.sensorData.predictedClass === 'vape' ? 'text-red-700' : 'text-emerald-700'}
+                    ${device.status === 'offline' ? 'text-gray-400' :
+                      device.sensorData.predictedClass === 'vape' ? 'text-red-700' : 'text-emerald-700'}
                   `}>
                     {device.sensorData.confidence}%
                   </span>
@@ -351,7 +361,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
               </div>
               
               {/* Animated Background for Alarm */}
-              {device.sensorData.predictedClass === 'vape' && (
+              {device.status !== 'offline' && device.sensorData.predictedClass === 'vape' && (
                 <div className="absolute inset-0 bg-red-400/5 animate-pulse" />
               )}
             </div>
@@ -480,7 +490,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                   w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-lg font-medium transition-all
                   ${isPinging 
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                    : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md'
+                    : 'bg-[#00C2CB] text-white hover:bg-[#009FA6] shadow-sm hover:shadow-md'
                   }
                 `}
               >
@@ -548,7 +558,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                   type="text" 
                   value={editForm.name} 
                   onChange={(e) => setEditForm({...editForm, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C2CB] focus:border-[#00C2CB] outline-none transition-all"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -558,7 +568,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                     type="text" 
                     value={editForm.building} 
                     onChange={(e) => setEditForm({...editForm, building: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C2CB] focus:border-[#00C2CB] outline-none transition-all"
                     />
                 </div>
                 <div>
@@ -589,7 +599,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                 Cancel
               </button>
               <button 
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm"
+                className="px-4 py-2 text-sm font-medium text-white bg-[#00C2CB] rounded-lg hover:bg-[#009FA6] shadow-sm"
                 onClick={handleSaveEdit}
               >
                 Save Changes

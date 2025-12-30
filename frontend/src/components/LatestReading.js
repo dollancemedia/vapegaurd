@@ -57,8 +57,8 @@ const LatestReading = ({ latestReading, isLoading }) => {
                 </div>
                 <div className="reading-name">Status</div>
                 <div className="reading-data" style={{
-                  color: latestReading.prediction?.type === 'vape' ? '#d97706' : 
-                         (latestReading.prediction?.type === 'fire' ? '#dc2626' : '#10b981'),
+                  color: latestReading.prediction?.type === 'vape' ? '#EF4444' : 
+                         (latestReading.prediction?.type === 'fire' ? '#dc2626' : '#00C2CB'),
                   textTransform: 'uppercase',
                   fontWeight: 'bold',
                   fontSize: '0.9rem'

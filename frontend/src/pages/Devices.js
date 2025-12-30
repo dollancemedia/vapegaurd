@@ -17,7 +17,6 @@ const Devices = () => {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [deviceHistory, setDeviceHistory] = useState({}); // Map of deviceId -> array of readings
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [notifiedDevices, setNotifiedDevices] = useState({}); // Map of deviceId -> lastNotificationTime
   
   const { devices, loading, error, refreshDevices, pingDevice, updateDeviceStatus } = useDevices();
 
@@ -49,45 +48,6 @@ const Devices = () => {
 
     return () => clearInterval(pollInterval);
   }, [refreshDevices]);
-
-  // Request notification permission on mount
-  useEffect(() => {
-    if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
-      Notification.requestPermission();
-    }
-  }, []);
-
-  // Check for vape alerts and trigger notifications
-  useEffect(() => {
-    devices.forEach(device => {
-      // Check if device is in vape state
-      if (device.sensorData && device.sensorData.predictedClass === 'vape') {
-        const now = Date.now();
-        const lastNotified = notifiedDevices[device.id] || 0;
-        
-        // Cooldown check (60 seconds)
-        if (now - lastNotified > 60000) {
-          // Trigger notification
-          if (Notification.permission === 'granted') {
-            const eventTime = new Date(device.sensorData.timestamp).toLocaleTimeString();
-            const loc = device.location;
-            const locString = `Building: ${loc.building || 'Unknown'}, Floor: ${loc.floor || 'Unknown'}, Room: ${loc.room || 'Unknown'}`;
-            
-            new Notification(`Vape Detected: ${device.name}`, {
-              body: `Time: ${eventTime}\nLocation: ${locString}`,
-              icon: '/logo.png' // Use the correct logo path
-            });
-            
-            // Update last notified time
-            setNotifiedDevices(prev => ({
-              ...prev,
-              [device.id]: now
-            }));
-          }
-        }
-      }
-    });
-  }, [devices, notifiedDevices]);
 
   // Fetch recent history on load
   useEffect(() => {
@@ -290,7 +250,7 @@ const Devices = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00C2CB] mx-auto mb-4"></div>
           <p className="text-gray-500 font-medium">Loading devices...</p>
         </div>
       </div>
@@ -304,7 +264,7 @@ const Devices = () => {
           <h2 className="text-xl font-bold text-red-600 mb-2">Error Loading Devices</h2>
           <p className="text-gray-600 mb-4">{error}</p>
           <button 
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 bg-[#00C2CB] text-white rounded-lg hover:bg-[#009FA6] transition-colors"
             onClick={refreshDevices}
           >
             Retry Connection
@@ -321,17 +281,17 @@ const Devices = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header - Matches Analytics Aesthetic */}
-      <div className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-20">
+      <div className="sticky top-0 z-20 pt-4 pb-2 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold text-gray-900">Device Management</h1>
                 <span className={`
                   inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                  ${isSystemOnline ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}
+                  ${isSystemOnline ? 'bg-[#00C2CB]/10 text-[#00C2CB]' : 'bg-red-100 text-red-800'}
                 `}>
-                  <span className={`w-2 h-2 rounded-full mr-1.5 ${isSystemOnline ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                  <span className={`w-2 h-2 rounded-full mr-1.5 ${isSystemOnline ? 'bg-[#00C2CB]' : 'bg-red-500'}`}></span>
                   {isSystemOnline ? 'System Online' : 'System Offline'}
                 </span>
               </div>
@@ -346,7 +306,7 @@ const Devices = () => {
                 </span>
               )}
               <button 
-                className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
+                className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#00C2CB] transition-all duration-200 shadow-sm"
                 onClick={handleManualRefresh}
               >
                 <svg className="-ml-1 mr-2 h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

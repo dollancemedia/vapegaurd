@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import RawDataCard from '../components/RawDataCard';
 import TestAlertButton from '../components/TestAlertButton';
-// import SchoolNotificationSystem from '../components/SchoolNotificationSystem'; // DISABLED - removed popup notifications
+import SchoolNotificationSystem from '../components/SchoolNotificationSystem';
 
 const Settings = () => {
   const [events, setEvents] = useState([]);
@@ -10,9 +10,9 @@ const Settings = () => {
     browserNotifications: true,
     emailAlerts: false,
     smsAlerts: false,
-    alertThreshold: 70
+    alertThreshold: 60
   });
-  // const notificationSystemRef = useRef(null); // DISABLED - removed popup notifications
+  const notificationSystemRef = useRef(null); // DISABLED - removed popup notifications
 
   // Handle test alerts for demonstration
   const handleTestAlert = useCallback((testEvent) => {
@@ -25,9 +25,9 @@ const Settings = () => {
   const handleDirectAlert = useCallback((testEvent) => {
     // console.log('Direct alert triggered (DISABLED):', testEvent);
     // Notification system disabled - no popup alerts will be shown
-    // if (notificationSystemRef.current) {
-    //   notificationSystemRef.current.triggerAlert(testEvent);
-    // }
+    if (notificationSystemRef.current) {
+      notificationSystemRef.current.triggerAlert(testEvent);
+    }
   }, []);
 
   const handleSettingChange = (setting, value) => {
@@ -43,12 +43,11 @@ const Settings = () => {
 
   return (
     <div className="settings-page">
-      {/* School Notification System - DISABLED to remove popup notifications */}
-      {/* <SchoolNotificationSystem 
+      <SchoolNotificationSystem 
         ref={notificationSystemRef}
         events={events} 
         isConnected={true} 
-      /> */}
+      />
       
       <div className="container">
         <div className="settings-header">
@@ -79,9 +78,21 @@ const Settings = () => {
                     <input
                       type="checkbox"
                       checked={notificationSettings.browserNotifications}
-                      onChange={(e) => handleSettingChange('browserNotifications', e.target.checked)}
+                      onChange={(e) => {
+                          const checked = e.target.checked;
+                          handleSettingChange('browserNotifications', checked);
+                          if (checked && Notification.permission !== 'granted') {
+                              Notification.requestPermission();
+                          }
+                      }}
                     />
-                    <span>📱 Browser Notifications</span>
+                    <span>📱 Browser Notifications <small style={{
+                         color: Notification.permission === 'granted' ? '#10b981' : (Notification.permission === 'denied' ? '#ef4444' : '#6b7280'), 
+                         fontWeight: '600',
+                         marginLeft: '8px'
+                     }}>
+                        (STATUS: {Notification.permission.toUpperCase()})
+                     </small></span>
                   </label>
                   
                   <label className="setting-item">

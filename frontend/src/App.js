@@ -4,6 +4,7 @@ import { ClerkProvider, SignedIn, SignedOut, RedirectToSignIn, UserButton } from
 import Devices from './pages/Devices';
 import Settings from './pages/Settings';
 import Analytics from './pages/Analytics';
+import NotificationController from './components/NotificationController';
 import './App.css';
 
 // IMPORTANT: Replace this with your actual Publishable Key from Clerk Dashboard
@@ -15,11 +16,12 @@ function App() {
       <Router>
         <div className="App">
           <SignedIn>
+            <NotificationController />
             <header className="App-header">
               <div className="container">
                 <div className="header-content">
                   <div className="logo-container">
-                    <img src="/logo.png" alt="VapeGuard Logo" className="app-logo" style={{ height: '40px', width: 'auto' }} />
+                    <img src="/logo-2.png" alt="Mistio Logo" className="app-logo" />
                   </div>
                   <nav className="main-nav">
                     <ul>
@@ -54,7 +56,7 @@ function App() {
               <div className="container">
                 <div className="footer-content">
                   <div className="footer-logo">
-                    <img src="/logo.png" alt="VapeGuard Logo" className="footer-logo-img" style={{ height: '30px', width: 'auto' }} />
+                    <img src="/logo-2.png" alt="Mistio Logo" className="footer-logo-img" style={{ height: '30px', width: 'auto' }} />
                   </div>
                   <div className="footer-links">
                     <ul>
@@ -64,7 +66,7 @@ function App() {
                     </ul>
                   </div>
                   <div className="footer-copyright">
-                    &copy; {new Date().getFullYear()} VapeGuard. All rights reserved.
+                    &copy; {new Date().getFullYear()} Mistio. All rights reserved.
                   </div>
                 </div>
               </div>

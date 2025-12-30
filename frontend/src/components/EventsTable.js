@@ -131,7 +131,7 @@ const EventsTable = ({ events, isLoading, onEventUpdate }) => {
                       <div className="confidence-mini-bar">
                         <div 
                           className="confidence-mini-fill" 
-                          style={{width: `${event.confidence}%`}}
+                          style={{width: `${event.confidence}%`, backgroundColor: '#00C2CB'}}
                         ></div>
                         <span>{event.confidence}%</span>
                       </div>

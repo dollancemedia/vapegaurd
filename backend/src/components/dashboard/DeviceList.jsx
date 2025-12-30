@@ -207,8 +207,9 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
                           <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                             <div 
                               className={`h-full rounded-full transition-all duration-500 ${
-                                device.sensorData.confidence > 80 ? 'bg-emerald-500' : 
-                                (device.sensorData.confidence > 50 ? 'bg-yellow-500' : 'bg-gray-400')
+                                isOffline ? 'bg-gray-300' :
+                                (device.sensorData.confidence > 80 ? 'bg-emerald-500' : 
+                                (device.sensorData.confidence > 50 ? 'bg-yellow-500' : 'bg-gray-400'))
                               }`}
                               style={{ width: `${device.sensorData.confidence}%` }}
                             />

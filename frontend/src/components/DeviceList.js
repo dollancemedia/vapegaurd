@@ -87,7 +87,7 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
             placeholder="Search devices by name or location..."
             value={filters.search}
             onChange={(e) => onFilterChange('search', e.target.value)}
-            className="block w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg leading-5 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-all duration-200"
+            className="block w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg leading-5 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#00C2CB] focus:border-[#00C2CB] sm:text-sm transition-all duration-200"
           />
         </div>
 
@@ -140,7 +140,7 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
                 className={`
                   group relative p-4 rounded-xl border transition-all duration-200 cursor-pointer
                   ${isSelected 
-                    ? 'bg-blue-50/50 border-blue-200 ring-1 ring-blue-200 shadow-sm' 
+                    ? 'bg-[#00C2CB]/10 border-[#00C2CB]/30 ring-1 ring-[#00C2CB]/30 shadow-sm' 
                     : 'bg-white border-gray-100 hover:border-gray-300 hover:shadow-md'
                   }
                   ${isAlarm && !isSelected ? 'border-red-100 bg-red-50/30' : ''}
@@ -150,7 +150,7 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
                 <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full 
                   ${isOffline 
                     ? 'bg-gray-300' 
-                    : (device.sensorData?.predictedClass === 'vape' ? 'bg-red-500' : 'bg-emerald-500')
+                    : (device.sensorData?.predictedClass === 'vape' ? 'bg-red-500' : 'bg-[#00C2CB]')
                   }
                 `} />
 
@@ -159,12 +159,12 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
                     <div className="flex items-center space-x-3">
                       <div className={`
                         p-2 rounded-lg 
-                        ${isAlarm ? 'bg-red-100 text-red-600' : (isOffline ? 'bg-gray-100 text-gray-500' : 'bg-blue-100 text-blue-600')}
+                        ${isAlarm ? 'bg-red-100 text-red-600' : (isOffline ? 'bg-gray-100 text-gray-500' : 'bg-[#00C2CB]/20 text-[#00C2CB]')}
                       `}>
                         {device.type === 'admin' ? <Icons.Admin /> : <Icons.Detector />}
                       </div>
                       <div>
-                        <h4 className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                        <h4 className="text-sm font-semibold text-gray-900 group-hover:text-[#00C2CB] transition-colors">
                           {device.name}
                         </h4>
                         <div className="flex items-center text-xs text-gray-500 mt-0.5">
@@ -183,11 +183,11 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
                         ? 'bg-red-50 text-red-700 border-red-100' 
                         : (isOffline 
                           ? 'bg-gray-50 text-gray-600 border-gray-100' 
-                          : 'bg-emerald-50 text-emerald-700 border-emerald-100')
+                          : 'bg-[#00C2CB]/10 text-[#00C2CB] border-[#00C2CB]/20')
                       }
                     `}>
                       <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                        isAlarm ? 'bg-red-500 animate-pulse' : (isOffline ? 'bg-gray-400' : 'bg-emerald-500')
+                        isAlarm ? 'bg-red-500 animate-pulse' : (isOffline ? 'bg-gray-400' : 'bg-[#00C2CB]')
                       }`} />
                       {device.status === 'alarm' ? 'Alert' : (device.status === 'online' ? 'Online' : 'Offline')}
                     </div>
@@ -207,8 +207,9 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
                           <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                             <div 
                               className={`h-full rounded-full transition-all duration-500 ${
-                                device.sensorData.confidence > 80 ? 'bg-emerald-500' : 
-                                (device.sensorData.confidence > 50 ? 'bg-yellow-500' : 'bg-gray-400')
+                                isOffline ? 'bg-gray-300' :
+                                (device.sensorData.confidence > 80 ? 'bg-[#00C2CB]' : 
+                                (device.sensorData.confidence > 50 ? 'bg-yellow-500' : 'bg-gray-400'))
                               }`}
                               style={{ width: `${device.sensorData.confidence}%` }}
                             />

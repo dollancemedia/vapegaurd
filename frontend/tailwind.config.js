@@ -7,7 +7,16 @@ module.exports = {
     './src/**/*.{js,jsx,ts,tsx}',
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        mistio: {
+          teal: '#00C2CB',
+          dark: '#0B1120',
+          primary: '#00C2CB',
+          secondary: '#0B1120',
+        }
+      }
+    },
   },
   plugins: [],
 };

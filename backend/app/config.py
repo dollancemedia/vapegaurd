@@ -6,5 +6,6 @@ class Settings(BaseSettings):
     DATABASE_NAME: str = "vape-alert"
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 settings = Settings()

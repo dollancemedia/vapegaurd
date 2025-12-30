@@ -249,22 +249,24 @@ const Dashboard = () => {
 
   return (
     <div className="dashboard">
-      {/* School Notification System - DISABLED to remove popup notifications */}
-      {/* <SchoolNotificationSystem 
+      <SchoolNotificationSystem 
         ref={notificationSystemRef}
         events={events} 
         isConnected={isConnected} 
-      /> */}
+      />
       
       <div className="container">
-        <div className="dashboard-header">
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <div>
-              <h1>Vape Detection Dashboard</h1>
-              <p className="dashboard-subtitle">Real-time monitoring and detection system for school safety</p>
+        <div className="dashboard-header mb-8">
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center gap-4">
+              <img src="/logo-2.png" alt="Mistio Logo" className="h-12 w-auto" />
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 m-0">Dashboard</h1>
+                <p className="text-gray-500 text-sm mt-1">Real-time monitoring and detection system</p>
+              </div>
             </div>
-            <div className="d-flex align-items-center">
-              <div className="dashboard-indicators">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <DataSourceIndicator isUsingSampleData={isUsingSampleData} />
                 <StatusIndicator isConnected={!!isLive} isLoading={isLoading} hasApiData={hasApiData} />
               </div>

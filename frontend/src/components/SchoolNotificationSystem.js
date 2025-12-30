@@ -4,15 +4,74 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
   const [activeAlerts, setActiveAlerts] = useState([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [lastEventId, setLastEventId] = useState(null);
+  const [permissionStatus, setPermissionStatus] = useState(Notification.permission);
+  const [showPermissionBanner, setShowPermissionBanner] = useState(false);
+  const [showManualInstruction, setShowManualInstruction] = useState(false);
+  
   const audioRef = useRef(null);
   const alertTimeoutRef = useRef({});
+  const mutedDevicesRef = useRef({}); // Map of deviceId -> timestamp (when mute expires)
 
-  // Initialize audio
+  // Initialize audio and request notification permission
   useEffect(() => {
     // Create audio context for alert sounds
     audioRef.current = new Audio();
     audioRef.current.preload = 'auto';
+
+    // Check permission status
+    checkPermission();
   }, []);
+
+  const checkPermission = () => {
+    if (Notification.permission === 'granted') {
+      setPermissionStatus('granted');
+      setShowPermissionBanner(false);
+    } else if (Notification.permission === 'denied') {
+      setPermissionStatus('denied');
+      setShowPermissionBanner(true);
+    } else {
+      setPermissionStatus('default');
+      // Auto-request on load if default
+      Notification.requestPermission().then(permission => {
+        setPermissionStatus(permission);
+        if (permission === 'denied') {
+          setShowPermissionBanner(true);
+        }
+      });
+    }
+  };
+
+  const handleRequestPermission = () => {
+    if (Notification.permission === 'denied') {
+        // If denied, we cannot programmatically request again. 
+        // We must instruct the user to change settings manually.
+        setShowManualInstruction(true);
+        // Explicitly alert the user to look at the top of the screen/browser
+        alert("Your browser has blocked notifications for this site.\n\nPlease click the lock icon 🔒 in your address bar and set 'Notifications' to 'Allow'.");
+        return;
+    }
+
+    Notification.requestPermission().then(permission => {
+      setPermissionStatus(permission);
+      
+      if (permission === 'granted') {
+        setShowPermissionBanner(false);
+        setShowManualInstruction(false);
+        // Test notification
+        new Notification("Notifications Enabled", {
+            body: "You will now receive alerts for vape and fire detections.",
+            icon: '/logo-2.png'
+        });
+      } else if (permission === 'denied') {
+          setShowPermissionBanner(true);
+      }
+    });
+  };
+
+  const handleIgnorePermission = () => {
+    setShowPermissionBanner(false);
+    setShowManualInstruction(false);
+  };
 
   // Expose triggerSchoolAlert function to parent components
   useImperativeHandle(ref, () => ({
@@ -30,20 +89,28 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
       return;
     }
     
-    // Check if this is a new high-confidence vape or fire event
-    // Use a more reliable way to track if we've processed this event
+    // Check if this is a new vape or fire event
     const eventIdentifier = latestEvent.id || latestEvent.timestamp;
     
+    // Check if device is muted
+    if (latestEvent.device_id) {
+        const muteUntil = mutedDevicesRef.current[latestEvent.device_id];
+        if (muteUntil && Date.now() < muteUntil) {
+            // console.log(`Ignoring alert for muted device: ${latestEvent.device_id}`);
+            return;
+        }
+    }
+
     // Check if we've already processed this event
     const alreadyProcessed = activeAlerts.some(alert => {
       const alertEventId = alert.event.id || alert.event.timestamp;
       return alertEventId === eventIdentifier && alert.event.type === latestEvent.type;
     });
     
+    // REMOVED CONFIDENCE CHECK as requested by user
     if (!alreadyProcessed && 
         eventIdentifier !== lastEventId && 
-        (latestEvent.type === 'vape' || latestEvent.type === 'fire') &&
-        latestEvent.confidence >= 70) {
+        (latestEvent.type === 'vape' || latestEvent.type === 'fire')) {
       
       triggerSchoolAlert(latestEvent);
       setLastEventId(eventIdentifier);
@@ -51,6 +118,15 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
   }, [events, lastEventId, activeAlerts]);
 
   const triggerSchoolAlert = (event) => {
+    // Check if device is muted - Top Level Check
+    // This prevents ANY reaction (Sound, UI, Browser) if the device is muted
+    if (event.device_id) {
+        const muteUntil = mutedDevicesRef.current[event.device_id];
+        if (muteUntil && Date.now() < muteUntil) {
+            return;
+        }
+    }
+
     // More robust duplicate detection
     const eventIdentifier = event.id || event.timestamp;
     
@@ -62,13 +138,11 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
     
     // If this event already has an alert, don't create a new one
     if (existingAlertIndex >= 0) {
-      console.log('Alert already exists for this event, not creating duplicate');
       return;
     }
     
     // Also check if this is the same as lastEventId to prevent duplicates
     if (eventIdentifier === lastEventId) {
-      console.log('This event was just processed, not creating duplicate');
       return;
     }
     
@@ -85,6 +159,20 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
     // Play alert sound
     if (soundEnabled) {
       playAlertSound(event.type);
+    }
+
+    // Trigger native browser notification
+    if (Notification.permission === "granted") {
+      try {
+        const n = new Notification(`SCHOOL ALERT: ${event.type.toUpperCase()} DETECTED`, {
+          body: `Location: ${event.location}\nConfidence: ${event.confidence}%`,
+          icon: '/logo-2.png',
+          requireInteraction: true
+        });
+        n.onclick = () => { window.focus(); };
+      } catch (e) {
+        console.error("Native notification failed:", e);
+      }
     }
 
     // Auto-dismiss after 30 seconds if not acknowledged
@@ -119,22 +207,30 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
   };
 
   const acknowledgeAlert = (alertId) => {
+    // Find alert to get device_id
+    const alert = activeAlerts.find(a => a.id === alertId);
+    if (alert && alert.event.device_id) {
+        // Mute for 10 minutes (10 * 60 * 1000 ms)
+        mutedDevicesRef.current[alert.event.device_id] = Date.now() + 600000;
+    }
+
+    // Start exit animation first
     setActiveAlerts(prev => 
       prev.map(alert => 
-        alert.id === alertId ? { ...alert, acknowledged: true } : alert
+        alert.id === alertId ? { ...alert, isExiting: true } : alert
       )
     );
-    
+
     // Clear auto-dismiss timeout
     if (alertTimeoutRef.current[alertId]) {
       clearTimeout(alertTimeoutRef.current[alertId]);
       delete alertTimeoutRef.current[alertId];
     }
     
-    // Set a timeout to automatically dismiss the acknowledged alert after 5 seconds
+    // Remove the alert after animation completes (e.g., 400ms)
     alertTimeoutRef.current[alertId] = setTimeout(() => {
       dismissAlert(alertId);
-    }, 5000);
+    }, 400); // Match animation duration
   };
 
   const dismissAlert = (alertId) => {
@@ -165,8 +261,6 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
     }
   };
 
-  // No longer needed since we're only using in-app notifications
-
   const getAlertIcon = (eventType) => {
     switch (eventType) {
       case 'vape': return '💨';
@@ -185,8 +279,70 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
 
   return (
     <>
+      {/* Permission Denied Banner */}
+      {showPermissionBanner && (
+        <div style={{
+            position: 'fixed',
+            top: '0',
+            left: '0',
+            right: '0',
+            backgroundColor: '#ef4444',
+            color: 'white',
+            padding: '12px 24px',
+            zIndex: 9999,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '20px' }}>⚠️</span>
+                <div>
+                    <strong>Notifications Blocked</strong>
+                    <span style={{ marginLeft: '8px', opacity: 0.9 }}>
+                        {showManualInstruction 
+                            ? "Browser has blocked notifications. Click the 🔒 icon in the URL bar to enable them."
+                            : "Please allow browser notifications to receive real-time vape alerts."
+                        }
+                    </span>
+                </div>
+            </div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+                {!showManualInstruction && (
+                    <button 
+                        onClick={handleRequestPermission}
+                        style={{
+                            backgroundColor: 'white',
+                            color: '#ef4444',
+                            border: 'none',
+                            padding: '6px 16px',
+                            borderRadius: '4px',
+                            fontWeight: '600',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        Allow Notifications
+                    </button>
+                )}
+                <button 
+                    onClick={handleIgnorePermission}
+                    style={{
+                        backgroundColor: 'transparent',
+                        color: 'white',
+                        border: '1px solid white',
+                        padding: '6px 16px',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                    }}
+                >
+                    Ignore
+                </button>
+            </div>
+        </div>
+      )}
+
       {/* Notification Settings */}
-      <div className="notification-settings">
+      <div className="notification-settings" style={{ display: 'none' }}> {/* Hidden but functional if needed */}
         <div className="settings-row">
           <label className="setting-item">
             <input
@@ -205,97 +361,81 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
           {activeAlerts.map((alert) => (
             <div
               key={alert.id}
-              className={`school-alert ${alert.event.type}-alert ${alert.acknowledged ? 'acknowledged' : 'active'}`}
-              style={{
-                borderLeftColor: getAlertColor(alert.event.type),
-                backgroundColor: alert.acknowledged ? '#f9fafb' : '#ffffff',
-                zIndex: alert.acknowledged ? 1 : 2 // Ensure unacknowledged alerts appear on top
-              }}
+              className={`school-alert ${alert.event.type}-alert ${alert.isExiting ? 'exiting' : 'active'}`}
             >
-              <div className="alert-header">
-                <div className="alert-title">
-                  <span className="alert-icon">{getAlertIcon(alert.event.type)}</span>
-                  <strong>SCHOOL ALERT: {alert.event.type.toUpperCase()} DETECTED</strong>
-                  {!alert.acknowledged && <span className="urgent-badge">URGENT</span>}
-                </div>
-                <div className="alert-actions">
-                  {!alert.acknowledged && (
-                    <button
-                      className="btn-acknowledge"
-                      onClick={(e) => {
-                        e.stopPropagation(); // Stop event propagation
-                        acknowledgeAlert(alert.id);
-                      }}
-                      style={{ position: 'relative', zIndex: 10 }} // Ensure button is clickable
-                    >
-                      ✓ Acknowledge
-                    </button>
-                  )}
+              <div className="alert-content-wrapper">
+                <div className="alert-header">
+                  <div className="alert-icon-wrapper">
+                    <span className="alert-icon">{getAlertIcon(alert.event.type)}</span>
+                  </div>
+                  <div className="alert-title-section">
+                    <div className="title-row">
+                        <h3 className="alert-title">
+                        {alert.event.type.toUpperCase()} DETECTED
+                        </h3>
+                        {!alert.acknowledged && <span className="urgent-badge">URGENT</span>}
+                        <span className="alert-time">{alert.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    </div>
+                    <div className="alert-details-compact">
+                        <span className="detail-item">{alert.event.location}</span>
+                        <span className="separator">•</span>
+                        <span className="detail-item">{alert.event.device_id}</span>
+                    </div>
+                  </div>
                   <button
-                    className="btn-dismiss"
+                    className="btn-dismiss-icon"
                     onClick={(e) => {
-                      e.stopPropagation(); // Stop event propagation
+                      e.stopPropagation();
                       dismissAlert(alert.id);
                     }}
-                    style={{ position: 'relative', zIndex: 10 }} // Ensure button is clickable
+                    aria-label="Dismiss"
                   >
                     ✕
                   </button>
                 </div>
-              </div>
-              
-              <div className="alert-details">
-                <div className="detail-row">
-                  <span className="detail-label">📍 Location:</span>
-                  <span className="detail-value">{alert.event.location}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">🎯 Confidence:</span>
-                  <span className="detail-value">{alert.event.confidence}%</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">🕐 Time:</span>
-                  <span className="detail-value">{alert.timestamp.toLocaleTimeString()}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">📱 Device:</span>
-                  <span className="detail-value">{alert.event.device_id}</span>
-                </div>
-              </div>
+                
+                <div className="alert-body">
+                  <div className="confidence-bar-compact">
+                    <div className="confidence-label">
+                        <span>Confidence</span>
+                        <span className="confidence-value">{alert.event.confidence}%</span>
+                    </div>
+                    <div className="progress-bg">
+                        <div 
+                            className="progress-fill" 
+                            style={{ 
+                                width: `${alert.event.confidence}%`,
+                                backgroundColor: getAlertColor(alert.event.type)
+                            }}
+                        />
+                    </div>
+                  </div>
 
-              <div className="alert-instructions">
-                <strong>Immediate Actions Required:</strong>
-                <ul>
-                  {alert.event.type === 'vape' ? (
-                    <>
-                      <li>🏃 Dispatch staff to {alert.event.location} immediately</li>
-                      <li>📋 Document the incident for disciplinary action</li>
-                      <li>👥 Check for additional students in the area</li>
-                      <li>📞 Contact parents/guardians if student identified</li>
-                    </>
-                  ) : (
-                    <>
-                      <li>🚨 Initiate fire safety protocol immediately</li>
-                      <li>🏃 Evacuate {alert.event.location} area</li>
-                      <li>📞 Contact emergency services (911)</li>
-                      <li>🔥 Activate fire suppression systems if available</li>
-                    </>
-                  )}
-                </ul>
+                  <div className="alert-actions-footer">
+                    {!alert.acknowledged ? (
+                        <button
+                        className="btn-acknowledge-full"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            acknowledgeAlert(alert.id);
+                        }}
+                        >
+                        Acknowledge Alert
+                        </button>
+                    ) : (
+                        <div className="acknowledged-status">
+                            <span>✓ Acknowledged</span>
+                        </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           ))}
         </div>
       )}
-
-      {/* Connection Status Warning */}
-      {!isConnected && (
-        <div className="connection-warning">
-          <span className="warning-icon">⚠️</span>
-          <strong>Warning:</strong> Real-time monitoring is offline. Alerts may be delayed.
-        </div>
-      )}
-    </>  );
+    </>
+  );
 });
 
 export default SchoolNotificationSystem;

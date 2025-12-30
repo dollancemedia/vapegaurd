@@ -42,8 +42,8 @@ const char* apiEndpoint = "http://10.0.0.43:8000/api/sensors/data";
 #define LED_PIN 13         // Built-in LED is GPIO 13 on Feather V2
 
 // I2C pins for BME680
-#define I2C_SDA 23          // SDA is GPIO 23 on Feather V2
-#define I2C_SCL 22          // SCL is GPIO 22 on Feather V2
+#define I2C_SCL 20          // SCL is GPIO 20 on Huzzah V2
+#define I2C_SDA 22          // SDA is GPIO 22 on Huzzah V2
 
 // Sensor Configuration
 Adafruit_BME680 bme; // I2C
@@ -110,7 +110,6 @@ void setup() {
   
   // DISABLED I2C for now since BME680 is not connected
   // This prevents watchdog resets due to hanging I2C bus scan
-  /*
   // Initialize I2C for BME680
   Wire.begin(I2C_SDA, I2C_SCL);
   
@@ -160,10 +159,6 @@ void setup() {
     bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
     bme.setGasHeater(320, 150); // 320*C for 150 ms
   }
-  */
-  
-  Serial.println("I2C/BME680 disabled (Hardware missing). Continuing...");
-  bme680Available = false;
   
   // Initialize PMS5003 on Hardware UART1
   // On Feather V2, RX is GPIO 33, TX is GPIO 27
@@ -477,4 +472,5 @@ String getTimestamp() {
   // Returns simple uptime string for now
   // For real timestamp, you'd need NTP time sync
   return String(millis());
+
 }
