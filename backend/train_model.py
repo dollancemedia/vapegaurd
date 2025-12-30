@@ -16,12 +16,14 @@ FEATURE_COLS = ["humidity", "pm25", "particle_size", "volume_spike"]
 OUT_RANGE_ALERT_THRESHOLD = 0.30
 
 # --- DB connection ---
-client = MongoClient(MONGODB_URI)
-db = client[DATABASE_NAME]
+def get_db():
+    client = MongoClient(MONGODB_URI)
+    return client[DATABASE_NAME]
 
 
 def get_newest_event():
     """Fetch the newest event by timestamp; fallback to _id order if needed."""
+    db = get_db()
     try:
         cur = db.events.find({}).sort("timestamp", -1).limit(1)
         return next(cur, None)
