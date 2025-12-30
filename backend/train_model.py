@@ -78,7 +78,7 @@ def _derive_features(event):
     }
 
 
-def _label_from_feedback_or_verified(event):
+def _label_from_feedback_or_verified(event, db):
     """Resolve ground-truth label: 1=vape, 0=normal.
     Priority: actual_class->latest feedback->verified->None.
     """
@@ -117,6 +117,7 @@ def fetch_dataset(limit=None, exclude_id=None):
     Excludes the event with exclude_id (e.g., newest) and maintains chronological order.
     Also tracks raw particle_size (400 - 2*gas_resistance) out-of-range frequency to suggest better bounds.
     """
+    db = get_db()
     query = {} if exclude_id is None else {"_id": {"$ne": exclude_id}}
     cursor = db.events.find(query).sort("timestamp", 1)  # ascending order
     if limit:
@@ -129,7 +130,7 @@ def fetch_dataset(limit=None, exclude_id=None):
 
     for ev in cursor:
         stats["rows_total"] += 1
-        y = _label_from_feedback_or_verified(ev)
+        y = _label_from_feedback_or_verified(ev, db)
         if y is None:
             continue
         stats["rows_labeled"] += 1

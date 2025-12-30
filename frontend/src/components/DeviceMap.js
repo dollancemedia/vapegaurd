@@ -189,7 +189,7 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
         >
           {/* Background Map Image - Embedded for perfect coordinate alignment */}
           <image 
-            href="/campus_map.svg" 
+            href={user?.username === 'wwhs' ? '/schools/washington/washington_campus_map.svg' : '/schools/irvington/campus_map.svg'} 
             width="800" 
             height="600" 
             className="opacity-90"
