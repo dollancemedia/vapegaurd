@@ -86,3 +86,6 @@ backend/.env
 
 # Trae IDE
 .trae/
+
+# Allow src/lib directories (required for frontend projects)
+!**/src/lib/
