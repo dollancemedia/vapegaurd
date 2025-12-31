@@ -5,7 +5,7 @@ import DeviceDetailPanel from '../components/DeviceDetailPanel';
 import { useDevices } from '../hooks/useDevices';
 import { useWebSocket } from '../hooks/useWebSocket';
 import api from '../services/api';
-import { useAuth } from '@clerk/clerk-react';
+import { useAuth, useOrganization } from '@clerk/clerk-react';
 
 const Devices = () => {
   const [selectedDevice, setSelectedDevice] = useState(null);
@@ -18,7 +18,10 @@ const Devices = () => {
   const [deviceHistory, setDeviceHistory] = useState({}); // Map of deviceId -> array of readings
   const [lastUpdated, setLastUpdated] = useState(null);
   
-  const { devices, loading, error, refreshDevices, pingDevice, updateDeviceStatus } = useDevices();
+  const { organization } = useOrganization();
+  const orgSlug = organization?.slug || '';
+  const school = orgSlug.includes('irvington') ? 'irvington' : (orgSlug.includes('washington') ? 'washington' : null);
+  const { devices, loading, error, refreshDevices, pingDevice, updateDeviceStatus } = useDevices(school);
 
   // Get Clerk token
   const { getToken } = useAuth();

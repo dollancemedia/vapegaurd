@@ -1,8 +1,16 @@
 # Development Notes
 
 ## Legacy Code
-- `landingpage/` directory appears to be a legacy Vite project. The active projects are `mistio-web` (Next.js Landing Page), `frontend` (React Dashboard), and `backend` (Python API).
+- `landingpage/` directory appears to be a legacy Vite project. The active projects are `mistio-web` (Vite Landing Page), `frontend` (React Dashboard), and `backend` (Python API).
 - `backend/app/routers/sensors.py` has a root-level include in `main.py` for legacy dashboard compatibility.
+
+## Local Development Startup
+- **Backend**: `cd backend` && `python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
+- **Frontend**: `cd frontend` && `npm start` (Runs on port 3002)
+- **Landing Page**: `cd mistio-web` && `npm run dev` (Runs on port 5173)
+
+## Known Issues / Warnings
+- **Backend ML Models**: Scikit-learn models (RandomForest, etc.) are raising `InconsistentVersionWarning` (saved with 1.3.2, loading with 1.7.2). They are falling back to rules, but models should be retrained or libraries downgraded for consistency.
 
 ## Production Readiness
 - **Backend Auth**: `backend/app/auth.py` contains a STUB function `validate_token`. **Before production**, this must be replaced with actual JWT validation using Clerk's public key (e.g., using `clerk-sdk-python` or `pyjwt` with JWKS).

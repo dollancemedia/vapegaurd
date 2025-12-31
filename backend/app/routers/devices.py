@@ -44,13 +44,25 @@ async def update_device_location(device_id: str, location: DeviceLocation):
     return {"status": "success", "device_id": device_id, "location": location}
 
 @router.get("/", response_model=List[dict])
-async def get_device_summary():
+async def get_device_summary(school: Optional[str] = None):
     """Get a summary of all devices and their recent activity"""
-    # Get unique device IDs from events collection
-    pipeline = [
+    allowed_device_ids: Optional[set] = None
+    if school:
+        allowed_device_ids = set()
+        async for sensor in db.sensors.find({"school": school}):
+            device_id = sensor.get("name")
+            if device_id:
+                allowed_device_ids.add(device_id)
+        if school and allowed_device_ids is not None and len(allowed_device_ids) == 0:
+            return []
+
+    pipeline = []
+    if allowed_device_ids:
+        pipeline.append({"$match": {"device_id": {"$in": list(allowed_device_ids)}}})
+    pipeline.extend([
         {"$group": {"_id": "$device_id"}},
         {"$project": {"device_id": "$_id", "_id": 0}}
-    ]
+    ])
     
     cursor = db.events.aggregate(pipeline)
     devices = []

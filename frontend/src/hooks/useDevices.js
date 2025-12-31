@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { deviceService } from '../services/deviceService';
 
-export const useDevices = () => {
+export const useDevices = (school) => {
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -11,7 +11,7 @@ export const useDevices = () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await deviceService.getAllDevices();
+      const data = await deviceService.getAllDevices(school);
       setDevices(data);
     } catch (err) {
       setError(err.message || 'Failed to fetch devices');
@@ -19,7 +19,7 @@ export const useDevices = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [school]);
 
   // Refresh devices (alias for fetchDevices)
   const refreshDevices = useCallback(() => {

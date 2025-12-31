@@ -45,10 +45,11 @@ apiClient.interceptors.response.use(
 // Device service functions
 export const deviceService = {
   // Get all devices
-  async getAllDevices() {
+  async getAllDevices(school) {
     try {
       // Fetch from real API
-      const response = await apiClient.get('/devices');
+      const path = school ? `/devices?school=${encodeURIComponent(school)}` : '/devices';
+      const response = await apiClient.get(path);
       const backendDevices = response.data;
       
       // Map backend data to frontend model

@@ -1,25 +1,23 @@
-# Deployment Plan for Mistio.app
+# Project Tasks & Review
 
-## Phase 1: Stack Alignment & Setup (Next.js Migration)
-- [x] Scaffold Next.js App (`mistio-web`) to replace Vite landing page
-- [x] Migrate core components (Hero, Features, etc.) to Next.js
-- [x] Configure Clerk Middleware (`proxy.ts` / `middleware.ts`)
-- [x] Configure Clerk Provider (`layout.tsx`)
-- [x] Create `.env.local` with placeholders
-- [x] Assemble Home Page (`page.tsx`) with Navbar and Footer
+## Review - 2025-12-30
 
-## Phase 2: Dashboard & Backend Configuration
-- [ ] Update Dashboard (`frontend/`) to handle Clerk session
-- [ ] Configure Python Backend (`api.mistio.app`) CORS and WebSocket Auth
+### Completed Actions
+- **Verified MongoDB**: Confirmed MongoDB service is running on default port 27017.
+- **Started Backend**: Started FastAPI backend on `http://0.0.0.0:8000`.
+- **Started Frontend**: Verified React frontend running on `http://localhost:3002`.
+- **Started Landing Page**: Started `mistio-web` (Vite) on `http://localhost:5173`.
+- **Updated Documentation**: Added "Local Development Startup" section to `dev.md` and noted known issues.
 
-## Phase 3: Deployment
-- [ ] Deploy Landing Page (`mistio-web`) to Vercel
-- [ ] Deploy Dashboard (`frontend/`) to Vercel
-- [ ] Deploy Backend (`api/`) to Render/Railway
+### Security & Code Quality Checks
+- **Sensitive Data**: Checked backend logs; no sensitive PII or credentials observed in sensor data payloads.
+- **Vulnerabilities**: 
+  - Backend ML models (`.joblib` files) are raising `InconsistentVersionWarning`. While currently falling back to rules, this version mismatch (saved with 1.3.2, loading with 1.7.2) could lead to instability.
+  - Frontend was proxying to port 8000 which was initially closed, causing `ECONNREFUSED`. This is resolved now that backend is up.
+- **Production Readiness**:
+  - `dev.md` updated with reminder to replace STUB auth function before production.
+  - Ensure debug modes (`--reload`) are disabled in production.
 
-## Review Summary
-- **Next.js Migration**: Successfully scaffolded `mistio-web` using Next.js App Router.
-- **Clerk Integration**: Implemented strict `clerkMiddleware` (renamed to `proxy.ts` per environment warning) and `ClerkProvider` in `layout.tsx`.
-- **Component Migration**: Migrated all core sections from Vite app (`Hero`, `ProblemStatement`, etc.) with full animation fidelity using Framer Motion and SVG utilities.
-- **Type Safety**: Resolved TypeScript errors in `AnimatedSection` and `ProblemStatementSection` regarding Framer Motion types.
-- **Build Verification**: Verified `npm run build` succeeds (fails only on runtime env var check, which is expected for placeholders).
+### Next Steps
+- Retrain ML models with current scikit-learn version to resolve warnings.
+- Implement proper JWT validation in `backend/app/auth.py`.
