@@ -50,7 +50,7 @@ export const ImageComparison = ({
   return (
     <div
       ref={containerRef}
-      className="relative w-full max-w-4xl mx-auto select-none rounded-xl overflow-hidden shadow-2xl cursor-crosshair"
+      className="relative w-full max-w-4xl mx-auto select-none rounded-xl overflow-hidden shadow-2xl cursor-crosshair touch-pan-y"
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseUp}
       onTouchMove={handleTouchMove}

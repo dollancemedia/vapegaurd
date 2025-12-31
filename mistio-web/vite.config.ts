@@ -17,4 +17,8 @@ export default defineConfig({
     }),
     tsconfigPaths()
   ],
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
 })

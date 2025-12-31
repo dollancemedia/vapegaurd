@@ -68,19 +68,23 @@ function AccordionItem({
   item,
   isActive,
   onMouseEnter,
+  onClick,
 }: {
   item: AccordionItemData;
   isActive: boolean;
   onMouseEnter: () => void;
+  onClick: () => void;
 }) {
   return (
     <div
       className={`
-        relative h-[550px] rounded-2xl overflow-hidden cursor-pointer
+        relative rounded-2xl overflow-hidden cursor-pointer
         transition-all duration-700 ease-in-out
-        ${isActive ? 'w-[500px]' : 'w-[80px]'}
+        w-full md:h-[550px]
+        ${isActive ? 'h-[400px] md:w-[500px]' : 'h-[80px] md:w-[80px]'}
       `}
       onMouseEnter={onMouseEnter}
+      onClick={onClick}
     >
       <img
         src={item.imageUrl}
@@ -100,7 +104,7 @@ function AccordionItem({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             transition={{ duration: 0.3, ease: "easeOut", delay: 0.2 }}
-            className="absolute bottom-0 left-0 p-6 text-white w-[500px]"
+            className="absolute bottom-0 left-0 p-6 text-white w-full"
           >
             <h3 className="text-xl font-bold mb-2 leading-tight">{item.title}</h3>
             <ul className="space-y-1">
@@ -122,8 +126,10 @@ function AccordionItem({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="absolute text-white text-base font-semibold whitespace-nowrap
-              left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-90 origin-center"
+            className={`absolute text-white text-base font-semibold whitespace-nowrap
+              left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 
+              md:rotate-90 md:origin-center
+            `}
           >
             {item.title}
           </motion.span>
@@ -169,13 +175,14 @@ export function LandingAccordionItem() {
           </div>
 
           <div className="w-full lg:w-2/3 flex justify-center lg:justify-end">
-            <div className="flex flex-row items-center justify-center gap-2 overflow-hidden p-2">
+            <div className="flex flex-col md:flex-row items-center justify-center gap-2 overflow-hidden p-2 w-full">
               {accordionItems.map((item, index) => (
                 <AccordionItem
                   key={item.id}
                   item={item}
                   isActive={index === activeIndex}
                   onMouseEnter={() => handleItemHover(index)}
+                  onClick={() => handleItemHover(index)}
                 />
               ))}
             </div>
