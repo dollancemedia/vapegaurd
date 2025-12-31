@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app.database import db
-from app.inference import load_model
+from app.inference import load_model, get_model_error
 from pymongo.errors import PyMongoError
 from datetime import datetime
 from starlette.middleware.cors import CORSMiddleware

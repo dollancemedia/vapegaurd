@@ -1,9 +1,8 @@
-from typing import Optional
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    MONGODB_URI: Optional[str] = None
+    MONGODB_URI: str
     DATABASE_NAME: str = "vape-alert"
     class Config:
         env_file = ".env"
