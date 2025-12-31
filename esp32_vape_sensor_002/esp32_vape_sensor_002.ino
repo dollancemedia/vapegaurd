@@ -18,7 +18,7 @@ const char* password = "rahul2008";  // Replace with your WiFi password
 
 // API Configuration
 // Local FastAPI backend on your PC (LAN testing)
-const char* apiEndpoint = "http://10.0.0.43:8000/api/sensors/data";
+const char* apiEndpoint = "https://vapegaurd-production.up.railway.app/api/sensors/data";
 // Vercel endpoint (requires auth): "https://vapegaurd-x6wi-4iihr8nqn-rahuls-projects-d9f10f54.vercel.app/api/sensors/data"
 
 // Error code definitions for better debugging
