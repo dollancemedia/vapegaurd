@@ -30,7 +30,8 @@ app.add_middleware(
         "https://mistio.app",
         "https://dashboard.mistio.app",
         "https://vapegaurd-x6wi.vercel.app",
-        "https://vapegaurd-x6wi-4iihr8nqn-rahuls-projects-d9f10f54.vercel.app"
+        "https://vapegaurd-x6wi-4iihr8nqn-rahuls-projects-d9f10f54.vercel.app",
+        "https://vapegaurd-production.up.railway.app"
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
