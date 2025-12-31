@@ -51,7 +51,7 @@ export const Navbar = () => {
 
           {/* Right: CTAs */}
           <div className="flex items-center gap-4">
-            <Button variant="ghost" className="hidden sm:flex" onClick={() => window.location.href = 'http://localhost:3002'}>
+            <Button variant="ghost" className="hidden sm:flex" onClick={() => window.location.href = 'https://dashboard.mistio.app'}>
               Log In
             </Button>
             <Button 
@@ -84,7 +84,7 @@ export const Navbar = () => {
               </a>
             ))}
             <div className="mt-4 px-3 flex flex-col gap-3">
-              <Button variant="ghost" className="w-full justify-start" onClick={() => window.location.href = 'http://localhost:3002'}>Log In</Button>
+              <Button variant="ghost" className="w-full justify-start" onClick={() => window.location.href = 'https://dashboard.mistio.app'}>Log In</Button>
               <Button 
                 variant="gradient" 
                 className="w-full"

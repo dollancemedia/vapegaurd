@@ -1,11 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useOrganization } from "@clerk/clerk-react";
 import deviceService from '../services/deviceService';
-
-const ORG_IMAGE_MAP = {
-  irvington: "/schools/irvington/irvington.svg",
-  washington: "/schools/washington/washington.svg",
-};
 
 // Icons
 const Icons = {
@@ -32,7 +26,6 @@ const Icons = {
 };
 
 const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
-  const { organization, isLoaded } = useOrganization();
   const [hoveredDevice, setHoveredDevice] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   
@@ -151,17 +144,6 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
     }
   };
 
-  const slug = organization?.slug;
-  console.log('Current Organization Slug:', slug);
-  
-  let mapImage = "/default_map.svg";
-  if (slug) {
-    const matchedKey = Object.keys(ORG_IMAGE_MAP).find(key => slug.includes(key));
-    if (matchedKey) {
-      mapImage = ORG_IMAGE_MAP[matchedKey];
-    }
-  }
-
   return (
     <div className="relative w-full h-full bg-gray-100 overflow-hidden group">
       
@@ -207,7 +189,7 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
         >
           {/* Background Map Image - Embedded for perfect coordinate alignment */}
           <image 
-            href={mapImage}
+            href={user?.username === 'wwhs' ? '/schools/washington/washington_campus_map.svg' : '/schools/irvington/campus_map.svg'} 
             width="800" 
             height="600" 
             className="opacity-90"
