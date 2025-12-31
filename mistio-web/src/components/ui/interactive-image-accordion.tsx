@@ -100,10 +100,10 @@ function AccordionItem({
       <AnimatePresence mode="wait">
         {isActive && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.3, ease: "easeOut", delay: 0.2 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3, ease: "easeOut", delay: 0.1 }}
             className="absolute bottom-0 left-0 p-6 text-white w-full"
           >
             <h3 className="text-xl font-bold mb-2 leading-tight">{item.title}</h3>

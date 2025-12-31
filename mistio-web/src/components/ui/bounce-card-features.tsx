@@ -13,8 +13,14 @@ export const BouncyCardsFeatures = () => {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           className="whitespace-nowrap rounded-lg bg-mistio-teal px-4 py-2 font-medium text-white shadow-xl transition-colors hover:bg-teal-600"
+          onClick={() => {
+            const testimonialsSection = document.getElementById('testimonials');
+            if (testimonialsSection) {
+              testimonialsSection.scrollIntoView({ behavior: 'smooth' });
+            }
+          }}
         >
-          View all features
+          See It in Action
         </motion.button>
       </div>
       <div className="mb-4 grid grid-cols-12 gap-4">
@@ -100,7 +106,7 @@ export const BouncyCardsFeatures = () => {
             </div>
           }
         >
-          <BounceCard className="w-full h-full">
+          <BounceCard className="w-full h-full overflow-hidden">
             <div className="absolute top-4 w-full text-center z-10 -translate-x-8 md:hidden">
               <h3 className="mx-auto text-center text-2xl font-semibold">Fast Vape Detection</h3>
             </div>
@@ -158,7 +164,7 @@ export const BouncyCardsFeatures = () => {
             </div>
           }
         >
-          <BounceCard className="w-full h-full">
+          <BounceCard className="w-full h-full overflow-hidden">
             <div className="absolute top-4 w-full text-center z-10 -translate-x-8 md:hidden">
               <h3 className="mx-auto text-center text-2xl font-semibold">Works Everywhere</h3>
             </div>
@@ -262,7 +268,7 @@ const FlipCardWrapper = ({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
+              className="fixed inset-0 bg-black/50 z-[60] backdrop-blur-sm"
               onClick={(e) => {
                 e.stopPropagation();
                 setIsFlipped(false);
@@ -270,7 +276,7 @@ const FlipCardWrapper = ({
             />
             <motion.div
               layoutId={`flip-card-${id}`}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              className="fixed inset-0 z-[70] flex items-center justify-center p-4"
             >
               <motion.div 
                  className="relative w-full max-w-2xl bg-white rounded-3xl overflow-hidden shadow-2xl cursor-default"

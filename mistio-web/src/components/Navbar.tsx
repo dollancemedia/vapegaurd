@@ -52,11 +52,12 @@ export const Navbar = () => {
           {/* Right: CTAs */}
           <div className="flex items-center gap-4">
             <Button variant="ghost" className="hidden sm:flex" onClick={() => window.location.href = 'https://dashboard.mistio.app'}>
-              Log In
+              Dashboard
             </Button>
             <Button 
               variant="gradient" 
               size="sm"
+              className="ml-2"
               onClick={() => {
                 const contactSection = document.getElementById('contact');
                 if (contactSection) {
@@ -84,7 +85,7 @@ export const Navbar = () => {
               </a>
             ))}
             <div className="mt-4 px-3 flex flex-col gap-3">
-              <Button variant="ghost" className="w-full justify-start" onClick={() => window.location.href = 'https://dashboard.mistio.app'}>Log In</Button>
+              <Button variant="ghost" className="w-full justify-start" onClick={() => window.location.href = 'https://dashboard.mistio.app'}>Dashboard</Button>
               <Button 
                 variant="gradient" 
                 className="w-full"
