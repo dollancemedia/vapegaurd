@@ -21,8 +21,8 @@ const MobileDashboard = () => {
   const [lastUpdated, setLastUpdated] = useState(null);
   
   const { organization } = useOrganization();
-  const orgSlug = organization?.slug || '';
-  const school = orgSlug.includes('irvington') ? 'irvington' : (orgSlug.includes('washington') ? 'washington' : null);
+  const name = organization?.name;
+  const school = name.toLowerCase();
   // Get Clerk token
   const { getToken } = useAuth();
   const [token, setToken] = useState(null);

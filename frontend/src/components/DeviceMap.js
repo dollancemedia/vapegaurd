@@ -2,11 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useOrganization } from "@clerk/clerk-react";
 import deviceService from '../services/deviceService';
 
-const ORG_IMAGE_MAP = {
-  irvington: "/schools/irvington.svg",
-  washington: "/schools/washington.svg",
-};
-
 // Icons
 const Icons = {
   Edit: () => (
@@ -186,16 +181,26 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditi
     }
   };
 
-  const slug = organization?.slug;
-  
-  let mapImage = "/schools/irvington.svg";
-  if (slug) {
-    // Check if any key in ORG_IMAGE_MAP is part of the slug
-    const matchedKey = Object.keys(ORG_IMAGE_MAP).find(key => slug.includes(key));
-    if (matchedKey) {
-      mapImage = ORG_IMAGE_MAP[matchedKey];
-    }
-  }
+  const name = organization?.name;
+
+  // Map image path state with preload + fallback handling
+  const [mapImage, setMapImage] = useState('/default.svg');
+
+  useEffect(() => {
+    let candidate = '/default.svg';
+    if (name) candidate = `/schools/${name.toLowerCase()}.svg`;
+
+    // Try to preload the image; if it fails, keep default
+    const img = new Image();
+    img.onload = () => setMapImage(candidate);
+    img.onerror = () => setMapImage('/default.svg');
+    img.src = candidate;
+
+    return () => {
+      img.onload = null;
+      img.onerror = null;
+    };
+  }, [name]);
 
   return (
     <div className="relative w-full h-full bg-white overflow-hidden group">

@@ -25,8 +25,8 @@ const Devices = () => {
   const [lastUpdated, setLastUpdated] = useState(null);
   
   const { organization } = useOrganization();
-  const orgSlug = organization?.slug || '';
-  const school = orgSlug.includes('irvington') ? 'irvington' : (orgSlug.includes('washington') ? 'washington' : null);
+  const name = organization?.name;
+  const school = name.toLowerCase();
   const { devices, loading, error, refreshDevices, pingDevice, updateDeviceStatus } = useDevices(school);
 
   // Get Clerk token

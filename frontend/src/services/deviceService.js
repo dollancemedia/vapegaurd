@@ -43,12 +43,11 @@ export const deviceService = {
   // Get all devices
   async getAllDevices(school) {
     try {
-      // ✅ Fastest-win fix: hit the trailing-slash route directly to avoid 307 redirects
-      const path = school
-        ? `/devices/?school=${encodeURIComponent(school)}`
-        : '/devices/';
+      // Fastest-win fix: hit the trailing-slash route directly to avoid 307 redirects
+      const path = !school ? `/devices/?school=noaccess` :
+        ((school === 'admin') ? '/devices/' : `/devices/?school=${encodeURIComponent(school)}`);
 
-      // ✅ Actually fetch devices
+      // Actually fetch devices
       const response = await apiClient.get(path);
       const backendDevices = response.data;
 
