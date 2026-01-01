@@ -1,4 +1,4 @@
 [phases.setup]
 # libgomp: Required for OpenMP support (XGBoost, Scikit-Learn threading)
 # gcc: Required for compiling any Python extensions that don't have wheels
-nixPkgs = ["libgomp", "gcc"]
+nixPkgs = [ "python311", "libgomp", "openblas", "gcc"]
