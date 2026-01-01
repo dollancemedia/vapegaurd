@@ -30,3 +30,115 @@ p {
   margin-top: 0;
   margin-bottom: 1rem;
 }
+
+/* Utility classes */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+
+/* Mobile Header Actions */
+.mobile-header-actions {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  padding: 8px;
+  color: #4b5563;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Hide desktop nav on mobile */
+@media (max-width: 640px) {
+  .desktop-nav {
+    display: none;
+  }
+  
+  .mobile-header-actions {
+    display: flex;
+  }
+
+  .App-header {
+    height: 60px; /* Keep height consistent */
+    box-shadow: none; /* Remove shadow if we want the "Device Management" section to blend or stand out */
+    border-bottom: none; /* Remove border if we want seamless look */
+  }
+
+  .App-header .container {
+    padding: 0 16px;
+  }
+
+  /* Make logo smaller on mobile */
+  .app-logo {
+    height: 32px;
+    width: auto;
+    position: static; /* Reset absolute positioning */
+    animation: none;
+    margin-top: 0;
+    top: auto;
+    left: auto;
+  }
+  
+  .logo-container {
+    min-width: auto;
+  }
+}
+
+/* Ensure mobile bottom nav is active */
+.mobile-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 80px; /* Taller for modern look */
+  background: #ffffff;
+  border-top: 1px solid #f3f4f6;
+  display: none;
+  z-index: 1000;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
+  border-radius: 24px 24px 0 0;
+  padding-bottom: 20px; /* Safe area */
+}
+
+.mobile-bottom-nav .nav-items {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  height: 100%;
+}
+
+.mobile-bottom-nav a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #9ca3af;
+  text-decoration: none;
+}
+
+.mobile-bottom-nav a.active {
+  color: #00C2CB;
+}
+
+.mobile-bottom-nav a.active span {
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .mobile-bottom-nav {
+    display: block;
+  }
+}

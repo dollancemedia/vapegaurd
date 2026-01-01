@@ -13,6 +13,8 @@ const Settings = () => {
     alertThreshold: 60
   });
   const notificationSystemRef = useRef(null); // DISABLED - removed popup notifications
+  const hasNotifications = typeof window !== 'undefined' && 'Notification' in window;
+  const notificationPermission = hasNotifications ? Notification.permission : 'unsupported';
 
   // Handle test alerts for demonstration
   const handleTestAlert = useCallback((testEvent) => {
@@ -77,22 +79,23 @@ const Settings = () => {
                   <label className="setting-item">
                     <input
                       type="checkbox"
+                      disabled={!hasNotifications}
                       checked={notificationSettings.browserNotifications}
                       onChange={(e) => {
                           const checked = e.target.checked;
                           handleSettingChange('browserNotifications', checked);
-                          if (checked && Notification.permission !== 'granted') {
+                          if (checked && hasNotifications && Notification.permission !== 'granted') {
                               Notification.requestPermission();
                           }
                       }}
                     />
                     <span>📱 Browser Notifications <small style={{
-                         color: Notification.permission === 'granted' ? '#10b981' : (Notification.permission === 'denied' ? '#ef4444' : '#6b7280'), 
+                         color: notificationPermission === 'granted' ? '#10b981' : (notificationPermission === 'denied' ? '#ef4444' : '#6b7280'), 
                          fontWeight: '600',
                          marginLeft: '8px'
                      }}>
-                        (STATUS: {Notification.permission.toUpperCase()})
-                     </small></span>
+                        (STATUS: {notificationPermission.toUpperCase()})
+                      </small></span>
                   </label>
                   
                   <label className="setting-item">

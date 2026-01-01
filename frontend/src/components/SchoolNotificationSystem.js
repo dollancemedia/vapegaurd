@@ -4,7 +4,8 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
   const [activeAlerts, setActiveAlerts] = useState([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [lastEventId, setLastEventId] = useState(null);
-  const [permissionStatus, setPermissionStatus] = useState(Notification.permission);
+  const hasNotifications = typeof window !== 'undefined' && 'Notification' in window;
+  const [permissionStatus, setPermissionStatus] = useState(hasNotifications ? Notification.permission : 'unsupported');
   const [showPermissionBanner, setShowPermissionBanner] = useState(false);
   const [showManualInstruction, setShowManualInstruction] = useState(false);
   
@@ -19,10 +20,20 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
     audioRef.current.preload = 'auto';
 
     // Check permission status
-    checkPermission();
+    if (hasNotifications) {
+      checkPermission();
+    } else {
+      setPermissionStatus('unsupported');
+      setShowPermissionBanner(false);
+    }
   }, []);
 
   const checkPermission = () => {
+    if (!hasNotifications) {
+      setPermissionStatus('unsupported');
+      setShowPermissionBanner(false);
+      return;
+    }
     if (Notification.permission === 'granted') {
       setPermissionStatus('granted');
       setShowPermissionBanner(false);
@@ -31,17 +42,15 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
       setShowPermissionBanner(true);
     } else {
       setPermissionStatus('default');
-      // Auto-request on load if default
-      Notification.requestPermission().then(permission => {
-        setPermissionStatus(permission);
-        if (permission === 'denied') {
-          setShowPermissionBanner(true);
-        }
-      });
+      setShowPermissionBanner(true);
     }
   };
 
   const handleRequestPermission = () => {
+    if (!hasNotifications) {
+      setPermissionStatus('unsupported');
+      return;
+    }
     if (Notification.permission === 'denied') {
         // If denied, we cannot programmatically request again. 
         // We must instruct the user to change settings manually.
@@ -58,10 +67,12 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
         setShowPermissionBanner(false);
         setShowManualInstruction(false);
         // Test notification
-        new Notification("Notifications Enabled", {
-            body: "You will now receive alerts for vape and fire detections.",
-            icon: '/logo-2.png'
-        });
+        if (hasNotifications) {
+          new Notification("Notifications Enabled", {
+              body: "You will now receive alerts for vape and fire detections.",
+              icon: '/logo-2.png'
+          });
+        }
       } else if (permission === 'denied') {
           setShowPermissionBanner(true);
       }
@@ -162,7 +173,7 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
     }
 
     // Trigger native browser notification
-    if (Notification.permission === "granted") {
+    if (hasNotifications && Notification.permission === "granted") {
       try {
         const n = new Notification(`SCHOOL ALERT: ${event.type.toUpperCase()} DETECTED`, {
           body: `Location: ${event.location}\nConfidence: ${event.confidence}%`,

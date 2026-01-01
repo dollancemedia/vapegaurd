@@ -9,7 +9,15 @@
     "install-backend": "cd backend && pip install -r requirements.txt",
     "vercel-build": "cd frontend && npm install && npm run build"
   },
-  "keywords": ["iot", "vape-detection", "esp32", "fastapi", "react", "xgboost", "mongodb"],
+  "keywords": [
+    "iot",
+    "vape-detection",
+    "esp32",
+    "fastapi",
+    "react",
+    "xgboost",
+    "mongodb"
+  ],
   "author": "Your Name",
   "license": "MIT",
   "engines": {

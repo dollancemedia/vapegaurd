@@ -361,6 +361,63 @@ main {
   to { transform: rotate(360deg); }
 }
 
+/* Mobile tweaks */
+@media (max-width: 640px) {
+  .App-header {
+    height: 48px;
+  }
+  .logo-container {
+    min-width: 120px;
+  }
+  .app-logo {
+    height: 64px;
+    top: -30px;
+  }
+  .main-nav ul {
+    display: none;
+  }
+  .app-footer {
+    padding: 20px 0 72px;
+  }
+  .footer-content {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+/* Mobile bottom nav moved to index.css or handled via Tailwind */
+/* 
+.mobile-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: #ffffff;
+  border-top: 1px solid #e5e7eb;
+  display: none;
+  z-index: 1000;
+}
+.mobile-bottom-nav .nav-items {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  height: 100%;
+}
+.mobile-bottom-nav a {
+  color: #4b5563;
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+.mobile-bottom-nav a.active {
+  color: #00C2CB;
+}
+@media (max-width: 640px) {
+  .mobile-bottom-nav {
+    display: block;
+  }
+}
+*/
 /* Latest Reading Styles */
 .latest-reading {
   display: flex;

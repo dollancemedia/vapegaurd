@@ -7,9 +7,12 @@ export const useDevices = (school) => {
   const [error, setError] = useState(null);
 
   // Fetch all devices
-  const fetchDevices = useCallback(async () => {
+  const fetchDevices = useCallback(async (opts = {}) => {
+    const silent = !!opts.silent;
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       setError(null);
       const data = await deviceService.getAllDevices(school);
       setDevices(data);
@@ -17,13 +20,16 @@ export const useDevices = (school) => {
       setError(err.message || 'Failed to fetch devices');
       console.error('Error fetching devices:', err);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [school]);
 
   // Refresh devices (alias for fetchDevices)
   const refreshDevices = useCallback(() => {
-    fetchDevices();
+    // Silent refresh: do not flip global loading state to avoid UI flicker
+    fetchDevices({ silent: true });
   }, [fetchDevices]);
 
   // Get device by ID
@@ -114,7 +120,8 @@ export const useDevices = (school) => {
 
   // Initial fetch on mount
   useEffect(() => {
-    fetchDevices();
+    // Initial fetch should show loading state
+    fetchDevices({ silent: false });
   }, [fetchDevices]);
 
   return {
