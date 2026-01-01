@@ -4,6 +4,10 @@
 - `landingpage/` directory appears to be a legacy Vite project. The active projects are `mistio-web` (Vite Landing Page), `frontend` (React Dashboard), and `backend` (Python API).
 - `backend/app/routers/sensors.py` has a root-level include in `main.py` for legacy dashboard compatibility.
 
+## Recent Fixes (2025-12-31)
+- **Frontend WebSocket Loop**: Fixed an infinite loop in `useWebSocket.js` caused by `connectionAttempts` state triggering re-renders and connection resets.
+- **Console Spam**: Removed excessive debug logging from `useWebSocket.js`.
+
 ## Local Development Startup
 - **Backend**: `cd backend` && `python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
 - **Frontend**: `cd frontend` && `npm start` (Runs on port 3002)

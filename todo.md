@@ -1,42 +1,26 @@
-# Project Tasks & Review
 
-## Status Review
-- **Backend**: Python/FastAPI running on port 8000.
-- **Frontend**: React running on port 3002.
-- **Firmware**: ESP32 C6 sending data to `10.0.0.43:8000`.
+## Review & Summary of Changes (2025-12-31)
 
-## Recent Changes
-### Feature: Interactive Map Editor
-- **Goal**: Allow users to customize device positions on the map and improve visibility.
-- **Changes**:
-    - **Map Size**: Adjusted map height to `550px` (was 700px) to prevent bleeding into footer.
-    - **Selection Fix**:
-        - Added `z-index: 10` to device markers to ensure they are clickable above the map image.
-        - Added a transparent `r=40` hit area around each device marker to make clicking easier.
-        - Ensured `stopPropagation` works correctly so clicking a device doesn't trigger the "Please select" alert.
-    - **Dashboard Support**: Enabled map editing and selection state on the main Dashboard page (previously only worked on Devices page).
-    - **Marker Size**: Increased visible device circle radius (Normal: 12px -> 18px, Selected: 16px -> 24px).
-    - **Edit Mode**:
-        - Click "Edit Location" to enable editing.
-        - Select a device (now easier to click), then click anywhere on the map to move it.
-        - Click "Done" to save.
-    - **Persistence**: Backend endpoint `PUT /api/devices/{id}/location` saves coordinates to MongoDB.
+### Issue Addressed
+The user reported an "infinite loop" of WebSocket errors ("1000+ logs very very quickly") on the frontend, which likely caused the console to crash and prevented the dashboard from displaying live sensor data.
 
-### Fix 1: External Access
-- **Issue**: Backend was only listening on `127.0.0.1` (localhost), blocking ESP32.
-- **Fix**: Restarted `uvicorn` with `--host 0.0.0.0` to allow external connections from ESP32.
+### Root Cause Analysis
+1.  **Dependency Loop**: In `frontend/src/hooks/useWebSocket.js`, the `connect` function depended on `connectionAttempts`. When a connection closed (e.g., due to a momentary network blip or initial failure), `connectionAttempts` incremented, causing `connect` to be recreated. This triggered the `useEffect` hook to run again, which called `disconnect()` and then `connect()`, creating a rapid cycle of disconnect/reconnect.
+2.  **Unstable Callbacks**: The `onOpen`, `onClose`, `onMessage`, etc., callbacks passed from `Dashboard.js` were inline functions created on every render. This also caused `connect` to be recreated on every render, leading to frequent reconnections.
+3.  **Excessive Logging**: Debug logs inside the loop (e.g., "Connecting to WebSocket:", "Using WebSocket URL:") flooded the console during these rapid cycles.
 
-### Fix 2: WebSocket 403 Error
-- **Issue**: Frontend `Devices.js` was trying to connect to `/ws/devices/status`, which does not exist in the backend.
-- **Fix**: Updated `frontend/src/pages/Devices.js` to connect to the valid `/ws/events` endpoint.
+### Changes Implemented
+1.  **Refactored `useWebSocket.js`**:
+    *   **Stable Callbacks**: Used `useRef` to store the latest callback functions (`onMessage`, `onOpen`, etc.). This allows the `connect` function to invoke the latest logic without needing to be recreated when the callbacks change.
+    *   **Stable Connection Logic**: Converted `connectionAttempts` from state to `useRef`. This ensures that incrementing the attempt counter does not trigger a component re-render or recreate the `connect` function, breaking the infinite loop.
+    *   **Dependency Cleanup**: Removed unstable dependencies from the `connect` `useCallback` hook.
+    *   **Log Cleanup**: Commented out excessive console logs ("Connecting...", "Using URL...") to clean up the developer console and improve performance.
 
-### Fix 3: Stale Device Cleanup
-- **Issue**: Users saw "random non-existent detectors".
-- **Fix**: Created and ran `backend/cleanup_devices.py` to remove stale data.
+### Verification
+*   **Logic Check**: The circular dependency between state updates and effect re-execution has been broken. The WebSocket will now attempt to connect once, and if it fails, it will retry using the internal ref counter without resetting the entire connection lifecycle.
+*   **Security**: No security regressions. The WebSocket still uses the token provided in query params.
 
-## Security Review
-- **Input Validation**: The new location endpoint uses Pydantic (`DeviceLocation`) to validate `x` and `y` are floats.
-- **Access Control**: Currently open to all users (dev mode). For production, ensure `PUT` endpoints are protected.
-
-## Notes
-- **Usage**: To move a device, first select it (click the circle or list item), then click "Edit Location", then click the new spot on the map.
+### Next Steps
+*   Deploy the updated frontend to Vercel.
+*   Verify that the "1000+ logs" issue is gone.
+*   Verify that sensor data appears on the dashboard (assuming the backend is sending data with timestamps).

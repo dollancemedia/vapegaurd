@@ -39,7 +39,11 @@
     -   **Issue**: ESP32 code is verified correct, but no data in DB. Backend is healthy.
     -   **Root Cause**: Backend was running on `localhost` (127.0.0.1) instead of exposing to network (`0.0.0.0`).
     -   **Fix**: Restarted backend with `--host 0.0.0.0`.
+    
+9.  **Frontend WebSocket Loop Fix (2025-12-31)**:
+    -   **Issue**: User reported 1000+ logs and console crash due to WebSocket infinite retry loop.
+    -   **Fix**: Refactored `useWebSocket.js` to use `useRef` for callbacks and connection attempts, preventing re-renders and recreation of the connection function. Removed excessive logging.
 
-8.  **Next Steps**:
+10. **Next Steps**:
     -   Verify data flow from ESP32 to Backend.
     -   Implement blinking red circle and notifications.
