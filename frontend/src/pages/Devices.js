@@ -7,13 +7,19 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import api from '../services/api';
 import { useAuth, useOrganization } from '@clerk/clerk-react';
 
+import MobileDashboard from './MobileDashboard';
+import { useMediaQuery } from 'react-responsive';
+
 const Devices = () => {
+  const isMobile = useMediaQuery({ maxWidth: 768 });
+  
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [filters, setFilters] = useState({
     status: 'all',
     type: 'all',
     search: ''
   });
+  
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [deviceHistory, setDeviceHistory] = useState({}); // Map of deviceId -> array of readings
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -185,6 +191,14 @@ const Devices = () => {
     queryParams: { token }
   });
 
+  // Determine overall system status
+  // Show "Live" if ANY device is online, otherwise "Offline"
+  const isSystemOnline = devices.some(device => device.status === 'online');
+
+  if (isMobile) {
+    return <MobileDashboard />;
+  }
+
   // Handle device selection from map or list
   const handleDeviceSelect = (device) => {
     setSelectedDevice(device);
@@ -196,20 +210,6 @@ const Devices = () => {
     setIsPanelOpen(false);
     setSelectedDevice(null);
   };
-
-  // Sync selectedDevice with devices list when it updates (e.g. after edit)
-  useEffect(() => {
-    if (selectedDevice && devices.length > 0) {
-      const updated = devices.find(d => d.id === selectedDevice.id);
-      // Check if name or location changed
-      if (updated && (
-          updated.name !== selectedDevice.name || 
-          JSON.stringify(updated.location) !== JSON.stringify(selectedDevice.location)
-        )) {
-        setSelectedDevice(prev => ({ ...prev, ...updated }));
-      }
-    }
-  }, [devices, selectedDevice]);
 
   // Handle filter changes
   const handleFilterChange = (filterType, value) => {
@@ -277,9 +277,9 @@ const Devices = () => {
     );
   }
 
-  // Determine overall system status
-  // Show "Live" if ANY device is online, otherwise "Offline"
-  const isSystemOnline = devices.some(device => device.status === 'online');
+  if (isMobile) {
+    return <MobileDashboard />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -324,9 +324,9 @@ const Devices = () => {
 
       {/* Main Content */}
       <div className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-9rem)]">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:h-[calc(100vh-9rem)]">
           {/* Map Section - Takes up 2 columns */}
-          <div className="lg:col-span-2 flex flex-col h-full min-h-[500px]">
+          <div className="lg:col-span-2 flex flex-col h-full min-h-[400px]">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col h-full overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
                 <h3 className="text-lg font-semibold text-gray-900">Campus Map</h3>
@@ -334,7 +334,7 @@ const Devices = () => {
                   {filteredDevices.length} devices shown
                 </span>
               </div>
-              <div className="flex-1 relative bg-gray-100">
+              <div className="relative bg-gray-100 h-[360px] sm:h-[420px] md:h-[520px] lg:flex-1 lg:h-auto min-h-[300px]">
                 <DeviceMap 
                   devices={filteredDevices}
                   selectedDevice={selectedDevice}
@@ -346,7 +346,7 @@ const Devices = () => {
           </div>
 
           {/* Device List Section - Takes up 1 column */}
-          <div className="lg:col-span-1 h-full min-h-[500px]">
+          <div className="lg:col-span-1 h-full min-h-[400px]">
             <DeviceList 
               devices={filteredDevices}
               selectedDevice={selectedDevice}

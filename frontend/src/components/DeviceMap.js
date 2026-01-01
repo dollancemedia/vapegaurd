@@ -31,16 +31,24 @@ const Icons = {
   )
 };
 
-const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
+const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditingExternal }) => {
   const { organization, isLoaded } = useOrganization();
   const [hoveredDevice, setHoveredDevice] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
+  
+  // Sync internal editing state with external prop if provided
+  useEffect(() => {
+    if (isEditingExternal !== undefined) {
+      setIsEditing(isEditingExternal);
+    }
+  }, [isEditingExternal]);
   
   // Dragging State
   const [draggingId, setDraggingId] = useState(null);
   const [localLocations, setLocalLocations] = useState({}); // Stores temporary positions while dragging/editing
   const svgRef = useRef(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 }); // For tooltip
+  const [bgFallback, setBgFallback] = useState(false);
 
   // Fallback coordinates
   const defaultCoordinates = {
@@ -95,6 +103,12 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
     setDraggingId(deviceId);
   };
 
+  const handleTouchStart = (e, deviceId) => {
+    if (!isEditing) return;
+    e.stopPropagation();
+    setDraggingId(deviceId);
+  };
+
   const handleMouseMove = (e) => {
     // Tooltip positioning
     const rect = e.currentTarget.getBoundingClientRect();
@@ -116,6 +130,24 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
     }
   };
 
+  const handleTouchMove = (e) => {
+    if (!isEditing) return;
+    if (e.touches && e.touches.length > 0) {
+      const touch = e.touches[0];
+      const rect = e.currentTarget.getBoundingClientRect();
+      setMousePos({ x: touch.clientX - rect.left, y: touch.clientY - rect.top });
+      if (draggingId) {
+        const point = getSVGPoint(touch.clientX, touch.clientY);
+        const x = Math.max(20, Math.min(780, point.x));
+        const y = Math.max(20, Math.min(580, point.y));
+        setLocalLocations(prev => ({
+          ...prev,
+          [draggingId]: { x, y }
+        }));
+      }
+    }
+  };
+
   const handleMouseUp = async () => {
     if (draggingId) {
       // Save the new location
@@ -131,6 +163,9 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
     }
   };
 
+  const handleTouchEnd = () => {
+    handleMouseUp();
+  };
   // Handle entering/exiting edit mode
   const toggleEditMode = () => {
     if (isEditing) {
@@ -153,7 +188,7 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
 
   const slug = organization?.slug;
   
-  let mapImage = "/default.svg";
+  let mapImage = "/schools/irvington.svg";
   if (slug) {
     // Check if any key in ORG_IMAGE_MAP is part of the slug
     const matchedKey = Object.keys(ORG_IMAGE_MAP).find(key => slug.includes(key));
@@ -163,23 +198,25 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
   }
 
   return (
-    <div className="relative w-full h-full bg-gray-100 overflow-hidden group">
+    <div className="relative w-full h-full bg-white overflow-hidden group">
       
-      {/* Controls Bar */}
-      <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
-        <button
-          onClick={toggleEditMode}
-          className={`
-            flex items-center space-x-2 px-4 py-2 rounded-full font-medium text-sm shadow-sm transition-all duration-200
-            ${isEditing 
-              ? 'bg-[#00C2CB] text-white hover:bg-[#009FA6] ring-2 ring-[#00C2CB]/30' 
-              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
-            }
-          `}
-        >
-          {isEditing ? <><Icons.Check /><span>Done Editing</span></> : <><Icons.Edit /><span>Edit Map</span></>}
-        </button>
-      </div>
+      {/* Controls Bar - Hidden if controlled externally */}
+      {isEditingExternal === undefined && (
+        <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
+          <button
+            onClick={toggleEditMode}
+            className={`
+              flex items-center space-x-2 px-4 py-2 rounded-full font-medium text-sm shadow-sm transition-all duration-200
+              ${isEditing 
+                ? 'bg-[#00C2CB] text-white hover:bg-[#009FA6] ring-2 ring-[#00C2CB]/30' 
+                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+              }
+            `}
+          >
+            {isEditing ? <><Icons.Check /><span>Done Editing</span></> : <><Icons.Edit /><span>Edit Map</span></>}
+          </button>
+        </div>
+      )}
 
       {/* Editing Instructions Toast */}
       {isEditing && (
@@ -194,6 +231,8 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
         className={`w-full h-full relative overflow-hidden transition-cursor duration-200 ${isEditing ? (draggingId ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-default'}`}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         onMouseLeave={() => {
           setHoveredDevice(null);
           handleMouseUp();
@@ -204,13 +243,18 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
           viewBox="0 0 800 600" 
           className="w-full h-full"
           preserveAspectRatio="xMidYMin meet"
+          xmlnsXlink="http://www.w3.org/1999/xlink"
+          style={bgFallback ? { backgroundImage: `url(${mapImage})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'top left' } : undefined}
         >
           {/* Background Map Image - Embedded for perfect coordinate alignment */}
           <image 
             href={mapImage}
+            xlinkHref={mapImage}
             width="800" 
             height="600" 
             className="opacity-90"
+            crossOrigin="anonymous"
+            onError={() => setBgFallback(true)}
           />
 
           {/* Device Markers */}
@@ -229,6 +273,7 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
                 key={device.id}
                 transform={`translate(${coords.x}, ${coords.y})`}
                 onMouseDown={(e) => handleMouseDown(e, device.id)}
+                onTouchStart={(e) => handleTouchStart(e, device.id)}
                 onClick={(e) => {
                   if (!isEditing && onDeviceSelect) {
                     e.stopPropagation();

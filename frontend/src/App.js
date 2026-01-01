@@ -5,6 +5,8 @@ import Devices from './pages/Devices';
 import Settings from './pages/Settings';
 import Analytics from './pages/Analytics';
 import NotificationController from './components/NotificationController';
+import ErrorBoundary from './components/ErrorBoundary';
+import { LayoutDashboard, BarChart2, Settings as SettingsIcon, Bell } from 'lucide-react';
 import './App.css';
 
 // IMPORTANT: Replace this with your actual Publishable Key from Clerk Dashboard
@@ -13,9 +15,10 @@ const CLERK_PUBLISHABLE_KEY = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY || 'pk
 function App() {
   return (
     <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY}>
-      <Router>
-        <div className="App">
-          <SignedIn>
+      <ErrorBoundary>
+        <Router>
+          <div className="App">
+            <SignedIn>
             <NotificationController />
             <header className="App-header">
               <div className="container">
@@ -23,7 +26,9 @@ function App() {
                   <div className="logo-container">
                     <img src="/logo-2.png" alt="Mistio Logo" className="app-logo" />
                   </div>
-                  <nav className="main-nav">
+                  
+                  {/* Desktop Nav */}
+                  <nav className="main-nav desktop-nav">
                     <ul>
                       <li>
                         <NavLink to="/devices" className={({ isActive }) => (isActive ? 'active' : '')}>Devices</NavLink>
@@ -39,6 +44,14 @@ function App() {
                       </li>
                     </ul>
                   </nav>
+
+                  {/* Mobile Header Icons */}
+                  <div className="mobile-header-actions">
+                    <button className="icon-btn">
+                      <Bell size={24} />
+                    </button>
+                    <UserButton />
+                  </div>
                 </div>
               </div>
             </header>
@@ -52,32 +65,30 @@ function App() {
               </Routes>
             </main>
             
-            <footer className="app-footer">
-              <div className="container">
-                <div className="footer-content">
-                  <div className="footer-logo">
-                    <img src="/logo-2.png" alt="Mistio Logo" className="footer-logo-img" style={{ height: '30px', width: 'auto' }} />
-                  </div>
-                  <div className="footer-links">
-                    <ul>
-                      <li><a href="/privacy">Privacy Policy</a></li>
-                      <li><a href="/terms">Terms of Service</a></li>
-                      <li><a href="/contact">Contact Us</a></li>
-                    </ul>
-                  </div>
-                  <div className="footer-copyright">
-                    &copy; {new Date().getFullYear()} Mistio. All rights reserved.
-                  </div>
-                </div>
+            <div className="mobile-bottom-nav">
+              <div className="nav-items">
+                <NavLink to="/devices" className={({ isActive }) => (isActive ? 'active' : '')}>
+                  <LayoutDashboard size={24} />
+                  <span>Devices</span>
+                </NavLink>
+                <NavLink to="/analytics" className={({ isActive }) => (isActive ? 'active' : '')}>
+                  <BarChart2 size={24} />
+                  <span>Analytics</span>
+                </NavLink>
+                <NavLink to="/settings" className={({ isActive }) => (isActive ? 'active' : '')}>
+                  <SettingsIcon size={24} />
+                  <span>Settings</span>
+                </NavLink>
               </div>
-            </footer>
-          </SignedIn>
-          
-          <SignedOut>
+            </div>
+            </SignedIn>
+            
+            <SignedOut>
              <RedirectToSignIn />
-          </SignedOut>
-        </div>
-      </Router>
+            </SignedOut>
+          </div>
+        </Router>
+      </ErrorBoundary>
     </ClerkProvider>
   );
 }
