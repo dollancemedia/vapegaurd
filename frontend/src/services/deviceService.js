@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 // Base API URL
-const API_BASE = process.env.REACT_APP_API_URL || "https://vapegaurd-production.up.railway.app";
+const API_BASE =
+  process.env.REACT_APP_API_URL || 'https://vapegaurd-production.up.railway.app';
 const API_BASE_URL = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
 
 // Create axios instance with default config
@@ -16,26 +17,20 @@ const apiClient = axios.create({
 // Request interceptor for adding auth tokens
 apiClient.interceptors.request.use(
   (config) => {
-    // Add auth token if available
     const token = localStorage.getItem('authToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 // Response interceptor for error handling
 apiClient.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Handle unauthorized access
       localStorage.removeItem('authToken');
       window.location.href = '/login';
     }
@@ -48,25 +43,34 @@ export const deviceService = {
   // Get all devices
   async getAllDevices(school) {
     try {
-      // Fetch from real API
-      const path = school ? `/devices?school=${encodeURIComponent(school)}` : '/devices';
+      // ✅ Fastest-win fix: hit the trailing-slash route directly to avoid 307 redirects
+      const path = school
+        ? `/devices/?school=${encodeURIComponent(school)}`
+        : '/devices/';
+
+      // ✅ Actually fetch devices
       const response = await apiClient.get(path);
       const backendDevices = response.data;
-      
+
+      // Defensive: backend might return {devices:[...]} instead of [...]
+      const devicesArray = Array.isArray(backendDevices)
+        ? backendDevices
+        : Array.isArray(backendDevices?.devices)
+          ? backendDevices.devices
+          : [];
+
       // Map backend data to frontend model
-      return backendDevices.map(device => {
+      return devicesArray.map((device) => {
         const latest = device.latest_event || {};
         const lastSeenTime = device.last_seen ? new Date(device.last_seen) : new Date(0);
         const isOnline = (new Date() - lastSeenTime) < 120000; // Online if seen in last 2 mins
 
-        // Prioritize persistent name if available
         const deviceName = device.name_override || device.device_id;
-        
-        // Prioritize persistent location if available
+
         const location = device.location_override || device.last_location || {
           building: 'Unknown',
           floor: 'Unknown',
-          room: 'Unknown'
+          room: 'Unknown',
         };
 
         return {
@@ -74,7 +78,7 @@ export const deviceService = {
           name: deviceName,
           type: 'detector',
           status: isOnline ? 'online' : 'offline',
-          location: location,
+          location,
           mapLocation: device.map_location || null,
           lastSeen: device.last_seen || new Date().toISOString(),
           uptime: 'N/A',
@@ -85,16 +89,19 @@ export const deviceService = {
             particleSize: latest.particle_size || latest.particleSize || 0,
             volumeSpike: latest.volume_spike || latest.volumeSpike || false,
             gasResistance: latest.gas_resistance || 0,
-            predictedClass: latest.predicted_class || (latest.prediction ? latest.prediction.type : 'normal'),
-            confidence: latest.confidence || (latest.prediction ? latest.prediction.confidence : 0),
-            timestamp: latest.timestamp || device.last_seen
-          }
+            predictedClass:
+              latest.predicted_class ||
+              (latest.prediction ? latest.prediction.type : 'normal'),
+            confidence:
+              latest.confidence ||
+              (latest.prediction ? latest.prediction.confidence : 0),
+            timestamp: latest.timestamp || device.last_seen,
+          },
         };
       });
     } catch (error) {
       console.error('Error fetching devices:', error);
-      // Fallback to empty array if API fails, do NOT show mock data
-      return []; 
+      return [];
     }
   },
 
@@ -112,11 +119,9 @@ export const deviceService = {
   // Get device by ID
   async getDevice(deviceId) {
     try {
-      // Fetch all devices and find the one we need
-      // (Since backend doesn't have a specific get-by-id endpoint yet)
       const devices = await this.getAllDevices();
-      const device = devices.find(d => d.id === deviceId);
-      
+      const device = devices.find((d) => d.id === deviceId);
+
       if (!device) {
         throw new Error('Device not found');
       }
@@ -143,16 +148,14 @@ export const deviceService = {
       // In production, uncomment the line below:
       // const response = await apiClient.post(`/devices/${deviceId}/ping`);
       // return response.data;
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Return simulated success
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
       return {
         success: true,
         deviceId,
         timestamp: new Date().toISOString(),
-        responseTime: Math.floor(Math.random() * 100) + 50 // 50-150ms
+        responseTime: Math.floor(Math.random() * 100) + 50,
       };
     } catch (error) {
       console.error('Error pinging device:', error);
@@ -176,11 +179,11 @@ export const deviceService = {
     try {
       const { startDate, endDate, limit = 100 } = options;
       const params = new URLSearchParams();
-      
+
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
       if (limit) params.append('limit', limit.toString());
-      
+
       const response = await apiClient.get(`/devices/${deviceId}/logs?${params}`);
       return response.data;
     } catch (error) {
@@ -194,7 +197,7 @@ export const deviceService = {
     try {
       const response = await apiClient.post(`/devices/${deviceId}/acknowledge`, {
         userId,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
       return response.data;
     } catch (error) {
@@ -206,7 +209,9 @@ export const deviceService = {
   // Get device statistics
   async getDeviceStatistics(timeRange = '24h') {
     try {
-      const response = await apiClient.get(`/devices/statistics?timeRange=${timeRange}`);
+      const response = await apiClient.get(
+        `/devices/statistics?timeRange=${encodeURIComponent(timeRange)}`
+      );
       return response.data;
     } catch (error) {
       console.error('Error fetching device statistics:', error);
@@ -223,7 +228,7 @@ export const deviceService = {
       console.error('Error testing device connection:', error);
       throw new Error(error.response?.data?.message || 'Failed to test device connection');
     }
-  }
+  },
 };
 
 export default deviceService;
