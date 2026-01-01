@@ -3,6 +3,8 @@ import axios from 'axios';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 // Socket.IO client removed; using native WebSocket via hook
 import { useWebSocket } from '../hooks/useWebSocket';
+import { useDevices } from '../hooks/useDevices';
+import { useAuth } from "@clerk/clerk-react";
 
 // Import components
 import SensorReadings from '../components/SensorReadings';
