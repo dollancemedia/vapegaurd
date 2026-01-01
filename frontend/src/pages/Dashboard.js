@@ -63,7 +63,7 @@ const Dashboard = () => {
   }, [getToken]);
 
   // Memoize query params to prevent reconnection loops
-  const queryParams = useMemo(() => ({ token }), [token]);
+  // const queryParams = useMemo(() => ({ token }), [token]);
 
   // Memoize message handler to prevent reconnection loops
   const onMessage = useCallback((data) => {
