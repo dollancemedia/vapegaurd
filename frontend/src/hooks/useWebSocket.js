@@ -19,9 +19,16 @@ export const useWebSocket = (url, options = {}) => {
     reconnectInterval = 3000,
     maxReconnectAttempts = 5,
     heartbeatInterval = 30000,
-    protocols = [],
-    queryParams = null
+    protocols: unsafeProtocols = [],
+    queryParams: unsafeQueryParams = null
   } = options;
+
+  // Memoize protocols and queryParams to prevent infinite reconnection loops
+  // if the consumer passes unstable references (e.g. literals in render)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const protocols = useMemo(() => unsafeProtocols, [JSON.stringify(unsafeProtocols)]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const queryParams = useMemo(() => unsafeQueryParams, [JSON.stringify(unsafeQueryParams)]);
 
   // Refs for callbacks to avoid dependency loops
   const onMessageRef = useRef(onMessage);
