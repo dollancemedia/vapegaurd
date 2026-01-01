@@ -19,7 +19,8 @@ const EventFeedback = ({ event, onFeedbackSubmitted }) => {
         throw new Error('Invalid event data');
       }
 
-      const apiUrl = process.env.REACT_APP_API_URL || '/api';
+      const API_BASE = process.env.REACT_APP_API_URL || "https://vapegaurd-production.up.railway.app";
+      const apiUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
       const response = await axios.post(
         `${apiUrl}/events/${event._id}/feedback`,
         { feedback_type: feedbackType, notes }

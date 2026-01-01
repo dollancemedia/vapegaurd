@@ -1,26 +1,25 @@
 
-## Review & Summary of Changes (2025-12-31)
+## Review & Summary of Changes (2026-01-01)
 
 ### Issue Addressed
-The user reported an "infinite loop" of WebSocket errors ("1000+ logs very very quickly") on the frontend, which likely caused the console to crash and prevented the dashboard from displaying live sensor data.
-
-### Root Cause Analysis
-1.  **Dependency Loop**: In `frontend/src/hooks/useWebSocket.js`, the `connect` function depended on `connectionAttempts`. When a connection closed (e.g., due to a momentary network blip or initial failure), `connectionAttempts` incremented, causing `connect` to be recreated. This triggered the `useEffect` hook to run again, which called `disconnect()` and then `connect()`, creating a rapid cycle of disconnect/reconnect.
-2.  **Unstable Callbacks**: The `onOpen`, `onClose`, `onMessage`, etc., callbacks passed from `Dashboard.js` were inline functions created on every render. This also caused `connect` to be recreated on every render, leading to frequent reconnections.
-3.  **Excessive Logging**: Debug logs inside the loop (e.g., "Connecting to WebSocket:", "Using WebSocket URL:") flooded the console during these rapid cycles.
+The user requested to update the frontend API base URL to use HTTPS (`https://vapegaurd-production.up.railway.app`) everywhere and ensure no `http://` is forced. This is to ensure secure communication with the production backend on Railway.
 
 ### Changes Implemented
-1.  **Refactored `useWebSocket.js`**:
-    *   **Stable Callbacks**: Used `useRef` to store the latest callback functions (`onMessage`, `onOpen`, etc.). This allows the `connect` function to invoke the latest logic without needing to be recreated when the callbacks change.
-    *   **Stable Connection Logic**: Converted `connectionAttempts` from state to `useRef`. This ensures that incrementing the attempt counter does not trigger a component re-render or recreate the `connect` function, breaking the infinite loop.
-    *   **Dependency Cleanup**: Removed unstable dependencies from the `connect` `useCallback` hook.
-    *   **Log Cleanup**: Commented out excessive console logs ("Connecting...", "Using URL...") to clean up the developer console and improve performance.
+1.  **Updated `.env.production`**: Changed `REACT_APP_API_URL` to `https://vapegaurd-production.up.railway.app`.
+2.  **Updated `frontend/src/services/api.js`**:
+    *   Set default `API_BASE` to `https://vapegaurd-production.up.railway.app`.
+    *   Added logic to append `/api` to the base URL for the axios instance, ensuring correct endpoint paths.
+3.  **Updated `frontend/src/services/deviceService.js`**:
+    *   Replicated the `API_BASE` and `/api` logic to ensure consistency.
+4.  **Updated Components**:
+    *   `DeviceSummary.js`, `EventsTable.js`, `BulkLabelingTool.js`, `EventFeedback.js`: Updated direct `REACT_APP_API_URL` usage to use the new HTTPS URL and properly handle the `/api` path.
+5.  **Updated `ConnectionErrorMessage.js`**: Updated the production API URL in the error message to reflect the new Railway domain.
 
 ### Verification
-*   **Logic Check**: The circular dependency between state updates and effect re-execution has been broken. The WebSocket will now attempt to connect once, and if it fails, it will retry using the internal ref counter without resetting the entire connection lifecycle.
-*   **Security**: No security regressions. The WebSocket still uses the token provided in query params.
+*   **Search**: Verified that no `http://vapegaurd-` strings exist in the `frontend/src` directory.
+*   **Logic**: Confirmed that the URL construction handles both the base domain and the `/api` prefix correctly.
+*   **Build**: Ran `npm run build` (in progress) to ensure no syntax errors were introduced.
 
 ### Next Steps
-*   Deploy the updated frontend to Vercel.
-*   Verify that the "1000+ logs" issue is gone.
-*   Verify that sensor data appears on the dashboard (assuming the backend is sending data with timestamps).
+*   Deploy the updated frontend.
+*   Verify that the frontend successfully connects to the backend over HTTPS.

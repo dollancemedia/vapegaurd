@@ -10,7 +10,8 @@ const DeviceSummary = () => {
     const fetchDevices = async () => {
       setIsLoading(true);
       try {
-        const apiUrl = process.env.REACT_APP_API_URL || '/api';
+        const API_BASE = process.env.REACT_APP_API_URL || "https://vapegaurd-production.up.railway.app";
+        const apiUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
         const response = await axios.get(`${apiUrl}/devices`);
         setDevices(response.data);
         setError(null);

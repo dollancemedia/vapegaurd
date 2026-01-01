@@ -17,7 +17,7 @@ const ConnectionErrorMessage = ({ isConnected, hasApiData, retryConnection }) =>
         <p>Unable to connect to the backend server. The dashboard will remain empty until live data is available.</p>
         <div className="connection-error-details">
           <ul>
-            <li>For production: verify API at https://vapegaurd-x6wi.vercel.app/api is reachable</li>
+            <li>For production: verify API at https://vapegaurd-production.up.railway.app/api is reachable</li>
             <li>For local dev: ensure backend is running on port 8000</li>
             <li>Check CORS and that environment variables are correctly set</li>
           </ul>

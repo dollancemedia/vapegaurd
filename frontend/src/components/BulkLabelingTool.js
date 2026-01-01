@@ -17,7 +17,8 @@ const BulkLabelingTool = ({ onLabelingComplete }) => {
     setSuccess(null);
 
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || '/api';
+      const API_BASE = process.env.REACT_APP_API_URL || "https://vapegaurd-production.up.railway.app";
+      const apiUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
       // Convert local datetime inputs to full ISO strings with timezone (Z)
       const startISO = new Date(startTime).toISOString();
       const endISO = new Date(endTime).toISOString();
