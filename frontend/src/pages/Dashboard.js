@@ -62,94 +62,97 @@ const Dashboard = () => {
     fetchToken();
   }, [getToken]);
 
+  // Memoize query params to prevent reconnection loops
+  const queryParams = useMemo(() => ({ token }), [token]);
+
+  // Memoize message handler to prevent reconnection loops
+  const onMessage = useCallback((data) => {
+    if (pausedRef.current) return;
+    // Handle legacy frontend types
+    if (data && data.type === 'newEvent' && data.event) {
+      setEvents((prevEvents) => [data.event, ...prevEvents].slice(0, 1));
+      return;
+    }
+
+    // Handle backend FastAPI websocket messages: type "sensor_data"
+    if (data && (data.type === 'sensor_data' || data.type === 'newSensorData')) {
+      const payload = data.data || data;
+
+      // Two possible shapes:
+      // A) { device_id, sensor_data: { ...reading } }
+      // B) { ...reading, predicted_class?, confidence?, prediction? }
+      let reading = payload.sensor_data
+        ? {
+            ...payload.sensor_data,
+            device_id: payload.device_id || payload.sensor_data.device_id,
+            timestamp: payload.sensor_data.timestamp || payload.timestamp || null,
+          }
+        : {
+            ...payload,
+            timestamp: payload.timestamp || null,
+          };
+
+      // Only accept readings that carry a server-provided timestamp
+      if (!reading.timestamp) {
+        return;
+      }
+
+      // Ignore stale or replayed readings
+      if (!isFresh(reading.timestamp)) {
+        return;
+      }
+
+      // Normalize field names expected by UI components
+      reading = {
+        ...reading,
+        volume_spike:
+          reading.volume_spike ?? reading.sound_level ?? reading.volumeSpike ?? 0,
+        particle_size:
+          reading.particle_size ?? reading.particleSize ?? reading.particle_size_nm ?? 0,
+      };
+
+      // Map predicted_class/confidence into prediction object if present
+      if (!reading.prediction && (payload.predicted_class || payload.confidence !== undefined)) {
+        reading.prediction = {
+          type: payload.predicted_class || 'normal',
+          confidence: payload.confidence ?? 0,
+        };
+      }
+
+      // Update sensor readings state
+      setSensorData((prevData) => {
+        const newData = [reading, ...prevData];
+        return newData.length > 20 ? newData.slice(0, 20) : newData;
+      });
+      setLatestReading(reading);
+      setLastLiveTs(Date.now());
+
+      // Also surface an event row when classification is present
+      const hasEventInfo =
+        (payload.prediction && payload.prediction.type) || payload.predicted_class;
+      if (hasEventInfo) {
+        const event = {
+          _id: payload._id || payload.id,
+          timestamp: reading.timestamp,
+          type: (payload.prediction && payload.prediction.type) || payload.predicted_class || 'normal',
+          confidence:
+            (payload.prediction && payload.prediction.confidence) ?? payload.confidence ?? 0,
+          device_id: payload.device_id || reading.device_id,
+          location: payload.location || reading.location || 'Unknown',
+          verified: payload.verified ?? false,
+        };
+        setEvents((prevEvents) => [event, ...prevEvents].slice(0, 1));
+      }
+    }
+  }, [STALE_SECONDS]); // isFresh depends on STALE_SECONDS, constant
+
   // Connect to native WebSocket server via shared hook
   const { reconnect } = useWebSocket('/ws/events', {
     reconnectInterval: 3000,
     maxReconnectAttempts: 5,
     heartbeatInterval: 30000,
-    queryParams: { token },
-    onMessage: (data) => {
-      if (pausedRef.current) return;
-      // Handle legacy frontend types
-      if (data && data.type === 'newEvent' && data.event) {
-        setEvents((prevEvents) => [data.event, ...prevEvents].slice(0, 1));
-        return;
-      }
-
-      // Handle backend FastAPI websocket messages: type "sensor_data"
-      if (data && (data.type === 'sensor_data' || data.type === 'newSensorData')) {
-        const payload = data.data || data;
-
-        // Two possible shapes:
-        // A) { device_id, sensor_data: { ...reading } }
-        // B) { ...reading, predicted_class?, confidence?, prediction? }
-        let reading = payload.sensor_data
-          ? {
-              ...payload.sensor_data,
-              device_id: payload.device_id || payload.sensor_data.device_id,
-              timestamp: payload.sensor_data.timestamp || payload.timestamp || null,
-            }
-          : {
-              ...payload,
-              timestamp: payload.timestamp || null,
-            };
-
-        // Only accept readings that carry a server-provided timestamp
-        if (!reading.timestamp) {
-          return;
-        }
-
-        // Ignore stale or replayed readings
-        if (!isFresh(reading.timestamp)) {
-          return;
-        }
-
-        // Normalize field names expected by UI components
-        reading = {
-          ...reading,
-          volume_spike:
-            reading.volume_spike ?? reading.sound_level ?? reading.volumeSpike ?? 0,
-          particle_size:
-            reading.particle_size ?? reading.particleSize ?? reading.particle_size_nm ?? 0,
-        };
-
-        // Map predicted_class/confidence into prediction object if present
-        if (!reading.prediction && (payload.predicted_class || payload.confidence !== undefined)) {
-          reading.prediction = {
-            type: payload.predicted_class || 'normal',
-            confidence: payload.confidence ?? 0,
-          };
-        }
-
-        // Update sensor readings state
-        setSensorData((prevData) => {
-          const newData = [reading, ...prevData];
-          return newData.length > 20 ? newData.slice(0, 20) : newData;
-        });
-        setLatestReading(reading);
-        setLastLiveTs(Date.now());
-
-        // Also surface an event row when classification is present
-        const hasEventInfo =
-          (payload.prediction && payload.prediction.type) || payload.predicted_class;
-        if (hasEventInfo) {
-          const event = {
-            _id: payload._id || payload.id,
-            timestamp: reading.timestamp,
-            type: (payload.prediction && payload.prediction.type) || payload.predicted_class || 'normal',
-            confidence:
-              (payload.prediction && payload.prediction.confidence) ?? payload.confidence ?? 0,
-            device_id: payload.device_id || reading.device_id,
-            location: payload.location || reading.location || 'Unknown',
-            verified: payload.verified ?? false,
-          };
-          setEvents((prevEvents) => [event, ...prevEvents].slice(0, 1));
-        }
-      }
-    },
-    onOpen: () => setIsConnected(true),
-    onClose: () => setIsConnected(false),
-    onError: () => setIsConnected(false)
+    queryParams,
+    onMessage
   });
 
   // lastMessage is available if needed for debugging
