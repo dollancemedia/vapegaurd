@@ -98,6 +98,7 @@ struct pms5003data data;
 // Device Configuration
 const String DEVICE_ID = "ESP32_C6_002";  // Unique device identifier (Detector 2)
 const String LOCATION = "Building A, Floor 1";  // Device location
+const String org = "washington";
 
 // Timing Configuration
 const unsigned long SENSOR_INTERVAL = 5000;  // Read sensors every 5 seconds
@@ -402,6 +403,7 @@ void readAndSendSensorData() {
   // Create JSON payload
   StaticJsonDocument<512> doc;
   doc["device_id"] = DEVICE_ID;
+  doc["org_id"] = org;
   doc["humidity"] = humidity;
   doc["temperature"] = temperature;
   doc["pm25"] = pm25;

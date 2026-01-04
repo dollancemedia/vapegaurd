@@ -97,6 +97,7 @@ struct pms5003data data;
 // Device Configuration
 const String DEVICE_ID = "ESP32_C6_001";  // Unique device identifier
 const String LOCATION = "School Bathroom - 2nd Floor";  // Device location
+const String org = "irvington";
 
 // Timing Configuration
 const unsigned long SENSOR_INTERVAL = 5000;  // Read sensors every 5 seconds
@@ -369,6 +370,7 @@ Serial.println(isConnected ? "YES" : "NO");
   DynamicJsonDocument doc(1024);
   doc["device_id"] = DEVICE_ID;
   doc["location"] = LOCATION;
+  doc["org_id"] = org;
   // doc["timestamp"] = getTimestamp();
   
   // Ensure valid numeric values for all sensor readings
