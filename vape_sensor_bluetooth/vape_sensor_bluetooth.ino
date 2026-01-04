@@ -134,6 +134,8 @@ bool bme680Available = false;
 int consecutiveFailures = 0;
 const int MAX_FAILURES = 5;
 String deviceMac = "";
+String cleanMac = "";
+String org = "";
 bool wifiConfigured = false;
 unsigned long configStartTime;
 
@@ -154,10 +156,33 @@ bool isResetHeld() {
   return false;
 }
 
+void factoryReset() {
+  Serial.println("[RESET] Factory reset: clearing WiFi + org");
+
+  // Clear NVS entries
+  prefs.begin("wifi", false);
+  prefs.clear();  // wipes all keys in "wifi" namespace
+  prefs.end();
+
+  // Clear RAM copies
+  ssid = "";
+  password = "";
+  org = "";
+  incomingSSID = "";
+  incomingPASS = "";
+  incomingORG = "";
+  wifiConfigured = false;
+  bleProvisioned = false;
+
+  delay(200);
+  ESP.restart();
+}
+
 void loadCredentials() {
   prefs.begin("wifi", true);  // read-only
   ssid = prefs.getString("ssid", "");
   password = prefs.getString("pass", "");
+  org = prefs.getString("org", "");
   prefs.end();
 
   wifiConfigured = (ssid.length() > 0 && password.length() > 0);
@@ -207,29 +232,39 @@ class ProvisionCallback : public BLECharacteristicCallbacks {
   }
 };
 
+class ServerCallbacks : public BLEServerCallbacks {
+  void onDisconnect(BLEServer* pServer) {
+    BLEDevice::startAdvertising();
+    Serial.println("[BLE] Client disconnected, advertising restarted");
+  }
+};
+
 void startConfigMode() {
   Serial.println("[BLE] Starting BLE provisioning...");
-
-  String bleName = "MISTIO-" + deviceMac;
+  
+  cleanMac = deviceMac;
+  cleanMac.replace(":","");
+  String bleName = "MISTIO-" + cleanMac;
   BLEDevice::init(bleName.c_str());  // device name = MISTIO-<MAC address>
   bleServer = BLEDevice::createServer();
+  bleServer->setCallbacks(new ServerCallbacks());
 
-  BLEService* service = bleServer->createService("1234"); // random UUID
+  BLEService* service = bleServer->createService("6E400001-B5A3-F393-E0A9-E50E24DCCA9E"); // random UUID
 
   ssidChar = service->createCharacteristic(
-    "abcd",
+    "6E400002-B5A3-F393-E0A9-E50E24DCCA9E",
     BLECharacteristic::PROPERTY_WRITE
   );
   ssidChar->setCallbacks(new ProvisionCallback());
 
   passChar = service->createCharacteristic(
-    "abce",
+    "6E400003-B5A3-F393-E0A9-E50E24DCCA9E",
     BLECharacteristic::PROPERTY_WRITE
   );
   passChar->setCallbacks(new ProvisionCallback());
 
   orgChar = service->createCharacteristic(
-    "abcf",
+    "6E400004-B5A3-F393-E0A9-E50E24DCCA9E",
     BLECharacteristic::PROPERTY_WRITE
   );
   orgChar->setCallbacks(new ProvisionCallback());
@@ -237,7 +272,7 @@ void startConfigMode() {
   service->start();
 
   BLEAdvertising* advertising = BLEDevice::getAdvertising();
-  advertising->addServiceUUID("1234");
+  advertising->addServiceUUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
   advertising->setScanResponse(true);
   advertising->start();
 
@@ -248,8 +283,16 @@ void setup() {
   Serial.begin(115200);
   // Removed while (!Serial) to avoid blocking on ESP32-C6 native USB; can cause watchdog resets if the host isn't attached
   Serial.println("[Init] Serial started at 115200");
+  
+  incomingSSID = "";
+  incomingPASS = "";
+  incomingORG = "";
+  bleProvisioned = false;
+
   // Get MAC
   deviceMac = WiFi.macAddress();
+  cleanMac = deviceMac;
+  cleanMac.replace(":","");
   Serial.println("Device MAC: " + deviceMac);
   // Load stored WiFi credentials
   loadCredentials();
@@ -324,19 +367,19 @@ void setup() {
   // Status indication
   blinkLED(3, 200);  // 3 quick blinks to indicate ready
   Serial.println("System ready!");
-
-  // Reset button --> config mode
-  if (isResetHeld()) {
-    Serial.println("[RESET] Button held. Entering config mode.");
-    startConfigMode();
-    return;
-  }
+  
+    // Reset button --> config mode
+    if (isResetHeld()) {
+      Serial.println("[RESET] Button held. Entering config mode.");
+      factoryReset();
+      return;
+    }
   
   // Defer WiFi connection until after setup completes to avoid early resets
   if (wifiConfigured) {
     Serial.println("[WiFi] Credentials found. Trying to connect...");
     connectToWiFi();
-
+    
     if (wifiConnected) {
       Serial.println("[WiFi] Connected. Setting up NTP...");
       configTime(0, 0, ntp1, ntp2);
@@ -361,25 +404,19 @@ void loop() {
       prefs.putString("org", incomingORG);
       prefs.end();
 
-      delay(400);
-    }
-    delay(100);
-    ESP.restart();
-  }
-  // If we're in AP/config mode, just serve HTTP
-  if (WiFi.getMode() == WIFI_MODE_AP) {
-    server.handleClient();
-    if (millis() - configStartTime > CONFIG_TIMEOUT) {  // 10 minutes
-      Serial.println("[Config] Timeout reached. Rebooting...");
+      BLEDevice::stopAdvertising();
+
+      delay(500);
       ESP.restart();
     }
+    delay(100);
     return;
   }
 
   // Reset button --> config mode
   if (isResetHeld()) {
     Serial.println("[RESET] Button held. Entering config mode.");
-    startConfigMode();
+    factoryReset();
     return;
   }
 
@@ -551,7 +588,8 @@ Serial.println(isConnected ? "YES" : "NO");
   
   // Create JSON payload
   DynamicJsonDocument doc(1024);
-  doc["device_id"] = deviceMac;
+  doc["device_id"] = cleanMac;
+  doc["org_id"] = org;
   doc["location"] = LOCATION;
   // doc["timestamp"] = getTimestamp();
   
