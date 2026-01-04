@@ -201,9 +201,48 @@ class ProvisionCallback : public BLECharacteristicCallbacks {
     // If all 3 are received → mark provisioning complete
     if (incomingSSID.length() > 0 && incomingPASS.length() > 0 && incomingORG.length() > 0) {
       bleProvisioned = true;
+    } else {
+      bleProvisioned = false;
     }
   }
 };
+
+void startConfigMode() {
+  Serial.println("[BLE] Starting BLE provisioning...");
+
+  String bleName = "MISTIO-" + deviceMac;
+  BLEDevice::init(bleName.c_str());  // device name = MISTIO-<MAC address>
+  bleServer = BLEDevice::createServer();
+
+  BLEService* service = bleServer->createService("1234"); // random UUID
+
+  ssidChar = service->createCharacteristic(
+    "abcd",
+    BLECharacteristic::PROPERTY_WRITE
+  );
+  ssidChar->setCallbacks(new ProvisionCallback());
+
+  passChar = service->createCharacteristic(
+    "abce",
+    BLECharacteristic::PROPERTY_WRITE
+  );
+  passChar->setCallbacks(new ProvisionCallback());
+
+  orgChar = service->createCharacteristic(
+    "abcf",
+    BLECharacteristic::PROPERTY_WRITE
+  );
+  orgChar->setCallbacks(new ProvisionCallback());
+
+  service->start();
+
+  BLEAdvertising* advertising = BLEDevice::getAdvertising();
+  advertising->addServiceUUID("1234");
+  advertising->setScanResponse(true);
+  advertising->start();
+
+  Serial.println("[BLE] Advertising as: " + deviceMac);
+}
 
 void setup() {
   Serial.begin(115200);
@@ -313,6 +352,20 @@ void setup() {
 }
 
 void loop() {
+  if (!wifiConfigured) {
+    if (bleProvisioned) {
+      Serial.println("[BLE] Provisioning complete. Saving credentials...");
+      saveCredentials(incomingSSID, incomingPASS);
+
+      prefs.begin("wifi", false);
+      prefs.putString("org", incomingORG);
+      prefs.end();
+
+      delay(400);
+    }
+    delay(100);
+    ESP.restart();
+  }
   // If we're in AP/config mode, just serve HTTP
   if (WiFi.getMode() == WIFI_MODE_AP) {
     server.handleClient();
@@ -407,59 +460,6 @@ void connectToWiFi() {
     Serial.println("\nWiFi connection failed after " + String(maxAttempts) + " attempts!");
     Serial.println("Check WiFi credentials and router settings.");
   }
-}
-
-void startConfigMode() {
-  configStartTime = millis();
-  Serial.println("[Config] Entering CONFIG MODE");
-
-  // Create AP name from MAC (e.g., SENSOR-AB12CD)
-  String apName = "SENSOR-" + deviceMac.substring(9); // last 3 bytes
-  Serial.println("[Config] Starting AP: " + apName);
-
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(apName.c_str(), setup_pass);  // simple setup password
-
-  IPAddress IP = WiFi.softAPIP();
-  Serial.print("[Config] AP IP address: ");
-  Serial.println(IP);
-
-  // Root page: show form
-  server.on("/", HTTP_GET, []() {
-    String html = "<html><body>"
-                  "<h2>Sensor WiFi Setup</h2>"
-                  "<p>Device Mac Address: " + deviceMac + "</p>"
-                  "<form action='/save' method='POST'>"
-                  "WiFi SSID: <input name='ssid'><br><br>"
-                  "WiFi Password: <input type='password' name='pass'><br><br>"
-                  "<input type='submit' value='Save & Reboot'>"
-                  "</form>"
-                  "</body></html>";
-    server.send(200, "text/html", html);
-  });
-
-  // Save handler
-  server.on("/save", HTTP_POST, []() {
-    String newSsid = server.arg("ssid");
-    String newPass = server.arg("pass");
-
-    if (newSsid.length() == 0 || newPass.length() == 0) {
-      server.send(400, "text/plain", "SSID and password required");
-      return;
-    }
-
-    saveCredentials(newSsid, newPass);
-
-    server.send(200, "text/html",
-                "<h3>Credentials saved. Rebooting...</h3>"
-                "<p>You can close this page.</p>");
-
-    delay(1000);
-    ESP.restart();
-  });
-
-  server.begin();
-  Serial.println("[Config] Web server started");
 }
 
 void readAndSendSensorData() {
