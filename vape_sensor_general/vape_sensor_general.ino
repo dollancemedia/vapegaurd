@@ -388,6 +388,7 @@ void startConfigMode() {
   server.on("/", HTTP_GET, []() {
     String html = "<html><body>"
                   "<h2>Sensor WiFi Setup</h2>"
+                  "<p>Device Mac Address: " + deviceMac + "</p>"
                   "<form action='/save' method='POST'>"
                   "WiFi SSID: <input name='ssid'><br><br>"
                   "WiFi Password: <input type='password' name='pass'><br><br>"
