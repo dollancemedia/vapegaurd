@@ -179,6 +179,32 @@ void saveCredentials(const String &newSsid, const String &newPass) {
   Serial.println("  SSID: " + ssid);
 }
 
+class ProvisionCallback : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic* characteristic) {
+    std::string value = characteristic->getValue();
+
+    if (characteristic == ssidChar) {
+      incomingSSID = String(value.c_str());
+      Serial.println("[BLE] Received SSID: " + incomingSSID);
+    }
+
+    if (characteristic == passChar) {
+      incomingPASS = String(value.c_str());
+      Serial.println("[BLE] Received PASS");
+    }
+
+    if (characteristic == orgChar) {
+      incomingORG = String(value.c_str());
+      Serial.println("[BLE] Received ORG: " + incomingORG);
+    }
+
+    // If all 3 are received → mark provisioning complete
+    if (incomingSSID.length() > 0 && incomingPASS.length() > 0 && incomingORG.length() > 0) {
+      bleProvisioned = true;
+    }
+  }
+};
+
 void setup() {
   Serial.begin(115200);
   // Removed while (!Serial) to avoid blocking on ESP32-C6 native USB; can cause watchdog resets if the host isn't attached
@@ -650,8 +676,6 @@ void sendDataToAPI(String jsonData) {
     consecutiveFailures = 0;
   }
 }
-
-// Local alert function removed as requested
 
 float calculateAQI(float pm25, float pm10) {
   // Simplified AQI calculation based on PM2.5 and PM10
