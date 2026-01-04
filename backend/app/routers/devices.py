@@ -49,8 +49,8 @@ async def get_device_summary(school: Optional[str] = None):
     allowed_device_ids: Optional[set] = None
     if school:
         allowed_device_ids = set()
-        async for sensor in db.sensors.find({"school": school}):
-            device_id = sensor.get("name")
+        async for device in db.devices.find({"org_id": school}):
+            device_id = device.get("device_id")
             if device_id:
                 allowed_device_ids.add(device_id)
         if school and allowed_device_ids is not None and len(allowed_device_ids) == 0:
