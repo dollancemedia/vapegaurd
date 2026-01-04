@@ -58,7 +58,7 @@ export const deviceService = {
         const isOnline = (new Date() - lastSeenTime) < 120000; // Online if seen in last 2 mins
 
         // Prioritize persistent name if available
-        const deviceName = device.name_override || device.device_id;
+        const deviceName = device.device_id || device.name_override;
         
         // Prioritize persistent location if available
         const location = device.location_override || device.last_location || {
