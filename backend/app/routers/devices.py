@@ -1,10 +1,55 @@
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Depends
 from app.database import db
+from app.auth import validate_token
 from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 
 router = APIRouter()
+
+class DeviceRegister(BaseModel):
+    device_id: str
+    school: str
+    school_name: Optional[str] = None
+
+@router.post("/register")
+async def register_device(device: DeviceRegister, user = Depends(validate_token)):
+    """Register a new device or update existing one"""
+    # Normalize MAC: remove colons and uppercase
+    device_id = device.device_id.upper().replace(":", "")
+    
+    # Basic validation
+    if len(device_id) != 12:
+         raise HTTPException(status_code=400, detail="Invalid MAC address format")
+
+    update_data = {
+        "device_id": device_id,
+        "org_id": device.school,
+        "updated_at": datetime.utcnow()
+    }
+    
+    if device.school_name:
+        update_data["school_name"] = device.school_name
+    
+    # Check if device already exists to preserve created_at
+    existing = await db.devices.find_one({"device_id": device_id})
+    if not existing:
+        update_data["created_at"] = datetime.utcnow()
+        # Initialize default metadata if needed
+        await db.device_metadata.update_one(
+            {"device_id": device_id},
+            {"$setOnInsert": {"name": f"Device {device_id[-4:]}", "location": "Unassigned"}},
+            upsert=True
+        )
+
+    await db.devices.update_one(
+        {"device_id": device_id},
+        {"$set": update_data},
+        upsert=True
+    )
+    
+    return {"status": "success", "device_id": device_id, "org_id": device.school}
+
 
 class DeviceLocation(BaseModel):
     x: float

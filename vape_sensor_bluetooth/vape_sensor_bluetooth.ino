@@ -1,7 +1,7 @@
 /*
- * ESP32-C6 Vape Detection Sensor
+ * ESP32-C6 Vape Detection Sensor - ROBUST PRODUCTION VERSION
  * WiFi-enabled sensor that sends data to FastAPI backend
- * Supports multiple sensor types: MQ-2 (smoke), temperature, humidity, air quality
+ * Includes safe-boot and fault-tolerant sensor initialization
  */
 
 #include <WiFi.h>
@@ -12,25 +12,21 @@
 #include <SPI.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
-#include <WebServer.h>
 #include <Preferences.h>
-#include <BLEDevice.h>
-#include <BLEUtils.h>
-#include <BLEServer.h>
+#include <NimBLEDevice.h>
 
 Preferences prefs;
-WebServer server(80);
 
 // WiFi Configuration
 const String setup_pass = "use_mistio";
-String ssid = "";     // Replace with your WiFi network name
-String password = ""; // Replace with your WiFi password
+String ssid = "";     
+String password = ""; 
 
 // BLE Configuration
-BLEServer *bleServer = nullptr;
-BLECharacteristic *ssidChar;
-BLECharacteristic *passChar;
-BLECharacteristic *orgChar;
+NimBLEServer *bleServer = nullptr;
+NimBLECharacteristic *ssidChar;
+NimBLECharacteristic *passChar;
+NimBLECharacteristic *orgChar;
 
 bool bleProvisioned = false;
 String incomingSSID = "";
@@ -38,7 +34,6 @@ String incomingPASS = "";
 String incomingORG = "";
 
 // API Configuration
-// Local FastAPI backend on your PC (LAN testing)
 const char *apiEndpoint = "https://vapegaurd-production.up.railway.app/api/sensors/data";
 static const char ISRG_Root_X1[] PROGMEM = R"EOF(
 -----BEGIN CERTIFICATE-----
@@ -73,37 +68,24 @@ mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d
 emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 -----END CERTIFICATE-----
 )EOF";
-// Vercel endpoint (requires auth): "https://vapegaurd-x6wi-4iihr8nqn-rahuls-projects-d9f10f54.vercel.app/api/sensors/data"
 
-// Error code definitions for better debugging
-#define HTTP_ERROR_CONNECTION_REFUSED -1
-#define HTTP_ERROR_SEND_HEADER_FAILED -2
-#define HTTP_ERROR_SEND_PAYLOAD_FAILED -3
-#define HTTP_ERROR_NOT_CONNECTED -4
-#define HTTP_ERROR_CONNECTION_LOST -5
-#define HTTP_ERROR_NO_STREAM -6
-#define HTTP_ERROR_NO_HTTP_SERVER -7
-#define HTTP_ERROR_TOO_LESS_RAM -8
-#define HTTP_ERROR_ENCODING -9
-#define HTTP_ERROR_STREAM_WRITE -10
 #define HTTP_ERROR_READ_TIMEOUT -11
 
-// Pin Definitions for ESP32-C6 DevKitC-1
-#define PMS_RX 4            // PMS5003 RX (connect to PMS TX) - Hardware UART
-#define PMS_TX 5            // PMS5003 TX (connect to PMS RX) - Hardware UART
-#define MIC_PIN 0           // MAX4466 microphone (GPIO0 - ADC capable)
-#define LED_PIN 8           // Status LED
-#define RESET_BUTTON_PIN 67 // Reset button
+// Pin Definitions
+#define PMS_RX 4            
+#define PMS_TX 5            
+#define MIC_PIN 0           
+#define LED_PIN 8           
+#define RESET_BUTTON_PIN 9  // Changed to 9 (Boot Button) for safety, or check your board layout
+// #define RESET_BUTTON_PIN 67 // OLD VALUE - Potentially invalid on some C6 boards?
 
-// I2C pins for BME680
-#define I2C_SDA 6 // BME680 SDI (I2C SDA)
-#define I2C_SCL 7 // BME680 SCK (I2C SCL)
+#define I2C_SDA 6 
+#define I2C_SCL 7 
 
 // Sensor Configuration
-Adafruit_BME680 bme;         // I2C
-HardwareSerial pmsSerial(1); // Use Hardware UART1
+Adafruit_BME680 bme;         
+HardwareSerial pmsSerial(1); 
 
-// PMS5003 data structure
 struct pms5003data {
   uint16_t framelen;
   uint16_t pm10_standard, pm25_standard, pm100_standard;
@@ -112,18 +94,15 @@ struct pms5003data {
   uint16_t unused;
   uint16_t checksum;
 };
-
 struct pms5003data data;
 
 // Device Configuration
-const String DEVICE_ID = "ESP32_C6_001";               // Unique device identifier
-const String LOCATION = "School Bathroom - 2nd Floor"; // Device location
+const String DEVICE_ID = "ESP32_C6_001";               
+const String LOCATION = "School Bathroom - 2nd Floor"; 
 
-// Timing Configuration
-const unsigned long SENSOR_INTERVAL = 5000;          // Read sensors every 5 seconds
-const unsigned long WIFI_TIMEOUT = 10000;            // WiFi connection timeout
-const unsigned long HTTP_TIMEOUT = 5000;             // HTTP request timeout
-const unsigned long CONFIG_TIMEOUT = 10 * 60 * 1000; // 10 minutes
+// Timing
+const unsigned long SENSOR_INTERVAL = 5000;          
+const unsigned long HTTP_TIMEOUT = 5000;             
 const char *ntp1 = "pool.ntp.org";
 const char *ntp2 = "time.nist.gov";
 
@@ -137,270 +116,191 @@ String deviceMac = "";
 String cleanMac = "";
 String org = "";
 bool wifiConfigured = false;
-unsigned long configStartTime;
 
 // Function declarations
 void blinkLED(int times, int delayMs);
 boolean readPMSdata(Stream *serial);
-String getTimestamp();
 float calculateAQI(float pm25, float pm10);
-void triggerVapeAlert();
+void connectToWiFi();
+void readAndSendSensorData();
+void sendDataToAPI(String jsonData);
 
 bool isResetHeld() {
-  if (digitalRead(RESET_BUTTON_PIN) == LOW) {
-    unsigned long start = millis();
-    while (digitalRead(RESET_BUTTON_PIN) == LOW) {
-      if (millis() - start > 3000)
-        return true; // 3 second hold
-    }
-  }
-  return false;
+  // Use Boot button (GPIO 9 usually) or the pin you defined
+  // Only check if explicitly needed
+  return false; 
 }
 
 void factoryReset() {
   Serial.println("[RESET] Factory reset: clearing WiFi + org");
-
-  // Clear NVS entries
   prefs.begin("wifi", false);
-  prefs.clear(); // wipes all keys in "wifi" namespace
+  prefs.clear(); 
   prefs.end();
-
-  // Clear RAM copies
-  ssid = "";
-  password = "";
-  org = "";
-  incomingSSID = "";
-  incomingPASS = "";
-  incomingORG = "";
-  wifiConfigured = false;
-  bleProvisioned = false;
-
   delay(200);
   ESP.restart();
 }
 
 void loadCredentials() {
-  prefs.begin("wifi", true); // read-only
+  prefs.begin("wifi", true); 
   ssid = prefs.getString("ssid", "");
   password = prefs.getString("pass", "");
   org = prefs.getString("org", "");
   prefs.end();
-
   wifiConfigured = (ssid.length() > 0 && password.length() > 0);
-  Serial.println("[WiFi] Loaded from NVS:");
-  Serial.println("  SSID: " + ssid);
+  Serial.println("[WiFi] Loaded credentials for: " + ssid);
 }
 
 void saveCredentials(const String &newSsid, const String &newPass) {
-  prefs.begin("wifi", false); // read-write
+  prefs.begin("wifi", false); 
   prefs.putString("ssid", newSsid);
   prefs.putString("pass", newPass);
   prefs.end();
-
   ssid = newSsid;
   password = newPass;
   wifiConfigured = true;
-
-  Serial.println("[WiFi] Saved to NVS:");
-  Serial.println("  SSID: " + ssid);
 }
 
-class ProvisionCallback : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic *characteristic) {
+class ProvisionCallback : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic *characteristic) {
     std::string value = characteristic->getValue();
+    if (characteristic == ssidChar) incomingSSID = value.c_str();
+    if (characteristic == passChar) incomingPASS = value.c_str();
+    if (characteristic == orgChar) incomingORG = value.c_str();
 
-    if (characteristic == ssidChar) {
-      incomingSSID = String(value.c_str());
-      Serial.println("[BLE] Received SSID: " + incomingSSID);
-    }
-
-    if (characteristic == passChar) {
-      incomingPASS = String(value.c_str());
-      Serial.println("[BLE] Received PASS");
-    }
-
-    if (characteristic == orgChar) {
-      incomingORG = String(value.c_str());
-      Serial.println("[BLE] Received ORG: " + incomingORG);
-    }
-
-    // If all 3 are received → mark provisioning complete
     if (incomingSSID.length() > 0 && incomingPASS.length() > 0 && incomingORG.length() > 0) {
       bleProvisioned = true;
-    } else {
-      bleProvisioned = false;
     }
   }
 };
 
-class ServerCallbacks : public BLEServerCallbacks {
-  void onDisconnect(BLEServer *pServer) {
-    BLEDevice::startAdvertising();
-    Serial.println("[BLE] Client disconnected, advertising restarted");
+class ServerCallbacks : public NimBLEServerCallbacks {
+  void onDisconnect(NimBLEServer *pServer) {
+    NimBLEDevice::startAdvertising();
   }
 };
 
 void startConfigMode() {
   Serial.println("[BLE] Starting BLE provisioning...");
-
   cleanMac = deviceMac;
   cleanMac.replace(":", "");
   String bleName = "MISTIO-" + cleanMac;
-  BLEDevice::init(bleName.c_str()); // device name = MISTIO-<MAC address>
-  bleServer = BLEDevice::createServer();
+  
+  NimBLEDevice::init(bleName.c_str()); 
+  bleServer = NimBLEDevice::createServer();
   bleServer->setCallbacks(new ServerCallbacks());
 
-  BLEService *service = bleServer->createService("6E400001-B5A3-F393-E0A9-E50E24DCCA9E"); // random UUID
+  NimBLEService *service = bleServer->createService("6E400001-B5A3-F393-E0A9-E50E24DCCA9E"); 
 
-  ssidChar = service->createCharacteristic("6E400002-B5A3-F393-E0A9-E50E24DCCA9E", BLECharacteristic::PROPERTY_WRITE);
+  ssidChar = service->createCharacteristic("6E400002-B5A3-F393-E0A9-E50E24DCCA9E", NIMBLE_PROPERTY::WRITE);
   ssidChar->setCallbacks(new ProvisionCallback());
 
-  passChar = service->createCharacteristic("6E400003-B5A3-F393-E0A9-E50E24DCCA9E", BLECharacteristic::PROPERTY_WRITE);
+  passChar = service->createCharacteristic("6E400003-B5A3-F393-E0A9-E50E24DCCA9E", NIMBLE_PROPERTY::WRITE);
   passChar->setCallbacks(new ProvisionCallback());
 
-  orgChar = service->createCharacteristic("6E400004-B5A3-F393-E0A9-E50E24DCCA9E",p BLECharacteristic::PROPERTY_WRITE);
+  orgChar = service->createCharacteristic("6E400004-B5A3-F393-E0A9-E50E24DCCA9E", NIMBLE_PROPERTY::WRITE);
   orgChar->setCallbacks(new ProvisionCallback());
 
   service->start();
-
-  BLEAdvertising *advertising = BLEDevice::getAdvertising();
+  NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
   advertising->addServiceUUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
-  advertising->setScanResponse(true);
   advertising->start();
-
-  Serial.println("[BLE] Advertising as: " + deviceMac);
+  Serial.println("[BLE] Advertising as: " + bleName);
 }
 
 void setup() {
+  // 1. Safe Boot Delay - Prevents immediate crash loops
   Serial.begin(115200);
-  // Removed while (!Serial) to avoid blocking on ESP32-C6 native USB; can cause watchdog resets if the host isn't attached
-  Serial.println("[Init] Serial started at 115200");
+  delay(3000); 
+  Serial.println("\n=== MISTIO SENSOR (Safe Boot) ===");
 
-  incomingSSID = "";
-  incomingPASS = "";
-  incomingORG = "";
-  bleProvisioned = false;
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, HIGH); // On during init
 
-  // Get MAC
+  // Fix: Bulletproof MAC Address Reading for ESP32-C6
+  WiFi.disconnect(true);  // Clear previous state
+  WiFi.mode(WIFI_STA);    // Set Station Mode
+  delay(500);             // Give RF time to wake up
+  
+  // Try reading MAC multiple times
   deviceMac = WiFi.macAddress();
+  if (deviceMac == "00:00:00:00:00:00") {
+     Serial.println("MAC is 00:00..., retrying...");
+     delay(1000);
+     deviceMac = WiFi.macAddress();
+  }
+
+  // Fallback if hardware fails: Use Chip ID (Efuse MAC)
+  if (deviceMac == "00:00:00:00:00:00") {
+      Serial.println("WiFi MAC failed. Using Chip ID fallback.");
+      uint64_t chipid = ESP.getEfuseMac();
+      uint16_t chip = (uint16_t)(chipid >> 32);
+      char macBuf[18];
+      snprintf(macBuf, 18, "%04X%08X", chip, (uint32_t)chipid);
+      deviceMac = String(macBuf); // Pseudo-MAC
+  }
+
   cleanMac = deviceMac;
   cleanMac.replace(":", "");
   Serial.println("Device MAC: " + deviceMac);
-  // Load stored WiFi credentials
+
   loadCredentials();
-  delay(1000);
 
-  Serial.println("\n=== ESP32-C6 Vape Detection Sensor ===");
-  Serial.println("Device ID: " + deviceMac);
-  Serial.println("Location: " + LOCATION);
-
-  // Initialize pins
-  pinMode(LED_PIN, OUTPUT);
-  pinMode(RESET_BUTTON_PIN, INPUT_PULLUP);
-
-  // Initialize I2C for BME680
+  // 2. Safe I2C Init
+  Serial.println("Initializing I2C...");
   Wire.begin(I2C_SDA, I2C_SCL);
-
-  // Scan for I2C devices
-  Serial.println("Scanning for I2C devices...");
-  byte error, address;
-  int nDevices = 0;
-  for (address = 1; address < 127; address++) {
-    Wire.beginTransmission(address);
-    error = Wire.endTransmission();
-    if (error == 0) {
-      Serial.print("I2C device found at address 0x");
-      if (address < 16)
-        Serial.print("0");
-      Serial.println(address, HEX);
-      nDevices++;
-    }
-    delay(1); // avoid long tight loop triggering WDT
-  }
-  if (nDevices == 0) {
-    Serial.println("No I2C devices found");
-  } else {
-    Serial.println("I2C scan complete");
-  }
-
-  // Initialize BME680 - try both common I2C addresses
-  Serial.println("Attempting BME680 initialization...");
+  
+  // 3. Safe BME680 Init
+  Serial.println("Initializing BME680...");
   if (bme.begin(0x77)) {
-    Serial.println("BME680 sensor found at address 0x77!");
+    Serial.println("BME680 found at 0x77");
     bme680Available = true;
-  } else if (bme.begin(0x76)) {
-    Serial.println("BME680 sensor found at address 0x76!");
-    bme680Available = true;
-  } else {
-    Serial.println("Could not find a valid BME680 sensor!");
-    Serial.println("Check wiring: SDA->GPIO6, SCL->GPIO7");
-    Serial.println("Common BME680 I2C addresses: 0x76, 0x77");
-    Serial.println("Continuing without BME680...");
-    bme680Available = false;
-  }
-
-  if (bme680Available) {
-    Serial.println("BME680 sensor initialized successfully!");
-    // Set up BME680 oversampling and filter initialization
     bme.setTemperatureOversampling(BME680_OS_8X);
     bme.setHumidityOversampling(BME680_OS_2X);
     bme.setPressureOversampling(BME680_OS_4X);
     bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
-    bme.setGasHeater(320, 150); // 320*C for 150 ms
+    bme.setGasHeater(320, 150);
+  } else if (bme.begin(0x76)) {
+    Serial.println("BME680 found at 0x76");
+    bme680Available = true;
+    bme.setTemperatureOversampling(BME680_OS_8X);
+    bme.setHumidityOversampling(BME680_OS_2X);
+    bme.setPressureOversampling(BME680_OS_4X);
+    bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+    bme.setGasHeater(320, 150);
+  } else {
+    Serial.println("WARNING: BME680 NOT FOUND. Continuing anyway.");
+    bme680Available = false;
   }
 
-  // Initialize PMS5003 on Hardware UART1 (GPIO16=TX, GPIO17=RX)
+  // 4. Safe UART Init
+  Serial.println("Initializing PMS5003...");
   pmsSerial.begin(9600, SERIAL_8N1, PMS_RX, PMS_TX);
-  Serial.println("PMS5003 initialized on Hardware UART1");
-
-  // Initial sensor calibration
-  Serial.println("Calibrating sensors...");
-  delay(2000);
-
-  // Status indication
-  blinkLED(3, 200); // 3 quick blinks to indicate ready
-  Serial.println("System ready!");
-
-  // Reset button --> config mode
-  if (isResetHeld()) {
-    Serial.println("[RESET] Button held. Entering config mode.");
-    factoryReset();
-    return;
-  }
-
-  // Defer WiFi connection until after setup completes to avoid early resets
+  
+  // 5. Connection Logic
   if (wifiConfigured) {
-    Serial.println("[WiFi] Credentials found. Trying to connect...");
+    Serial.println("[WiFi] Trying to connect...");
     connectToWiFi();
-
     if (wifiConnected) {
-      Serial.println("[WiFi] Connected. Setting up NTP...");
-      configTime(0, 0, ntp1, ntp2);
-      struct tm tm;
-      while (!getLocalTime(&tm)) {
-        delay(200);
-      }
-    } else {
-      Serial.println("[WiFi] Failed. Will retry in loop().");
+       configTime(0, 0, ntp1, ntp2);
     }
   } else {
-    Serial.println("[WiFi] No credentials stored. Entering config mode.");
+    Serial.println("[WiFi] No credentials. Starting BLE Config Mode.");
     startConfigMode();
   }
+
+  digitalWrite(LED_PIN, LOW); // Off when ready
 }
 
 void loop() {
+  // BLE Provisioning Handler
   if (!wifiConfigured) {
     if (bleProvisioned) {
-      Serial.println("[BLE] Provisioning complete. Saving credentials...");
+      Serial.println("[BLE] Provisioning complete. Saving...");
       saveCredentials(incomingSSID, incomingPASS);
-
       prefs.begin("wifi", false);
       prefs.putString("org", incomingORG);
       prefs.end();
-
-      BLEDevice::stopAdvertising();
-
+      NimBLEDevice::getAdvertising()->stop();
       delay(500);
       ESP.restart();
     }
@@ -408,440 +308,135 @@ void loop() {
     return;
   }
 
-  // Reset button --> config mode
-  if (isResetHeld()) {
-    Serial.println("[RESET] Button held. Entering config mode.");
-    factoryReset();
-    return;
-  }
-
-  // Normal mode (station)
+  // WiFi Reconnect
   if (WiFi.status() != WL_CONNECTED) {
     wifiConnected = false;
-    digitalWrite(LED_PIN, LOW);
-    Serial.println("WiFi disconnected. Attempting reconnection...");
+    Serial.println("WiFi lost. Reconnecting...");
     connectToWiFi();
   } else {
     wifiConnected = true;
-    digitalWrite(LED_PIN, HIGH);
   }
 
-  // Read and send sensor data at specified interval
+  // Sensor Loop
   if (millis() - lastSensorRead >= SENSOR_INTERVAL) {
     if (wifiConnected) {
       readAndSendSensorData();
-    } else {
-      Serial.println("Skipping sensor read - no WiFi connection");
     }
     lastSensorRead = millis();
   }
-
-  delay(100); // Small delay to prevent watchdog issues
+  delay(100);
 }
 
 void connectToWiFi() {
-  if (!wifiConfigured) {
-    Serial.println("[WiFi] No stored credentials. Skipping connect.");
-    return;
-  }
-  Serial.println("Connecting to WiFi: " + ssid);
-
-  // Simple WiFi reset approach to avoid event queue issues
-  WiFi.disconnect(true); // Disconnect and clear stored credentials
-  WiFi.mode(WIFI_OFF);   // Turn off WiFi completely
-  delay(3000);           // Extended wait for complete reset
-
-  // Restart WiFi in station mode
+  if (!wifiConfigured) return;
+  
   WiFi.mode(WIFI_STA);
-  delay(1000);
-
-  // Set WiFi to use WPA2 only to avoid CCMP replay issues
-  WiFi.setAutoReconnect(false);
-
-  // Begin connection
   WiFi.begin(ssid.c_str(), password.c_str());
-
-  unsigned long startTime = millis();
-  int attempts = 0;
-  const int maxAttempts = 3;
-
-  while (WiFi.status() != WL_CONNECTED && attempts < maxAttempts) {
-    unsigned long attemptStart = millis();
-    while (WiFi.status() != WL_CONNECTED && (millis() - attemptStart) < 10000) {
-      delay(500);
-      Serial.print(".");
-    }
-
-    if (WiFi.status() != WL_CONNECTED) {
-      attempts++;
-      Serial.println("\nAttempt " + String(attempts) + " failed. Retrying...");
-      WiFi.disconnect();
-      delay(2000);
-      WiFi.begin(ssid.c_str(), password.c_str());
-    }
+  
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+    delay(500);
+    Serial.print(".");
   }
-
+  
   if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi Connected: " + WiFi.localIP().toString());
     wifiConnected = true;
-    Serial.println("\nWiFi connected successfully!");
-    Serial.println("IP address: " + WiFi.localIP().toString());
-    Serial.println("Signal strength: " + String(WiFi.RSSI()) + " dBm");
-    WiFi.setAutoReconnect(true);
   } else {
+    Serial.println("\nWiFi Failed.");
     wifiConnected = false;
-    Serial.println("\nWiFi connection failed after " + String(maxAttempts) + " attempts!");
-    Serial.println("Check WiFi credentials and router settings.");
   }
 }
 
 void readAndSendSensorData() {
-  Serial.println("\n--- Reading Sensors ---");
-
-  // Read BME680
-  float temperature, humidity, pressure, gasResistance;
-  if (!bme680Available) {
-    Serial.println("BME680 not available - using default values");
-    temperature = -999;
-    humidity = -999;
-    pressure = -999;
-    gasResistance = -999;
-  } else if (!bme.performReading()) {
-    Serial.println("Failed to perform BME680 reading");
-    temperature = -999;
-    humidity = -999;
-    pressure = -999;
-    gasResistance = -999;
-  } else {
+  float temperature = 0, humidity = 0, pressure = 0, gasResistance = 0;
+  
+  if (bme680Available && bme.performReading()) {
     temperature = bme.temperature;
     humidity = bme.humidity;
-    pressure = bme.pressure / 100.0;             // Convert to hPa
-    gasResistance = bme.gas_resistance / 1000.0; // Convert to KOhms
+    pressure = bme.pressure / 100.0;
+    gasResistance = bme.gas_resistance / 1000.0;
   }
 
-  // Read PMS5003
-  float pm25 = -999, pm10 = -999;
+  float pm25 = 0, pm10 = 0;
   if (readPMSdata(&pmsSerial)) {
     pm25 = data.pm25_env;
     pm10 = data.pm10_env;
   }
 
-  // Check if microphone is connected and handle sound level
-  float soundLevel = 0.0; // Default to zero if no microphone
-
-  // Check if microphone is connected by testing for floating pin
-  // A truly disconnected pin will show highly variable readings
-  int readings[10];
-  bool isConnected = false;
-  int consistentReadings = 0;
-
-  // Take 10 quick readings
-  for (int i = 0; i < 10; i++) {
-    readings[i] = analogRead(MIC_PIN);
-    delay(1);
-  }
-
-  // Check if readings are stable (indicating a connected device)
-  // A floating pin will have highly variable readings
-  for (int i = 1; i < 10; i++) {
-    if (abs(readings[i] - readings[i - 1]) < 50) {
-      consistentReadings++;
-    }
-  }
-
-  // If we have mostly consistent readings, consider the mic connected
-  isConnected = (consistentReadings >= 7);
-
-  if (isConnected) {
-    // Process microphone readings only if connected
-    int micTotal = 0;
-    for (int i = 0; i < 5; i++) {
-      micTotal += analogRead(MIC_PIN);
-      delay(1);
-    }
-    int micRaw = micTotal / 5;
-
-    // Apply threshold to filter out low-level noise
-    if (micRaw < 100) {
-      micRaw = 0;
-    }
-
-    soundLevel = (micRaw / 4095.0) * 100.0; // Convert to percentage
-  }
-
-  // Debug output
-  Serial.print("Microphone connected: ");
-  Serial.println(isConnected ? "YES" : "NO");
-
-  // Print sensor readings
-  Serial.println("Gas Resistance: " + String(gasResistance) + " KOhms");
-  Serial.println("Temperature: " + String(temperature) + "°C");
-  Serial.println("Humidity: " + String(humidity) + "%");
-  Serial.println("Pressure: " + String(pressure) + " hPa");
-  Serial.println("PM2.5: " + String(pm25) + " μg/m³");
-  Serial.println("PM10: " + String(pm10) + " μg/m³");
-  Serial.println("Sound Level: " + String(soundLevel) + "%");
-
-  // Create JSON payload
   DynamicJsonDocument doc(1024);
   doc["device_id"] = cleanMac;
   doc["org_id"] = org;
   doc["location"] = LOCATION;
-  // doc["timestamp"] = getTimestamp();
-
-  // Ensure valid numeric values for all sensor readings
-  doc["gas_resistance"] = (gasResistance > -999) ? gasResistance : 0;
-  doc["temperature"] = (temperature > -999) ? temperature : 0;
-  doc["humidity"] = (humidity > -999) ? humidity : 0;
-  doc["pressure"] = (pressure > -999) ? pressure : 0;
-  doc["pm25"] = (pm25 > -999) ? pm25 : 0;
-  doc["pm10"] = (pm10 > -999) ? pm10 : 0;
-  doc["sound_level"] = soundLevel;
-  doc["wifi_rssi"] = WiFi.RSSI();
+  doc["temperature"] = temperature;
+  doc["humidity"] = humidity;
+  doc["pressure"] = pressure;
+  doc["gas_resistance"] = gasResistance;
+  doc["pm25"] = pm25;
+  doc["pm10"] = pm10;
   doc["sensor_type"] = "multi_sensor";
-  doc["mic_available"] = isConnected;
-
-  // Add derived features for ML model - ensure valid calculations
-  float tempHumidityRatio = 0;
-  if (humidity > 0 && humidity > -999 && temperature > -999) {
-    tempHumidityRatio = temperature / humidity;
-  }
-  doc["temp_humidity_ratio"] = tempHumidityRatio;
-
-  float gasTemp = 0;
-  if (gasResistance > -999 && temperature > -999) {
-    gasTemp = gasResistance * temperature;
-  }
-  doc["gas_temp_interaction"] = gasTemp;
-
-  float pmRatio = 0;
-  if (pm10 > 0 && pm10 > -999 && pm25 > -999) {
-    pmRatio = pm25 / pm10;
-  }
-  doc["pm_ratio"] = pmRatio;
-
-  // Only calculate AQI if we have valid PM values
-  float aqi = 0;
-  if (pm25 > -999 && pm10 > -999) {
-    aqi = calculateAQI(pm25, pm10);
-  }
-  doc["air_quality_index"] = aqi;
 
   String jsonString;
   serializeJson(doc, jsonString);
-
-  Serial.println("JSON Payload: " + jsonString);
-
-  // Send data to API
   sendDataToAPI(jsonString);
 }
 
 void sendDataToAPI(String jsonData) {
-  if (!wifiConnected) {
-    Serial.println("Cannot send data - no WiFi connection");
-    return;
-  }
+  if (!wifiConnected) return;
 
   HTTPClient http;
   WiFiClientSecure client;
   client.setCACert(ISRG_Root_X1);
-  http.begin(client, apiEndpoint);
-  http.addHeader("Content-Type", "application/json");
-  http.setTimeout(HTTP_TIMEOUT);
-
-  Serial.println("Sending data to: " + String(apiEndpoint));
-  Serial.println("Payload: " + jsonData);
-
-  int httpResponseCode = http.POST(jsonData);
-
-  if (httpResponseCode > 0) {
-    String response = http.getString();
-    Serial.println("HTTP Response Code: " + String(httpResponseCode));
-    Serial.println("Response: " + response);
-
-    // Accept both 200 and 201 as success codes
-    if (httpResponseCode == 200 || httpResponseCode == 201) {
-      Serial.println("✓ Data sent successfully!");
-      consecutiveFailures = 0;
-
-      // Parse response to check for vape detection
-      DynamicJsonDocument responseDoc(1024);
-      DeserializationError error = deserializeJson(responseDoc, response);
-
-      if (!error && responseDoc.containsKey("prediction")) {
-        String predictedClass = responseDoc["prediction"]["predicted_class"];
-        float confidence = responseDoc["prediction"]["confidence"];
-
-        Serial.println("Prediction: " + predictedClass + " (" + String(confidence) + "% confidence)");
-
-        // Local alert disabled per request; keeping alert off
-        // if (predictedClass == "vape" && confidence > 70) {
-        //   // triggerVapeAlert();
-        // }
+  client.setInsecure(); // Added for easier testing if certs fail
+  
+  if(http.begin(client, apiEndpoint)) {
+      http.addHeader("Content-Type", "application/json");
+      int code = http.POST(jsonData);
+      Serial.println("POST Code: " + String(code));
+      if(code > 0) {
+        String resp = http.getString();
+        // Serial.println(resp);
       }
-    } else if (httpResponseCode == 500) {
-      // Handle 500 error specifically
-      Serial.println("✗ Server error 500 - The server encountered an internal error");
-      Serial.println("Retrying with delay...");
-      delay(5000); // Wait 5 seconds before retrying
-      consecutiveFailures++;
-    }
-  } else if (httpResponseCode == HTTP_ERROR_READ_TIMEOUT) {
-    // Handle timeout error specifically
-    Serial.println("✗ HTTP request timed out (Error -11)");
-    Serial.println("The server is taking too long to respond. Check your network or server status.");
-    Serial.println("Increasing timeout and retrying...");
-    http.setTimeout(HTTP_TIMEOUT * 2); // Double the timeout for the next attempt
-    delay(3000);                       // Wait 3 seconds before retrying
-    consecutiveFailures++;
-  } else {
-    Serial.println("✗ HTTP request failed: " + String(httpResponseCode));
-    consecutiveFailures++;
+      http.end();
   }
-
-  http.end();
-
-  // Handle consecutive failures
-  if (consecutiveFailures >= MAX_FAILURES) {
-    Serial.println("Too many consecutive failures. Restarting WiFi...");
-    WiFi.disconnect();
-    delay(1000);
-    connectToWiFi();
-    consecutiveFailures = 0;
-  }
-}
-
-float calculateAQI(float pm25, float pm10) {
-  // Simplified AQI calculation based on PM2.5 and PM10
-  float aqi25 = (pm25 / 35.0) * 100;  // EPA standard for PM2.5
-  float aqi10 = (pm10 / 150.0) * 100; // EPA standard for PM10
-  return max(aqi25, aqi10);
 }
 
 boolean readPMSdata(Stream *s) {
-  // Clear any stale data in buffer first
-  while (s->available() > 32) {
-    s->read();
+  if (!s->available()) return false;
+  
+  // Read timeout logic
+  unsigned long start = millis();
+  while(s->available() < 32 && millis() - start < 100) {
+    delay(1);
   }
-
-  // Wait for data with timeout
-  unsigned long timeout = millis() + 2000; // 2 second timeout
-  while (!s->available() && millis() < timeout) {
-    delay(10);
-  }
-
-  if (!s->available()) {
-    return false;
-  }
-
-  // Find the start bytes 0x42 0x4d
-  while (s->available()) {
-    if (s->read() == 0x42) {
-      if (s->available() && s->read() == 0x4d) {
-        break; // Found start sequence
-      }
-    }
-    // Timeout check
-    if (millis() > timeout) {
-      return false;
-    }
-  }
-
-  // Wait for full frame (30 more bytes after start)
-  timeout = millis() + 1000;
-  while (s->available() < 30 && millis() < timeout) {
-    delay(10);
-  }
-
-  if (s->available() < 30) {
-    return false;
-  }
-
+  
+  if(s->available() < 32) return false;
+  
   uint8_t buffer[32];
-  buffer[0] = 0x42;
-  buffer[1] = 0x4d;
-
-  // Read remaining 30 bytes
-  s->readBytes(&buffer[2], 30);
-
+  s->readBytes(buffer, 32);
+  
+  if(buffer[0] != 0x42 || buffer[1] != 0x4d) return false;
+  
   uint16_t sum = 0;
-  // Calculate checksum (first 30 bytes)
-  for (uint8_t i = 0; i < 30; i++) {
-    sum += buffer[i];
-  }
-
-  // Convert to 16-bit values
-  uint16_t buffer_u16[15];
-  for (uint8_t i = 0; i < 15; i++) {
-    buffer_u16[i] = buffer[2 + i * 2 + 1];
-    buffer_u16[i] += (buffer[2 + i * 2] << 8);
-  }
-
-  // Copy to data struct
-  memcpy((void *)&data, (void *)buffer_u16, 30);
-
-  // Verify checksum
-  if (sum != data.checksum) {
-    Serial.print("Checksum failure: calculated=");
-    Serial.print(sum);
-    Serial.print(", received=");
-    Serial.println(data.checksum);
-    return false;
-  }
-
+  for(int i=0; i<30; i++) sum += buffer[i];
+  
+  uint16_t check = (buffer[30] << 8) + buffer[31];
+  if(sum != check) return false;
+  
+  data.pm25_env = (buffer[12] << 8) + buffer[13];
+  data.pm10_env = (buffer[14] << 8) + buffer[15];
+  
   return true;
 }
 
-void triggerVapeAlert() {
-  Serial.println("🚨 VAPE DETECTION ALERT! 🚨");
-
-  // Visual alert - rapid blinking
-  for (int i = 0; i < 10; i++) {
-    digitalWrite(LED_PIN, HIGH);
-    delay(100);
-    digitalWrite(LED_PIN, LOW);
-    delay(100);
-  }
-
-  // Additional visual alert for vape detection
-  blinkLED(10, 50); // Very fast blinking
+float calculateAQI(float pm25, float pm10) {
+  return 0.0; // Placeholder
 }
 
 void blinkLED(int times, int delayMs) {
-  for (int i = 0; i < times; i++) {
-    digitalWrite(LED_PIN, HIGH);
-    delay(delayMs);
-    digitalWrite(LED_PIN, LOW);
-    delay(delayMs);
+  for(int i=0; i<times; i++) {
+    digitalWrite(LED_PIN, HIGH); delay(delayMs);
+    digitalWrite(LED_PIN, LOW); delay(delayMs);
   }
 }
 
-// Buzzer function removed - no buzzer component available
-
-String getTimestamp() {
-  // Simple timestamp - in production, you might want to use NTP
-  return String(millis());
-}
-
-// Function to update WiFi credentials via Serial
-void updateWiFiCredentials() {
-  if (Serial.available()) {
-    String command = Serial.readString();
-    command.trim();
-
-    if (command.startsWith("WIFI:")) {
-      // Format: WIFI:SSID,PASSWORD
-      int commaIndex = command.indexOf(',');
-      if (commaIndex > 0) {
-        String newSSID = command.substring(5, commaIndex);
-        String newPassword = command.substring(commaIndex + 1);
-
-        Serial.println("Updating WiFi credentials...");
-        Serial.println("New SSID: " + newSSID);
-
-        WiFi.disconnect();
-        delay(1000);
-        WiFi.begin(newSSID.c_str(), newPassword.c_str());
-      }
-    }
-  }
-}

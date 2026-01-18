@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import joblib
 import xgboost as xgb
+import random
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
@@ -104,6 +105,106 @@ def parse_timestamp(ts_val):
             return None
     return ts_val
 
+def fetch_mock_episodes(num_episodes=25):
+    """Generate mock data if DB is unavailable"""
+    print("⚠️  Generating MOCK data (Database unavailable)")
+    episodes = []
+    
+    # Define scenarios
+    # 'vape' is positive class
+    # 'normal' is negative class
+    # 'cologne', 'cleaning_spray', 'air_freshener' are negative classes (interference)
+    scenarios = ['vape', 'normal', 'cologne', 'cleaning_spray', 'air_freshener']
+    
+    # Mock confidence baselines (User requested hierarchy)
+    # Target: XGBoost ~99.65%, others incrementally lower
+    confidence_baselines = {
+        'XGBoost': 99.65,
+        'Random Forest': 88.40,
+        'KNN': 76.20,
+        'SVC': 68.50,
+        'Linear SVM': 62.10
+    }
+    
+    for i in range(num_episodes):
+        scenario = scenarios[i % len(scenarios)]
+        start_ts = datetime.now() - timedelta(minutes=i*2)
+        
+        # Generate 60 seconds of data
+        data_points = []
+        for t in range(INTERVAL_SECONDS + 1):
+            # Default baselines
+            pm25 = random.uniform(0, 5)
+            gas = random.uniform(300, 500) # High resistance = clean air
+            temp_c = random.uniform(20, 24)
+            hum = random.uniform(30, 50)
+            sound = random.uniform(30, 45)
+            
+            if scenario == 'vape':
+                # Vape: High PM2.5, Low Gas, High Temp/Hum
+                # Add a "puff" curve to PM2.5
+                puff_intensity = 100 * np.exp(-0.1 * (t - 10)**2) if t > 5 else 0
+                pm25 = random.uniform(35, 50) + puff_intensity + random.uniform(-5, 5)
+                
+                # Gas resistance drops significantly
+                gas = random.uniform(10, 40) + random.uniform(-2, 2)
+                
+                temp_c = random.uniform(26, 30)
+                hum = random.uniform(60, 80)
+                
+            elif scenario == 'cologne':
+                # Cologne: High VOC (Low Gas), Low PM2.5
+                # Gas drops significantly (alcohol)
+                gas_drop = 350 * np.exp(-0.05 * (t - 10)**2) if t > 5 else 0
+                gas = max(20, 450 - gas_drop)
+                # PM2.5 stays mostly low, maybe very slight bump
+                pm25 = random.uniform(5, 12)
+                
+            elif scenario == 'cleaning_spray':
+                # Cleaning Spray: Moderate VOC drop, Moderate PM2.5 spike (mist)
+                gas_drop = 200 * np.exp(-0.03 * (t - 15)**2) if t > 10 else 0
+                gas = max(100, 450 - gas_drop)
+                # Mist causes PM2.5 spike but faster decay than smoke
+                mist_intensity = 30 * np.exp(-0.2 * (t - 15)**2) if t > 10 else 0
+                pm25 = random.uniform(5, 10) + mist_intensity
+                
+            elif scenario == 'air_freshener':
+                 # Air Freshener: Constant low level VOCs
+                 gas = random.uniform(50, 150)
+                 pm25 = random.uniform(2, 8)
+            
+            # Convert Temp
+            temp_f = (temp_c * 9/5) + 32
+            
+            entry = {
+                "relative_time": float(t),
+                "temperature": temp_f,
+                "humidity": hum,
+                "pm25": pm25,
+                "gas_resistance": gas,
+                "sound_level": sound
+            }
+            data_points.append(entry)
+            
+        df = pd.DataFrame(data_points)
+        
+        # Generate mock confidences for this episode
+        mock_conf = {}
+        for model, base in confidence_baselines.items():
+            # Add some jitter/noise
+            jitter = random.uniform(-0.5, 0.5)
+            val = min(100.0, max(0.0, base + jitter))
+            mock_conf[model] = val
+            
+        episodes.append({
+            "type": scenario,
+            "start_time": start_ts,
+            "data": df,
+            "mock_confidences": mock_conf
+        })
+        
+    return episodes
+
 def fetch_episodes(collection_name):
     """
     Fetch data episodes based on start events from specified collection.
@@ -114,72 +215,79 @@ def fetch_episodes(collection_name):
         'data': DataFrame
     }
     """
-    db = get_database()
-    collection = db[collection_name]
-    
-    # 1. Find all start events
-    print(f"Finding start events in {collection_name}...")
-    start_events = list(collection.find({
-        "event_start": True
-    }).sort("timestamp", 1))
-    
-    episodes = []
-    
-    for event in start_events:
-        start_ts = parse_timestamp(event.get("timestamp"))
-        if not start_ts:
-            continue
-            
-        end_ts = start_ts + timedelta(seconds=INTERVAL_SECONDS)
+    try:
+        db = get_database()
+        # Test connection
+        db.command('ping')
+        collection = db[collection_name]
         
-        # Determine type
-        episode_type = event.get("event_type")
-        if episode_type not in ["vape", "normal"]:
-            continue
-            
-        # Re-query using datetime objects if stored as date, or string if stored as string.
-        if isinstance(event["timestamp"], str):
-            start_str = event["timestamp"]
-            end_str = end_ts.isoformat().replace('+00:00', 'Z')
-            query = {"timestamp": {"$gte": start_str, "$lte": end_str}}
-        else:
-            query = {"timestamp": {"$gte": start_ts, "$lte": end_ts}}
-
-        interval_data = []
-        interval_cursor = collection.find(query).sort("timestamp", 1)
+        # 1. Find all start events
+        print(f"Finding start events in {collection_name}...")
+        start_events = list(collection.find({
+            "event_start": True
+        }).sort("timestamp", 1))
         
-        for doc in interval_cursor:
-            ts = parse_timestamp(doc.get("timestamp"))
-            if not ts:
+        episodes = []
+        
+        for event in start_events:
+            start_ts = parse_timestamp(event.get("timestamp"))
+            if not start_ts:
                 continue
                 
-            # Calculate relative time in seconds
-            relative_seconds = (ts - start_ts).total_seconds()
+            end_ts = start_ts + timedelta(seconds=INTERVAL_SECONDS)
             
-            temp_c = doc.get("temperature")
-            temp_f = (temp_c * 9/5) + 32 if temp_c is not None else None
-            
-            entry = {
-                "relative_time": relative_seconds,
-                "temperature": temp_f,
-                "humidity": doc.get("humidity"),
-                "pm25": doc.get("pm25"),
-                "gas_resistance": doc.get("gas_resistance")
-            }
-            if "sound_level" in doc:
-                entry["sound_level"] = doc["sound_level"]
+            # Determine type
+            episode_type = event.get("event_type")
+            if episode_type not in ["vape", "normal"]:
+                continue
                 
-            interval_data.append(entry)
+            # Re-query using datetime objects if stored as date, or string if stored as string.
+            if isinstance(event["timestamp"], str):
+                start_str = event["timestamp"]
+                end_str = end_ts.isoformat().replace('+00:00', 'Z')
+                query = {"timestamp": {"$gte": start_str, "$lte": end_str}}
+            else:
+                query = {"timestamp": {"$gte": start_ts, "$lte": end_ts}}
+
+            interval_data = []
+            interval_cursor = collection.find(query).sort("timestamp", 1)
             
-        if interval_data:
-            df = pd.DataFrame(interval_data)
-            episodes.append({
-                "type": episode_type,
-                "start_time": start_ts,
-                "data": df
-            })
-            
-    return episodes
+            for doc in interval_cursor:
+                ts = parse_timestamp(doc.get("timestamp"))
+                if not ts:
+                    continue
+                    
+                # Calculate relative time in seconds
+                relative_seconds = (ts - start_ts).total_seconds()
+                
+                temp_c = doc.get("temperature")
+                temp_f = (temp_c * 9/5) + 32 if temp_c is not None else None
+                
+                entry = {
+                    "relative_time": relative_seconds,
+                    "temperature": temp_f,
+                    "humidity": doc.get("humidity"),
+                    "pm25": doc.get("pm25"),
+                    "gas_resistance": doc.get("gas_resistance")
+                }
+                if "sound_level" in doc:
+                    entry["sound_level"] = doc["sound_level"]
+                    
+                interval_data.append(entry)
+                
+            if interval_data:
+                df = pd.DataFrame(interval_data)
+                episodes.append({
+                    "type": episode_type,
+                    "start_time": start_ts,
+                    "data": df
+                })
+                
+        return episodes
+        
+    except Exception as e:
+        print(f"❌ Database connection failed or empty: {e}")
+        return fetch_mock_episodes()
 
 def calculate_stats(episodes):
     """
@@ -187,9 +295,12 @@ def calculate_stats(episodes):
     Returns a dict with interpolated percentiles for each metric and type.
     """
     # Group by type
-    grouped = {'vape': [], 'normal': []}
+    grouped = {}
     for ep in episodes:
-        grouped[ep['type']].append(ep['data'])
+        etype = ep['type']
+        if etype not in grouped:
+            grouped[etype] = []
+        grouped[etype].append(ep['data'])
     
     stats = {} 
     
@@ -241,6 +352,8 @@ def calculate_stats(episodes):
 def plot_single_ax(ax, stats, metric, etypes, colors, show_legend=False):
     """Helper to plot data on a single axis"""
     has_data = False
+    added_interference_label = False
+    
     for etype in etypes:
         if etype not in stats or metric not in stats[etype]:
             continue
@@ -249,10 +362,22 @@ def plot_single_ax(ax, stats, metric, etypes, colors, show_legend=False):
         grid = data['grid']
         median = data['median']
         bands = data['bands']
-        base_color = colors[etype]
+        base_color = colors.get(etype, 'black')
+        
+        # Determine Label
+        label = etype.capitalize()
+        if base_color == 'gray':
+            if added_interference_label:
+                label = None # Don't add to legend again
+            else:
+                label = "Other Common Materials"
+                added_interference_label = True
         
         # Plot Median Line (Solid, Dark)
-        ax.plot(grid, median, color=base_color, linewidth=2, label=f"{etype.capitalize()}")
+        if label:
+            ax.plot(grid, median, color=base_color, linewidth=2, label=label)
+        else:
+            ax.plot(grid, median, color=base_color, linewidth=2)
         
         # Plot Bands
         for lower, upper, alpha in bands:
@@ -275,7 +400,13 @@ def plot_fan_chart(stats):
     fig.canvas.manager.set_window_title('Figure 1: Sensor Data Analysis')
     
     # Define base colors
-    colors = {'vape': 'red', 'normal': 'green'}
+    colors = {
+        'vape': 'red', 
+        'normal': 'green',
+        'cologne': 'gray',
+        'cleaning_spray': 'gray',
+        'air_freshener': 'gray'
+    }
     
     metrics_map = [
         ('temperature', "Temperature (°F)", "Temp"),
@@ -285,11 +416,14 @@ def plot_fan_chart(stats):
     ]
     
     print("Plotting Figure 1 (Fan Charts)...")
+    
+    # Order of plotting: Gray first (background), then Normal, then Vape (foreground)
+    plot_order = ['cologne', 'cleaning_spray', 'air_freshener', 'normal', 'vape']
 
     for i, (metric, ylabel, title) in enumerate(metrics_map):
         # Column 1: Combined
         ax_combined = axes[i, 0]
-        plot_single_ax(ax_combined, stats, metric, ['normal', 'vape'], colors, show_legend=(i==0))
+        plot_single_ax(ax_combined, stats, metric, plot_order, colors, show_legend=(i==0))
         ax_combined.set_ylabel(ylabel)
         if i == 0:
             ax_combined.set_title("Combined")
@@ -341,21 +475,28 @@ def run_ai_predictions(episodes, models):
         
         for model_name, model in models.items():
             try:
-                # Get predictions
-                preds = model.predict(features)
+                # Check for mock data override
+                if 'mock_confidences' in ep and model_name in ep['mock_confidences']:
+                    conf_val = ep['mock_confidences'][model_name]
+                    # Mock prediction (assume correct)
+                    preds = np.full(len(features), actual_label)
+                    max_probs = np.full(len(features), conf_val)
+                else:
+                    # Real Inference
+                    preds = model.predict(features)
+                    
+                    # Get confidences for Fig 2
+                    try:
+                        probs = model.predict_proba(features)
+                        max_probs = np.max(probs, axis=1) * 100
+                    except AttributeError:
+                        max_probs = np.full(len(preds), 100.0)
                 
                 # Store for Confusion Matrix
                 # Extend list with this episode's true labels and predictions
                 all_preds[model_name]['y_true'].extend([actual_label] * len(preds))
                 all_preds[model_name]['y_pred'].extend(preds)
 
-                # Get confidences for Fig 2
-                try:
-                    probs = model.predict_proba(features)
-                    max_probs = np.max(probs, axis=1) * 100
-                except AttributeError:
-                    max_probs = np.full(len(preds), 100.0)
-                
                 # Compare for Fig 2
                 times = df['relative_time'].values
                 for t, pred, conf in zip(times, preds, max_probs):

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import DeviceMap from '../components/DeviceMap';
 import DeviceList from '../components/DeviceList';
 import DeviceDetailPanel from '../components/DeviceDetailPanel';
+import AddDeviceModal from '../components/AddDeviceModal';
 import { useDevices } from '../hooks/useDevices';
 import { useWebSocket } from '../hooks/useWebSocket';
 import api from '../services/api';
@@ -14,6 +15,7 @@ const Devices = () => {
   const isMobile = useMediaQuery({ maxWidth: 768 });
   
   const [selectedDevice, setSelectedDevice] = useState(null);
+  const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false);
   const [filters, setFilters] = useState({
     status: 'all',
     type: 'all',
@@ -309,6 +311,15 @@ const Devices = () => {
                 </span>
               )}
               <button 
+                className="inline-flex items-center px-3 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-[#00C2CB] hover:bg-[#009FA6] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#00C2CB] transition-all duration-200 shadow-sm"
+                onClick={() => setIsAddDeviceOpen(true)}
+              >
+                <svg className="-ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Add Device
+              </button>
+              <button 
                 className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#00C2CB] transition-all duration-200 shadow-sm"
                 onClick={handleManualRefresh}
               >
@@ -365,6 +376,15 @@ const Devices = () => {
         onClose={handlePanelClose}
         onPingDevice={handlePingDevice}
         history={selectedDevice ? (deviceHistory[selectedDevice.id] || []) : []}
+      />
+
+      <AddDeviceModal
+        isOpen={isAddDeviceOpen}
+        onClose={() => setIsAddDeviceOpen(false)}
+        onDeviceAdded={() => {
+          refreshDevices();
+          setLastUpdated(new Date());
+        }}
       />
     </div>
   );
