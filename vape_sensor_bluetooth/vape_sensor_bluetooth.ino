@@ -193,6 +193,7 @@ void saveCredentials(const String &newSsid, const String &newPass) {
 
 class ProvisionCallback : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic *pCharacteristic) {
+    Serial.println("[BLE] onWrite fired");
     std::string value = pCharacteristic->getValue();
 
     if (pCharacteristic == ssidChar) {
@@ -239,32 +240,39 @@ void startConfigMode() {
   bleServer->setCallbacks(new ServerCallbacks());
 
   NimBLEService *service = bleServer->createService("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
+  ProvisionCallback provCallback;
 
   ssidChar = service->createCharacteristic(
     "6E400002-B5A3-F393-E0A9-E50E24DCCA9E",
-    NIMBLE_PROPERTY::WRITE
+    NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
   );
-  ssidChar->setCallbacks(new ProvisionCallback());
+  ssidChar->setCallbacks(&provCallback);
 
   passChar = service->createCharacteristic(
     "6E400003-B5A3-F393-E0A9-E50E24DCCA9E",
-    NIMBLE_PROPERTY::WRITE
+    NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
   );
-  passChar->setCallbacks(new ProvisionCallback());
+  passChar->setCallbacks(&provCallback);
 
   orgChar = service->createCharacteristic(
     "6E400004-B5A3-F393-E0A9-E50E24DCCA9E",
-    NIMBLE_PROPERTY::WRITE
+    NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
   );
-  orgChar->setCallbacks(new ProvisionCallback());
+  orgChar->setCallbacks(&provCallback);
 
   service->start();
 
   NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+
   NimBLEAdvertisementData advData;
   advData.setName(bleName.c_str());
   advData.addServiceUUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
-  pAdvertising->setScanResponseData(advData);
+  
+  NimBLEAdvertisementData scanData;
+  scanData.setName(bleName.c_str());  // optional but recommended
+
+  pAdvertising->setAdvertisementData(advData);
+  pAdvertising->setScanResponseData(scanData);
   pAdvertising->start();
 
   Serial.println("[BLE] Advertising as: " + bleName);

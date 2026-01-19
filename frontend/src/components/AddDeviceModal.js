@@ -99,15 +99,18 @@ const AddDeviceModal = ({ isOpen, onClose, onDeviceAdded }) => {
       // Write SSID
       const ssidChar = await service.getCharacteristic(SSID_UUID);
       await ssidChar.writeValue(encoder.encode(ssid));
+      await new Promise(r => setTimeout(r, 150));
 
       // Write Password
       const passChar = await service.getCharacteristic(PASS_UUID);
       await passChar.writeValue(encoder.encode(password));
+      await new Promise(r => setTimeout(r, 150));
 
       // Write Org
       const orgId = organization?.id || 'unknown_org';
       const orgChar = await service.getCharacteristic(ORG_UUID);
       await orgChar.writeValue(encoder.encode(orgId));
+      await new Promise(r => setTimeout(r, 150));
       
       setStatus('saving');
       setStatusMessage('Registering device...');
