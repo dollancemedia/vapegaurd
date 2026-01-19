@@ -76,17 +76,24 @@ const AddDeviceModal = ({ isOpen, onClose, onDeviceAdded }) => {
       const encoder = new TextEncoder();
 
       // Write SSID
+      setStatusMessage('const ssid');
       const ssidChar = await service.getCharacteristic(SSID_UUID);
+      setStatusMessage('await ssid');
       await ssidChar.writeValue(encoder.encode(ssid));
-
+      
       // Write Password
+      setStatusMessage('const pass');
       const passChar = await service.getCharacteristic(PASS_UUID);
+      setStatusMessage('await pass');
       await passChar.writeValue(encoder.encode(password));
-
+      
       // Write Org
       const orgId = organization?.id || 'unknown_org';
+      setStatusMessage('const org');
       const orgChar = await service.getCharacteristic(ORG_UUID);
+      setStatusMessage('await org');
       await orgChar.writeValue(encoder.encode(orgId));
+      setStatusMessage('bluetooth goon');
 
       // Parse MAC from device name (MISTIO-XXXXXXXXXXXX)
       let macFromBle = '';
