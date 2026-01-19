@@ -78,21 +78,27 @@ const AddDeviceModal = ({ isOpen, onClose, onDeviceAdded }) => {
       // Write SSID
       setStatusMessage('const ssid');
       const ssidChar = await service.getCharacteristic(SSID_UUID);
+      await new Promise(resolve => setTimeout(resolve, 200));
       setStatusMessage('await ssid');
       await ssidChar.writeValue(encoder.encode(ssid));
+      await new Promise(resolve => setTimeout(resolve, 200));
       
       // Write Password
       setStatusMessage('const pass');
       const passChar = await service.getCharacteristic(PASS_UUID);
+      await new Promise(resolve => setTimeout(resolve, 200));
       setStatusMessage('await pass');
       await passChar.writeValue(encoder.encode(password));
+      await new Promise(resolve => setTimeout(resolve, 200));
       
       // Write Org
       const orgId = organization?.id || 'unknown_org';
       setStatusMessage('const org');
       const orgChar = await service.getCharacteristic(ORG_UUID);
+      await new Promise(resolve => setTimeout(resolve, 200));
       setStatusMessage('await org');
       await orgChar.writeValue(encoder.encode(orgId));
+      await new Promise(resolve => setTimeout(resolve, 200));
       setStatusMessage('bluetooth goon');
 
       // Parse MAC from device name (MISTIO-XXXXXXXXXXXX)
