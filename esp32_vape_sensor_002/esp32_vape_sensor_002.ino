@@ -247,19 +247,19 @@ void startConfigMode() {
     "6E400002-B5A3-F393-E0A9-E50E24DCCA9E",
     NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
   );
-  ssidChar->setCallbacks(&provCallback);
+  ssidChar->setCallbacks(new ProvisionCallback());//&provCallback);
 
   passChar = service->createCharacteristic(
     "6E400003-B5A3-F393-E0A9-E50E24DCCA9E",
     NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
   );
-  passChar->setCallbacks(&provCallback);
+  passChar->setCallbacks(new ProvisionCallback());//&provCallback);
 
   orgChar = service->createCharacteristic(
     "6E400004-B5A3-F393-E0A9-E50E24DCCA9E",
     NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
   );
-  orgChar->setCallbacks(&provCallback);
+  orgChar->setCallbacks(new ProvisionCallback());//&provCallback);
 
   service->start();
 
@@ -405,6 +405,16 @@ void setup() {
 
 void loop() {
   if (!wifiConfigured) {
+    if (ssidChar->getValue().length() > 0 && passChar->getValue().length() > 0 && orgChar->getValue().length() > 0) {
+      Serial.println("[POLL] currently polling for new values");
+
+      incomingSSID = ssidChar->getValue().c_str();
+      incomingPASS = passChar->getValue().c_str();
+      incomingORG  = orgChar->getValue().c_str();
+
+      bleProvisioned = true;
+    }
+    Serial.println("[LOOP] In config mode, bleProvisioned=" + String(bleProvisioned));
     if (bleProvisioned) {
       Serial.println("[BLE] Provisioning complete. Saving credentials...");
       saveCredentials(incomingSSID, incomingPASS);
