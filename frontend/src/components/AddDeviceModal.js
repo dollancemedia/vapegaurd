@@ -84,7 +84,7 @@ const AddDeviceModal = ({ isOpen, onClose, onDeviceAdded }) => {
       await passChar.writeValue(encoder.encode(password));
       
       // Write Org
-      const orgId = organization?.id || 'unknown_org';
+      const orgId = organization?.name || 'unknown_org';
       const orgChar = await service.getCharacteristic(ORG_UUID);
       await orgChar.writeValue(encoder.encode(orgId));
 
