@@ -72,7 +72,28 @@ const AddDeviceModal = ({ isOpen, onClose, onDeviceAdded }) => {
 
       setStatus('provisioning');
       setStatusMessage('Sending Wi-Fi credentials...');
-
+      
+      // Parse MAC from device name (MISTIO-XXXXXXXXXXXX)
+      let macFromBle = '';
+      if (device.name && device.name.includes('MISTIO-')) {
+        macFromBle = device.name.replace('MISTIO-', '');
+      } else {
+        // If name is missing or doesn't match, we can't auto-register easily
+        // For now, let's prompt the user or handle it.
+        // But wait! If we just provisioned it, maybe we can assume it worked?
+        // Let's try to extract from name if possible, otherwise use a placeholder or fail gracefully.
+        console.warn("Device name not in expected format:", device.name);
+        if (device.name) {
+          // Try to find any hex string
+          const match = device.name.match(/([0-9A-Fa-f]{12})/);
+          if (match) macFromBle = match[1];
+        }
+      }
+      
+      if (!macFromBle) {
+        throw new Error("Could not extract MAC address from device name (" + (device.name || "Unknown") + "). Please use Manual Registration.");
+      }
+      
       const encoder = new TextEncoder();
 
       // Write SSID
@@ -87,27 +108,6 @@ const AddDeviceModal = ({ isOpen, onClose, onDeviceAdded }) => {
       const orgId = organization?.id || 'unknown_org';
       const orgChar = await service.getCharacteristic(ORG_UUID);
       await orgChar.writeValue(encoder.encode(orgId));
-
-      // Parse MAC from device name (MISTIO-XXXXXXXXXXXX)
-      let macFromBle = '';
-      if (device.name && device.name.includes('MISTIO-')) {
-          macFromBle = device.name.replace('MISTIO-', '');
-      } else {
-          // If name is missing or doesn't match, we can't auto-register easily
-          // For now, let's prompt the user or handle it.
-          // But wait! If we just provisioned it, maybe we can assume it worked?
-          // Let's try to extract from name if possible, otherwise use a placeholder or fail gracefully.
-          console.warn("Device name not in expected format:", device.name);
-          if (device.name) {
-             // Try to find any hex string
-             const match = device.name.match(/([0-9A-Fa-f]{12})/);
-             if (match) macFromBle = match[1];
-          }
-      }
-
-      if (!macFromBle) {
-          throw new Error("Could not extract MAC address from device name (" + (device.name || "Unknown") + "). Please use Manual Registration.");
-      }
       
       setStatus('saving');
       setStatusMessage('Registering device...');
