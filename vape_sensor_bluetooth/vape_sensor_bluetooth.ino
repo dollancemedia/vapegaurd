@@ -76,7 +76,7 @@ static const char ISRG_Root_X1[] =
 #define PMS_TX 5            // PMS5003 TX (connect to PMS RX) - Hardware UART
 #define MIC_PIN 0           // MAX4466 microphone (GPIO0 - ADC capable)
 #define LED_PIN 8           // Status LED
-#define RESET_BUTTON_PIN 67 // Reset button
+#define RESET_BUTTON_PIN 9 // Reset button
 
 // I2C pins for BME680
 #define I2C_SDA 6 // BME680 SDI (I2C SDA)
@@ -133,13 +133,13 @@ float calculateAQI(float pm25, float pm10);
 void triggerVapeAlert();
 
 bool isResetHeld() {
-  // if (digitalRead(RESET_BUTTON_PIN) == LOW) {
-  //   unsigned long start = millis();
-  //   while (digitalRead(RESET_BUTTON_PIN) == LOW) {
-  //     if (millis() - start > 3000)
-  //       return true; // 3 second hold
-  //   }
-  // }
+  if (digitalRead(RESET_BUTTON_PIN) == LOW) {
+    unsigned long start = millis();
+    while (digitalRead(RESET_BUTTON_PIN) == LOW) {
+      if (millis() - start > 3000)
+        return true; // 3 second hold
+    }
+  }
   return false;
 }
 
@@ -240,25 +240,25 @@ void startConfigMode() {
   bleServer->setCallbacks(new ServerCallbacks());
 
   NimBLEService *service = bleServer->createService("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
-  ProvisionCallback provCallback;
+  ProvisionCallback provCallback; // new ProvisionCallback());//
 
   ssidChar = service->createCharacteristic(
     "6E400002-B5A3-F393-E0A9-E50E24DCCA9E",
     NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
   );
-  ssidChar->setCallbacks(&provCallback);
+  ssidChar->setCallbacks(new ProvisionCallback());//&provCallback);
 
   passChar = service->createCharacteristic(
     "6E400003-B5A3-F393-E0A9-E50E24DCCA9E",
     NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
   );
-  passChar->setCallbacks(&provCallback);
+  passChar->setCallbacks(new ProvisionCallback());//&provCallback);
 
   orgChar = service->createCharacteristic(
     "6E400004-B5A3-F393-E0A9-E50E24DCCA9E",
     NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
   );
-  orgChar->setCallbacks(&provCallback);
+  orgChar->setCallbacks(new ProvisionCallback());//&provCallback);
 
   service->start();
 
@@ -319,13 +319,12 @@ void setup() {
   Serial.println("Scanning for I2C devices...");
   byte error, address;
   int nDevices = 0;
-  for (address = 1; address < 127; address++) {
+  for(address = 1; address < 127; address++) {
     Wire.beginTransmission(address);
     error = Wire.endTransmission();
     if (error == 0) {
       Serial.print("I2C device found at address 0x");
-      if (address < 16)
-        Serial.print("0");
+      if (address < 16) Serial.print("0");
       Serial.println(address, HEX);
       nDevices++;
     }
@@ -372,7 +371,7 @@ void setup() {
   delay(2000);
 
   // Status indication
-  blinkLED(3, 200); // 3 quick blinks to indicate ready
+  blinkLED(3, 200);  // 3 quick blinks to indicate ready
   Serial.println("System ready!");
 
   // Reset button --> config mode
@@ -405,6 +404,13 @@ void setup() {
 
 void loop() {
   if (!wifiConfigured) {
+    if (ssidChar->getValue().length() > 0 && passChar->getValue().length() > 0 && orgChar->getValue().length() > 0) {
+      incomingSSID = ssidChar->getValue().c_str();
+      incomingPASS = passChar->getValue().c_str();
+      incomingORG  = orgChar->getValue().c_str();
+
+      bleProvisioned = true;
+    }
     if (bleProvisioned) {
       Serial.println("[BLE] Provisioning complete. Saving credentials...");
       saveCredentials(incomingSSID, incomingPASS);
@@ -450,7 +456,7 @@ void loop() {
     lastSensorRead = millis();
   }
 
-  delay(100); // Small delay to prevent watchdog issues
+  delay(100);  // Small delay to prevent watchdog issues
 }
 
 void connectToWiFi() {
@@ -461,9 +467,9 @@ void connectToWiFi() {
   Serial.println("Connecting to WiFi: " + ssid);
 
   // Simple WiFi reset approach to avoid event queue issues
-  WiFi.disconnect(true); // Disconnect and clear stored credentials
-  WiFi.mode(WIFI_OFF);   // Turn off WiFi completely
-  delay(3000);           // Extended wait for complete reset
+  WiFi.disconnect(true);     // Disconnect and clear stored credentials
+  WiFi.mode(WIFI_OFF);       // Turn off WiFi completely
+  delay(3000);               // Extended wait for complete reset
 
   // Restart WiFi in station mode
   WiFi.mode(WIFI_STA);
@@ -557,7 +563,7 @@ void readAndSendSensorData() {
   // Check if readings are stable (indicating a connected device)
   // A floating pin will have highly variable readings
   for (int i = 1; i < 10; i++) {
-    if (abs(readings[i] - readings[i - 1]) < 50) {
+    if (abs(readings[i] - readings[i-1]) < 50) {
       consistentReadings++;
     }
   }
@@ -603,12 +609,12 @@ void readAndSendSensorData() {
   // doc["timestamp"] = getTimestamp();
 
   // Ensure valid numeric values for all sensor readings
-  doc["gas_resistance"] = (gasResistance > -999) ? gasResistance : 0;
-  doc["temperature"] = (temperature > -999) ? temperature : 0;
-  doc["humidity"] = (humidity > -999) ? humidity : 0;
-  doc["pressure"] = (pressure > -999) ? pressure : 0;
-  doc["pm25"] = (pm25 > -999) ? pm25 : 0;
-  doc["pm10"] = (pm10 > -999) ? pm10 : 0;
+  doc["humidity"] = humidity;
+  doc["gas_resistance"] = gasResistance;
+  doc["temperature"] = temperature;
+  doc["pressure"] = pressure;
+  doc["pm25"] = pm25;
+  doc["pm10"] = pm10;
   doc["sound_level"] = soundLevel;
   doc["wifi_rssi"] = WiFi.RSSI();
   doc["sensor_type"] = "multi_sensor";

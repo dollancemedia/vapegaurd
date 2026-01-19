@@ -77,7 +77,7 @@ static const char ISRG_Root_X1[] =
 #define PMS_TX 27          // Connect to PMS5003 RX
 #define MIC_PIN 34         // A2 is GPIO 34 on Feather V2
 #define LED_PIN 13         // Built-in LED is GPIO 13 on Feather V2
-#define RESET_BUTTON_PIN 67 // Reset button
+#define RESET_BUTTON_PIN 38 // Reset button
 
 // I2C pins for BME680
 #define I2C_SCL 20          // SCL is GPIO 20 on Huzzah V2
@@ -134,13 +134,13 @@ float calculateAQI(float pm25, float pm10);
 void triggerVapeAlert();
 
 bool isResetHeld() {
-  // if (digitalRead(RESET_BUTTON_PIN) == LOW) {
-  //   unsigned long start = millis();
-  //   while (digitalRead(RESET_BUTTON_PIN) == LOW) {
-  //     if (millis() - start > 3000)
-  //       return true; // 3 second hold
-  //   }
-  // }
+  if (digitalRead(RESET_BUTTON_PIN) == LOW) {
+    unsigned long start = millis();
+    while (digitalRead(RESET_BUTTON_PIN) == LOW) {
+      if (millis() - start > 3000)
+        return true; // 3 second hold
+    }
+  }
   return false;
 }
 
@@ -241,7 +241,7 @@ void startConfigMode() {
   bleServer->setCallbacks(new ServerCallbacks());
 
   NimBLEService *service = bleServer->createService("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
-  ProvisionCallback provCallback;
+  ProvisionCallback provCallback; // new ProvisionCallback());//
 
   ssidChar = service->createCharacteristic(
     "6E400002-B5A3-F393-E0A9-E50E24DCCA9E",
@@ -406,15 +406,12 @@ void setup() {
 void loop() {
   if (!wifiConfigured) {
     if (ssidChar->getValue().length() > 0 && passChar->getValue().length() > 0 && orgChar->getValue().length() > 0) {
-      Serial.println("[POLL] currently polling for new values");
-
       incomingSSID = ssidChar->getValue().c_str();
       incomingPASS = passChar->getValue().c_str();
       incomingORG  = orgChar->getValue().c_str();
 
       bleProvisioned = true;
     }
-    Serial.println("[LOOP] In config mode, bleProvisioned=" + String(bleProvisioned));
     if (bleProvisioned) {
       Serial.println("[BLE] Provisioning complete. Saving credentials...");
       saveCredentials(incomingSSID, incomingPASS);
