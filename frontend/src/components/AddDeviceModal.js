@@ -58,8 +58,8 @@ const AddDeviceModal = ({ isOpen, onClose, onDeviceAdded }) => {
       console.log("Requesting Bluetooth device...");
       // Try a broader scan first to debug
       const device = await navigator.bluetooth.requestDevice({
-        // filters: [{ namePrefix: 'MISTIO-' }], // Commented out for debugging
-        acceptAllDevices: true,
+        filters: [{ namePrefix: 'MISTIO-' }], // Commented out for debugging
+        // acceptAllDevices: true,
         optionalServices: [BLE_SERVICE_UUID]
       });
 
