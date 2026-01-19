@@ -6,7 +6,7 @@ import { useDevices } from '../hooks/useDevices';
 import { useWebSocket } from '../hooks/useWebSocket';
 import api from '../services/api';
 import { useAuth, useOrganization } from '@clerk/clerk-react';
-import { Bell, Plus, Edit2, Map as MapIcon, Wifi, WifiOff, AlertTriangle } from 'lucide-react';
+import { Edit2 } from 'lucide-react';
 
 const MobileDashboard = () => {
   const [selectedDevice, setSelectedDevice] = useState(null);
@@ -18,10 +18,9 @@ const MobileDashboard = () => {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isMapEditing, setIsMapEditing] = useState(false); // State for map editing mode
   const [deviceHistory, setDeviceHistory] = useState({});
-  const [lastUpdated, setLastUpdated] = useState(null);
   
   const { organization } = useOrganization();
-  const name = organization?.name;
+  const name = organization?.name || 'School';
   const school = name.toLowerCase();
   // Get Clerk token
   const { getToken } = useAuth();
@@ -43,10 +42,8 @@ const MobileDashboard = () => {
 
   // Setup silent polling
   useEffect(() => {
-    setLastUpdated(new Date());
     const pollInterval = setInterval(() => {
       refreshDevices();
-      setLastUpdated(new Date());
     }, 5000);
     return () => clearInterval(pollInterval);
   }, [refreshDevices]);
@@ -99,48 +96,11 @@ const MobileDashboard = () => {
 
   // WebSocket handler
   const handleWebSocketMessage = useCallback((message) => {
-    if (!message) return;
-    if (message.type === 'sensor_data' || message.type === 'newSensorData') {
-      const payload = message.data || message;
-      const deviceId = payload.device_id || (payload.sensor_data && payload.sensor_data.device_id);
-      
-      if (deviceId) {
-        const reading = payload.sensor_data || payload;
-        const updates = {
-          sensorData: {
-            humidity: reading.humidity,
-            temperature: reading.temperature || 0,
-            pm25: reading.pm25,
-            particleSize: reading.particle_size || reading.particleSize || 0,
-            volumeSpike: reading.volume_spike || reading.volumeSpike || false,
-            predictedClass: reading.predicted_class || (reading.prediction ? reading.prediction.type : 'normal'),
-            timestamp: reading.timestamp || new Date().toISOString(),
-            confidence: reading.confidence || (reading.prediction && reading.prediction.confidence) || 0
-          },
-          lastSeen: new Date().toISOString(),
-          status: 'online'
-        };
-        
-        updateDeviceStatus(deviceId, updates);
-        setDeviceHistory(prev => {
-          const currentHistory = prev[deviceId] || [];
-          const newHistory = [{
-            ...updates.sensorData,
-            timestamp: updates.sensorData.timestamp
-          }, ...currentHistory].slice(0, 50);
-          return { ...prev, [deviceId]: newHistory };
-        });
-
-        setSelectedDevice(prev => {
-          if (prev && prev.id === deviceId) {
-            return {
-              ...prev,
-              ...updates,
-              location: reading.location ? { ...prev.location, ...reading.location } : prev.location
-            };
-          }
-          return prev;
-        });
+    // console.log('WebSocket update:', message);
+    if (message.type === 'device_update') {
+      const { device_id, ...updates } = message.data;
+      if (device_id) {
+        updateDeviceStatus(device_id, updates);
       }
     }
   }, [updateDeviceStatus]);

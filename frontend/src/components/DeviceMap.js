@@ -27,7 +27,7 @@ const Icons = {
 };
 
 const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditingExternal }) => {
-  const { organization, isLoaded } = useOrganization();
+  const { organization } = useOrganization();
   const [hoveredDevice, setHoveredDevice] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   
@@ -65,6 +65,7 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditi
       });
       setLocalLocations(initialLocs);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [devices, isEditing]);
 
   // Get device visual props

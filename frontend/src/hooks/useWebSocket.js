@@ -29,11 +29,13 @@ export const useWebSocket = (url, options = {}) => {
   // Stable memoized values
   const memoProtocols = useMemo(
     () => protocols,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [JSON.stringify(protocols)]
   );
 
   const memoQueryParams = useMemo(
     () => queryParams,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [JSON.stringify(queryParams)]
   );
 

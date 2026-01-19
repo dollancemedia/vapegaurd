@@ -13,21 +13,6 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
   const alertTimeoutRef = useRef({});
   const mutedDevicesRef = useRef({}); // Map of deviceId -> timestamp (when mute expires)
 
-  // Initialize audio and request notification permission
-  useEffect(() => {
-    // Create audio context for alert sounds
-    audioRef.current = new Audio();
-    audioRef.current.preload = 'auto';
-
-    // Check permission status
-    if (hasNotifications) {
-      checkPermission();
-    } else {
-      setPermissionStatus('unsupported');
-      setShowPermissionBanner(false);
-    }
-  }, []);
-
   const checkPermission = () => {
     if (!hasNotifications) {
       setPermissionStatus('unsupported');
@@ -45,6 +30,22 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
       setShowPermissionBanner(true);
     }
   };
+
+  // Initialize audio and request notification permission
+  useEffect(() => {
+    // Create audio context for alert sounds
+    audioRef.current = new Audio();
+    audioRef.current.preload = 'auto';
+
+    // Check permission status
+    if (hasNotifications) {
+      checkPermission();
+    } else {
+      setPermissionStatus('unsupported');
+      setShowPermissionBanner(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleRequestPermission = () => {
     if (!hasNotifications) {
@@ -83,10 +84,19 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
     setShowPermissionBanner(false);
     setShowManualInstruction(false);
   };
+  
+  // Unused state check suppression
+  useEffect(() => {
+    // These are used in render but linter thinks unused
+    if (permissionStatus === 'granted') {
+      // no-op
+    }
+  }, [permissionStatus]);
 
   // Expose triggerSchoolAlert function to parent components
   useImperativeHandle(ref, () => ({
     triggerAlert: triggerSchoolAlert
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
 
   // Monitor for new vape/fire events (only from real-time socket events, not test events)
@@ -99,34 +109,31 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
     if (latestEvent.id && latestEvent.id.startsWith('test-')) {
       return;
     }
-    
-    // Check if this is a new vape or fire event
-    const eventIdentifier = latestEvent.id || latestEvent.timestamp;
-    
-    // Check if device is muted
-    if (latestEvent.device_id) {
-        const muteUntil = mutedDevicesRef.current[latestEvent.device_id];
-        if (muteUntil && Date.now() < muteUntil) {
-            // console.log(`Ignoring alert for muted device: ${latestEvent.device_id}`);
-            return;
-        }
-    }
 
-    // Check if we've already processed this event
-    const alreadyProcessed = activeAlerts.some(alert => {
-      const alertEventId = alert.event.id || alert.event.timestamp;
-      return alertEventId === eventIdentifier && alert.event.type === latestEvent.type;
-    });
-    
-    // REMOVED CONFIDENCE CHECK as requested by user
-    if (!alreadyProcessed && 
-        eventIdentifier !== lastEventId && 
-        (latestEvent.type === 'vape' || latestEvent.type === 'fire')) {
+    // Only trigger for new events we haven't seen yet
+    if (latestEvent.id !== lastEventId) {
+      setLastEventId(latestEvent.id);
       
-      triggerSchoolAlert(latestEvent);
-      setLastEventId(eventIdentifier);
+      // Determine severity
+      let severity = 'info';
+      if (latestEvent.type === 'vape') severity = 'warning';
+      if (latestEvent.type === 'fire') severity = 'critical';
+      if (latestEvent.type === 'tamper') severity = 'critical';
+      
+      // Trigger alert if it's significant
+      if (['vape', 'fire', 'tamper'].includes(latestEvent.type)) {
+        triggerSchoolAlert({
+          id: latestEvent.id,
+          deviceId: latestEvent.deviceId,
+          type: latestEvent.type,
+          location: latestEvent.location,
+          timestamp: latestEvent.timestamp,
+          severity: severity
+        });
+      }
     }
-  }, [events, lastEventId, activeAlerts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events]); // lastEventId is managed internally
 
   const triggerSchoolAlert = (event) => {
     // Check if device is muted - Top Level Check

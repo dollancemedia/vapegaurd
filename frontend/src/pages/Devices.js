@@ -188,7 +188,7 @@ const Devices = () => {
     }
   }, [updateDeviceStatus]);
 
-  const { isConnected } = useWebSocket('/ws/events', {
+  useWebSocket('/ws/events', {
     onMessage: handleWebSocketMessage,
     queryParams: { token }
   });
