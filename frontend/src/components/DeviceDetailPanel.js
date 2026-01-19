@@ -251,11 +251,6 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
     return num.toFixed(2) + " kΩ";
   };
 
-  // Get device type display name
-  const getDeviceTypeName = (type) => {
-    return type === 'admin' ? 'Admin Console' : 'Vape Detector';
-  };
-
   // Format timestamp
   const formatTimestamp = (timestamp) => {
     return new Date(timestamp).toLocaleString();

@@ -26,7 +26,7 @@ const MobileDashboard = () => {
   const { getToken } = useAuth();
   const [token, setToken] = useState(null);
 
-  const { devices, loading, error, refreshDevices, pingDevice, updateDeviceStatus } = useDevices(school, token);
+  const { devices, refreshDevices, pingDevice, updateDeviceStatus } = useDevices(school, token);
 
   useEffect(() => {
     const fetchToken = async () => {
