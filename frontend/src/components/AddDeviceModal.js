@@ -82,7 +82,7 @@ const AddDeviceModal = ({ isOpen, onClose, onDeviceAdded }) => {
       });
       
       const provChar = await service.getCharacteristic(SSID_UUID); // same UUID as before
-      await provChar.writeValue(new TextEncoder().encode(payload));
+      await provChar.writeValue(encoder.encode(payload));
       
 
       // Parse MAC from device name (MISTIO-XXXXXXXXXXXX)
