@@ -6,19 +6,17 @@
  */
 
 #include <WiFi.h>
-#include <HTTPClient.h>
-#include <WiFiClientSecure.h>
+#include <esp_http_client.h>
 #include <ArduinoJson.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
-#include <WebServer.h>
 #include <Preferences.h>
 #include <NimBLEDevice.h>
+#include <esp_mac.h>
 
 Preferences prefs;
-WebServer server(80);
 
 // WiFi Configuration
 const String setup_pass = "use_mistio";
@@ -39,21 +37,39 @@ String incomingORG = "";
 // API Configuration
 // Local FastAPI backend on your PC (LAN testing)
 const char *apiEndpoint = "https://vapegaurd-production.up.railway.app/api/sensors/data";
-static const char ISRG_Root_X1[] PROGMEM = R"EOF(\n-----BEGIN CERTIFICATE-----\nMIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw\nTzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh\ncmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4\nWhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu\nZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY\nMTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc\nh77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+\n0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U\nA5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW\nT8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH\nB5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC\nB5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv\nKBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn\nOlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn\njh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw\nqHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI\nrU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV\nHRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq\nhkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL\nubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ\n3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK\nNFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5\nORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur\nTkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC\njNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc\noyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq\n4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA\nmRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d\nemyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=\n-----END CERTIFICATE-----\n)EOF";
+static const char ISRG_Root_X1[] = 
+"-----BEGIN CERTIFICATE-----\n"
+"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\n"
+"-----END CERTIFICATE-----\n";
 // Vercel endpoint (requires auth): "https://vapegaurd-x6wi-4iihr8nqn-rahuls-projects-d9f10f54.vercel.app/api/sensors/data"
-
-// Error code definitions for better debugging
-#define HTTP_ERROR_CONNECTION_REFUSED -1
-#define HTTP_ERROR_SEND_HEADER_FAILED -2
-#define HTTP_ERROR_SEND_PAYLOAD_FAILED -3
-#define HTTP_ERROR_NOT_CONNECTED -4
-#define HTTP_ERROR_CONNECTION_LOST -5
-#define HTTP_ERROR_NO_STREAM -6
-#define HTTP_ERROR_NO_HTTP_SERVER -7
-#define HTTP_ERROR_TOO_LESS_RAM -8
-#define HTTP_ERROR_ENCODING -9
-#define HTTP_ERROR_STREAM_WRITE -10
-#define HTTP_ERROR_READ_TIMEOUT -11
 
 // Pin Definitions for ESP32-C6 DevKitC-1
 #define PMS_RX 4            // PMS5003 RX (connect to PMS TX) - Hardware UART
@@ -106,6 +122,9 @@ String org = "";
 bool wifiConfigured = false;
 unsigned long configStartTime;
 
+// HTTP response buffer
+String httpResponseBuffer = "";
+
 // Function declarations
 void blinkLED(int times, int delayMs);
 boolean readPMSdata(Stream *serial);
@@ -114,13 +133,13 @@ float calculateAQI(float pm25, float pm10);
 void triggerVapeAlert();
 
 bool isResetHeld() {
-  if (digitalRead(RESET_BUTTON_PIN) == LOW) {
-    unsigned long start = millis();
-    while (digitalRead(RESET_BUTTON_PIN) == LOW) {
-      if (millis() - start > 3000)
-        return true; // 3 second hold
-    }
-  }
+  // if (digitalRead(RESET_BUTTON_PIN) == LOW) {
+  //   unsigned long start = millis();
+  //   while (digitalRead(RESET_BUTTON_PIN) == LOW) {
+  //     if (millis() - start > 3000)
+  //       return true; // 3 second hold
+  //   }
+  // }
   return false;
 }
 
@@ -242,8 +261,10 @@ void startConfigMode() {
   service->start();
 
   NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
-  pAdvertising->enableScanResponse(true);
+  NimBLEAdvertisementData advData;
+  advData.setName(bleName.c_str());
+  advData.addServiceUUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
+  pAdvertising->setScanResponseData(advData);
   pAdvertising->start();
 
   Serial.println("[BLE] Advertising as: " + bleName);
@@ -260,7 +281,13 @@ void setup() {
   bleProvisioned = false;
 
   // Get MAC
-  deviceMac = WiFi.macAddress();
+  uint8_t baseMac[6];
+  esp_read_mac(baseMac, ESP_MAC_WIFI_STA);
+  char macStr[18];
+  snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
+         baseMac[0], baseMac[1], baseMac[2],
+         baseMac[3], baseMac[4], baseMac[5]);
+  deviceMac = String(macStr);
   cleanMac = deviceMac;
   cleanMac.replace(":", "");
   Serial.println("Device MAC: " + deviceMac);
@@ -614,28 +641,67 @@ void readAndSendSensorData() {
   sendDataToAPI(jsonString);
 }
 
+// Event handler for HTTP client
+esp_err_t http_event_handler(esp_http_client_event_t *evt) {
+  switch(evt->event_id) {
+    case HTTP_EVENT_ON_DATA:
+      // Append received data to buffer
+      if (evt->data_len > 0) {
+        char* data = (char*)evt->data;
+        for (int i = 0; i < evt->data_len; i++) {
+          httpResponseBuffer += data[i];
+        }
+      }
+      break;
+    case HTTP_EVENT_ERROR:
+      Serial.println("HTTP_EVENT_ERROR");
+      break;
+    default:
+      break;
+  }
+  return ESP_OK;
+}
+
 void sendDataToAPI(String jsonData) {
   if (!wifiConnected) {
     Serial.println("Cannot send data - no WiFi connection");
     return;
   }
 
-  HTTPClient http;
-  WiFiClientSecure client;
-  client.setCACert(ISRG_Root_X1);
-  http.begin(client, apiEndpoint);
-  http.addHeader("Content-Type", "application/json");
-  http.setTimeout(HTTP_TIMEOUT);
+  // Clear response buffer
+  httpResponseBuffer = "";
+
+  // Configure HTTP client
+  esp_http_client_config_t config = {};
+  config.url = apiEndpoint;
+  config.event_handler = http_event_handler;
+  config.cert_pem = ISRG_Root_X1;
+  config.timeout_ms = HTTP_TIMEOUT;
+  config.method = HTTP_METHOD_POST;
+
+  esp_http_client_handle_t client = esp_http_client_init(&config);
+  
+  if (client == NULL) {
+    Serial.println("Failed to initialize HTTP client");
+    return;
+  }
+
+  // Set headers
+  esp_http_client_set_header(client, "Content-Type", "application/json");
+  
+  // Set POST data
+  esp_http_client_set_post_field(client, jsonData.c_str(), jsonData.length());
 
   Serial.println("Sending data to: " + String(apiEndpoint));
   Serial.println("Payload: " + jsonData);
 
-  int httpResponseCode = http.POST(jsonData);
+  // Perform HTTP request
+  esp_err_t err = esp_http_client_perform(client);
 
-  if (httpResponseCode > 0) {
-    String response = http.getString();
+  if (err == ESP_OK) {
+    int httpResponseCode = esp_http_client_get_status_code(client);
     Serial.println("HTTP Response Code: " + String(httpResponseCode));
-    Serial.println("Response: " + response);
+    Serial.println("Response: " + httpResponseBuffer);
 
     // Accept both 200 and 201 as success codes
     if (httpResponseCode == 200 || httpResponseCode == 201) {
@@ -644,7 +710,7 @@ void sendDataToAPI(String jsonData) {
 
       // Parse response to check for vape detection
       DynamicJsonDocument responseDoc(1024);
-      DeserializationError error = deserializeJson(responseDoc, response);
+      DeserializationError error = deserializeJson(responseDoc, httpResponseBuffer);
 
       if (!error && responseDoc.containsKey("prediction")) {
         String predictedClass = responseDoc["prediction"]["predicted_class"];
@@ -663,29 +729,33 @@ void sendDataToAPI(String jsonData) {
       Serial.println("Retrying with delay...");
       delay(5000); // Wait 5 seconds before retrying
       consecutiveFailures++;
+    } else {
+      Serial.println("✗ Unexpected HTTP response code");
+      consecutiveFailures++;
     }
-  } else if (httpResponseCode == HTTP_ERROR_READ_TIMEOUT) {
-    // Handle timeout error specifically
-    Serial.println("✗ HTTP request timed out (Error -11)");
-    Serial.println("The server is taking too long to respond. Check your network or server status.");
-    Serial.println("Increasing timeout and retrying...");
-    http.setTimeout(HTTP_TIMEOUT * 2); // Double the timeout for the next attempt
-    delay(3000);                       // Wait 3 seconds before retrying
-    consecutiveFailures++;
   } else {
-    Serial.println("✗ HTTP request failed: " + String(httpResponseCode));
+    Serial.print("✗ HTTP request failed: ");
+    Serial.println(esp_err_to_name(err));
+    
+    if (err == ESP_ERR_TIMEOUT) {
+      // Handle timeout error specifically
+      Serial.println("✗ HTTP request timed out");
+      Serial.println("The server is taking too long to respond. Check your network or server status.");
+      delay(3000); // Wait 3 seconds before retrying
+    }
     consecutiveFailures++;
   }
 
-  http.end();
+  // Cleanup
+  esp_http_client_cleanup(client);
 
   // Handle consecutive failures
   if (consecutiveFailures >= MAX_FAILURES) {
     Serial.println("Too many consecutive failures. Restarting WiFi...");
     WiFi.disconnect();
-    delay(1000);
-    connectToWiFi();
+    delay(2000);
     consecutiveFailures = 0;
+    connectToWiFi();
   }
 }
 
