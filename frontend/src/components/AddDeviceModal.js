@@ -75,18 +75,15 @@ const AddDeviceModal = ({ isOpen, onClose, onDeviceAdded }) => {
 
       const encoder = new TextEncoder();
 
-      // Write SSID
-      const ssidChar = await service.getCharacteristic(SSID_UUID);
-      await ssidChar.writeValue(encoder.encode(ssid));
-
-      // Write Password
-      const passChar = await service.getCharacteristic(PASS_UUID);
-      await passChar.writeValue(encoder.encode(password));
-
-      // Write Org
-      const orgId = organization?.id || 'unknown_org';
-      const orgChar = await service.getCharacteristic(ORG_UUID);
-      await orgChar.writeValue(encoder.encode(orgId));
+      const payload = JSON.stringify({
+        ssid,
+        password,
+        org: organization.id
+      });
+      
+      const provChar = await service.getCharacteristic(SSID_UUID); // same UUID as before
+      await provChar.writeValue(new TextEncoder().encode(payload));
+      
 
       // Parse MAC from device name (MISTIO-XXXXXXXXXXXX)
       let macFromBle = '';
