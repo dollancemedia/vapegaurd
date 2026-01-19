@@ -46,6 +46,7 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
         # Clean payload to expected fields
         expected_fields = [
             "device_id",
+            "org_id",
             "timestamp",
             "humidity",
             "temperature",
@@ -97,6 +98,7 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
         # Build event document
         doc = {
             "device_id": payload.get("device_id", "unknown"),
+            "school": payload.get("org_id", "unknown"),
             "timestamp": datetime.utcnow().isoformat(timespec="milliseconds") + "Z",
             "humidity": payload.get("humidity", 0.0),
             "temperature": payload.get("temperature", 0.0),
@@ -127,6 +129,7 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
             mic_available = bool(doc.get("mic_available", True))
             sensor_reading = {
                 "device_id": doc.get("device_id", "unknown"),
+                "school": doc.get("school", "unknown"),
                 "timestamp": doc.get("timestamp"),
                 "humidity": float(doc.get("humidity", 0)),
                 "pm25": float(doc.get("pm25", 0)),
