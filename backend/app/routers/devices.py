@@ -90,17 +90,28 @@ async def update_device_location(device_id: str, location: DeviceLocation):
 
 @router.delete("/{device_id}")
 async def delete_device(device_id: str, user = Depends(validate_token)):
-    """Delete a device and its metadata"""
+    """Delete a device, its metadata, and all associated events"""
     # Delete from devices registry
-    result = await db.devices.delete_one({"device_id": device_id})
+    r1 = await db.devices.delete_one({"device_id": device_id})
     
     # Delete metadata
-    await db.device_metadata.delete_one({"device_id": device_id})
+    r2 = await db.device_metadata.delete_one({"device_id": device_id})
     
-    if result.deleted_count == 0:
+    # Delete all events for this device (to ensure it disappears from dashboard)
+    r3 = await db.events.delete_many({"device_id": device_id})
+    
+    if r1.deleted_count == 0 and r2.deleted_count == 0 and r3.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Device not found")
         
-    return {"status": "success", "message": "Device deleted"}
+    return {
+        "status": "success", 
+        "message": "Device deleted",
+        "deleted_counts": {
+            "registry": r1.deleted_count,
+            "metadata": r2.deleted_count,
+            "events": r3.deleted_count
+        }
+    }
 
 @router.get("/", response_model=List[dict])
 async def get_device_summary(school: Optional[str] = None):
