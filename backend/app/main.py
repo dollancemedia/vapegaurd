@@ -14,7 +14,7 @@ from app.routers.admin import router as admin_router
 app = FastAPI(
     title="Vape/Fire Detection API",
     description="Real-time vape and fire detection system with ML predictions",
-    version="1.0.0"
+    version="1.0.1"
 )
 
 # CORS middleware with explicit origins for development and production
