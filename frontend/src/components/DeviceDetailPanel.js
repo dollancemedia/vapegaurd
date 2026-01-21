@@ -236,7 +236,9 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, onDeleteDevi
             onClose();
         } catch (error) {
             console.error('Failed to delete device:', error);
-            alert('Failed to delete device');
+            // Extract meaningful error message
+            const errorMessage = error.message || (error.response?.data?.message) || 'Unknown error occurred';
+            alert(`Failed to delete device: ${errorMessage}`);
         }
     }
   };
