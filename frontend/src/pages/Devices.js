@@ -29,7 +29,7 @@ const Devices = () => {
   const { organization } = useOrganization();
   const name = organization?.name;
   const school = name.toLowerCase();
-  const { devices, loading, error, refreshDevices, pingDevice, updateDeviceStatus } = useDevices(school);
+  const { devices, loading, error, refreshDevices, pingDevice, updateDeviceStatus, deleteDevice } = useDevices(school);
 
   // Get Clerk token
   const { getToken } = useAuth();
@@ -375,6 +375,7 @@ const Devices = () => {
         isOpen={isPanelOpen}
         onClose={handlePanelClose}
         onPingDevice={handlePingDevice}
+        onDeleteDevice={deleteDevice}
         history={selectedDevice ? (deviceHistory[selectedDevice.id] || []) : []}
       />
 

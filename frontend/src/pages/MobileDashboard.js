@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import DeviceMap from '../components/DeviceMap';
 import DeviceList from '../components/DeviceList';
 import DeviceDetailPanel from '../components/DeviceDetailPanel';
+import AddDeviceModal from '../components/AddDeviceModal';
 import { useDevices } from '../hooks/useDevices';
 import { useWebSocket } from '../hooks/useWebSocket';
 import api from '../services/api';
@@ -10,6 +11,7 @@ import { Edit2 } from 'lucide-react';
 
 const MobileDashboard = () => {
   const [selectedDevice, setSelectedDevice] = useState(null);
+  const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false);
   const [filters, setFilters] = useState({
     status: 'all',
     type: 'all',
@@ -26,7 +28,7 @@ const MobileDashboard = () => {
   const { getToken } = useAuth();
   const [token, setToken] = useState(null);
 
-  const { devices, refreshDevices, pingDevice, updateDeviceStatus } = useDevices(school, token);
+  const { devices, refreshDevices, pingDevice, updateDeviceStatus, deleteDevice } = useDevices(school, token);
 
   useEffect(() => {
     const fetchToken = async () => {
@@ -200,12 +202,13 @@ const MobileDashboard = () => {
         {/* Device List / Empty State */}
         <div className="bg-white rounded-3xl shadow-sm min-h-[200px] flex-shrink-0">
            <DeviceList 
-              devices={filteredDevices}
-              selectedDevice={selectedDevice}
-              onDeviceSelect={handleDeviceSelect}
-              filters={filters}
-              onFilterChange={handleFilterChange}
-            />
+            devices={filteredDevices}
+            selectedDevice={selectedDevice}
+            onDeviceSelect={handleDeviceSelect}
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            onAddDevice={() => setIsAddDeviceOpen(true)}
+          />
         </div>
       </div>
 
@@ -214,7 +217,16 @@ const MobileDashboard = () => {
         isOpen={isPanelOpen}
         onClose={handlePanelClose}
         onPingDevice={handlePingDevice}
+        onDeleteDevice={deleteDevice}
         history={selectedDevice ? (deviceHistory[selectedDevice.id] || []) : []}
+      />
+
+      <AddDeviceModal
+        isOpen={isAddDeviceOpen}
+        onClose={() => setIsAddDeviceOpen(false)}
+        onDeviceAdded={() => {
+          refreshDevices();
+        }}
       />
     </div>
   );

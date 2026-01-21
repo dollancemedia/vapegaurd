@@ -10,6 +10,7 @@ const NotificationController = () => {
   const [events, setEvents] = useState([]);
   // Use ref for tracking time to avoid re-creating the WebSocket handler (which causes reconnects)
   const lastNotificationTimeRef = useRef({}); 
+  const offlineDevicesRef = useRef(new Set());
 
   useEffect(() => {
     const fetchToken = async () => {
@@ -54,9 +55,28 @@ const NotificationController = () => {
         try {
             const devices = await deviceService.getAllDevices();
             devices.forEach(device => {
-                // Ignore offline devices to prevent stale data spam
+                const loc = device.location || {};
+                const locationStr = `Building: ${loc.building || '?'}, Room: ${loc.room || '?'}`;
+
+                // Handle offline detection
                 if (device.status === 'offline') {
+                    if (!offlineDevicesRef.current.has(device.id)) {
+                        // Device just went offline
+                        offlineDevicesRef.current.add(device.id);
+                        processAlert(
+                            device.id,
+                            'offline',
+                            100, // 100% confidence it's offline
+                            locationStr,
+                            new Date().toISOString()
+                        );
+                    }
                     return;
+                } else {
+                    // Device is online, remove from offline set
+                    if (offlineDevicesRef.current.has(device.id)) {
+                        offlineDevicesRef.current.delete(device.id);
+                    }
                 }
 
                 // Check timestamp to ensure data is fresh (within last 60 seconds)
@@ -67,9 +87,6 @@ const NotificationController = () => {
                 }
 
                 if (device.sensorData && (device.sensorData.predictedClass === 'vape' || device.sensorData.predictedClass === 'fire')) {
-                    const loc = device.location || {};
-                    const locationStr = `Building: ${loc.building || '?'}, Room: ${loc.room || '?'}`;
-                    
                     processAlert(
                         device.id,
                         device.sensorData.predictedClass,

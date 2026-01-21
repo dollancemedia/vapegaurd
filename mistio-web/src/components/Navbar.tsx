@@ -24,7 +24,7 @@ export const Navbar = () => {
             >
               {isOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
-            <div className="relative flex items-center">
+            <a href="/" className="relative flex items-center">
                {/* Placeholder for spacing */}
                <div className="w-32 h-10"></div>
                {/* Actual Logo - Absolute positioned to overflow */}
@@ -33,7 +33,7 @@ export const Navbar = () => {
                 src="/logo.png" 
                 alt="Mistio" 
               />
-            </div>
+            </a>
           </div>
 
           {/* Center: Desktop Nav Links */}

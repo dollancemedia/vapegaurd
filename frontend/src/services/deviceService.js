@@ -228,6 +228,17 @@ export const deviceService = {
       throw new Error(error.response?.data?.message || 'Failed to test device connection');
     }
   },
+
+  // Delete device
+  async deleteDevice(deviceId) {
+    try {
+      await apiClient.delete(`/devices/${deviceId}`);
+      return true;
+    } catch (error) {
+      console.error('Error deleting device:', error);
+      throw new Error(error.response?.data?.message || 'Failed to delete device');
+    }
+  }
 };
 
 export default deviceService;

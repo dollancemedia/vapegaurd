@@ -12,6 +12,7 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
   const audioRef = useRef(null);
   const alertTimeoutRef = useRef({});
   const mutedDevicesRef = useRef({}); // Map of deviceId -> timestamp (when mute expires)
+  const globalMuteUntilRef = useRef(0); // Timestamp until which ALL alerts are muted
 
   const checkPermission = () => {
     if (!hasNotifications) {
@@ -175,7 +176,7 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
     setActiveAlerts(prev => [newAlert, ...prev.slice(0, 4)]); // Keep max 5 alerts
 
     // Play alert sound
-    if (soundEnabled) {
+    if (soundEnabled && event.type !== 'offline') {
       playAlertSound(event.type);
     }
 
@@ -225,12 +226,8 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
   };
 
   const acknowledgeAlert = (alertId) => {
-    // Find alert to get device_id
-    const alert = activeAlerts.find(a => a.id === alertId);
-    if (alert && alert.event.device_id) {
-        // Mute for 10 minutes (10 * 60 * 1000 ms)
-        mutedDevicesRef.current[alert.event.device_id] = Date.now() + 600000;
-    }
+    // Mute ALL devices for 10 minutes (10 * 60 * 1000 ms) regardless of which alert was acknowledged
+    globalMuteUntilRef.current = Date.now() + 600000;
 
     // Start exit animation first
     setActiveAlerts(prev => 

@@ -95,6 +95,21 @@ export const useDevices = (school) => {
     );
   }, []);
 
+  // Delete device
+  const deleteDevice = useCallback(async (deviceId) => {
+    try {
+      await deviceService.deleteDevice(deviceId);
+      // Remove from local state
+      setDevices(prevDevices => 
+        prevDevices.filter(device => device.id !== deviceId)
+      );
+      return true;
+    } catch (err) {
+      console.error('Error deleting device:', err);
+      throw err;
+    }
+  }, []);
+
   // Get devices by status
   const getDevicesByStatus = useCallback((status) => {
     return devices.filter(device => device.status === status);
@@ -135,6 +150,7 @@ export const useDevices = (school) => {
     updateDeviceStatus,
     addDevice,
     removeDevice,
+    deleteDevice,
     getDevicesByStatus,
     getDevicesByType,
     getDeviceStats

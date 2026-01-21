@@ -50,7 +50,7 @@ const Icons = {
   )
 };
 
-const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilterChange }) => {
+const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilterChange, onAddDevice }) => {
   // Format last seen time
   const formatLastSeen = (timestamp) => {
     const now = new Date();
@@ -77,18 +77,31 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
     <div className="flex flex-col h-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
       {/* Filters Header */}
       <div className="p-4 border-b border-gray-100 bg-gray-50/50 space-y-4">
-        {/* Search */}
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Icons.Search />
+        {/* Search and Add Device */}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Icons.Search />
+            </div>
+            <input
+              type="text"
+              placeholder="Search devices..."
+              value={filters.search}
+              onChange={(e) => onFilterChange('search', e.target.value)}
+              className="block w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg leading-5 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#00C2CB] focus:border-[#00C2CB] sm:text-sm transition-all duration-200"
+            />
           </div>
-          <input
-            type="text"
-            placeholder="Search devices by name or location..."
-            value={filters.search}
-            onChange={(e) => onFilterChange('search', e.target.value)}
-            className="block w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg leading-5 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#00C2CB] focus:border-[#00C2CB] sm:text-sm transition-all duration-200"
-          />
+          {onAddDevice && (
+            <button
+              onClick={onAddDevice}
+              className="flex-shrink-0 p-2.5 bg-[#00C2CB] text-white rounded-lg hover:bg-[#009FA6] transition-colors shadow-sm"
+              aria-label="Add Device"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* Status Tabs */}

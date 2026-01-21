@@ -24,8 +24,8 @@ export const ContactSection = () => {
               <ContactItem 
                 icon={<Mail className="w-6 h-6" />}
                 title="Email Us"
-                content="rahul@mistio.app"
-                href="mailto:rahul@mistio.app"
+                content="contact@mistio.app"
+                href="mailto:contact@mistio.app"
               />
               <ContactItem 
                 icon={<Phone className="w-6 h-6" />}

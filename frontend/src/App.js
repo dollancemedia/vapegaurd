@@ -24,7 +24,9 @@ function App() {
               <div className="container">
                 <div className="header-content">
                   <div className="logo-container">
-                    <img src="/logo-2.png" alt="Mistio Logo" className="app-logo" />
+                    <a href="https://mistio.app">
+                      <img src="/logo-2.png" alt="Mistio Logo" className="app-logo" />
+                    </a>
                   </div>
                   
                   {/* Desktop Nav */}
