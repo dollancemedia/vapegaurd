@@ -88,6 +88,20 @@ async def update_device_location(device_id: str, location: DeviceLocation):
     )
     return {"status": "success", "device_id": device_id, "location": location}
 
+@router.delete("/{device_id}")
+async def delete_device(device_id: str, user = Depends(validate_token)):
+    """Delete a device and its metadata"""
+    # Delete from devices registry
+    result = await db.devices.delete_one({"device_id": device_id})
+    
+    # Delete metadata
+    await db.device_metadata.delete_one({"device_id": device_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Device not found")
+        
+    return {"status": "success", "message": "Device deleted"}
+
 @router.get("/", response_model=List[dict])
 async def get_device_summary(school: Optional[str] = None):
     """Get a summary of all devices and their recent activity"""
