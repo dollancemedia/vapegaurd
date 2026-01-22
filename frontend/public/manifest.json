@@ -3,17 +3,17 @@
   "name": "Mistio Dashboard",
   "icons": [
     {
-      "src": "logo-2.png",
+      "src": "tablogo.png",
       "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/svg+xml"
+      "type": "image/png"
     },
     {
-      "src": "logo-2.png",
+      "src": "tablogo.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "logo-2.png",
+      "src": "tablogo.png",
       "type": "image/png",
       "sizes": "512x512"
     }
