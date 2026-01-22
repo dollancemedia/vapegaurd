@@ -125,7 +125,7 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
       if (['vape', 'fire', 'tamper'].includes(latestEvent.type)) {
         triggerSchoolAlert({
           id: latestEvent.id,
-          deviceId: latestEvent.deviceId,
+          device_id: latestEvent.device_id,
           type: latestEvent.type,
           location: latestEvent.location,
           timestamp: latestEvent.timestamp,
@@ -226,8 +226,12 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
   };
 
   const acknowledgeAlert = (alertId) => {
-    // Mute ALL devices for 10 minutes (10 * 60 * 1000 ms) regardless of which alert was acknowledged
-    globalMuteUntilRef.current = Date.now() + 600000;
+    // Find the alert to get the device ID
+    const alert = activeAlerts.find(a => a.id === alertId);
+    if (alert && alert.event && alert.event.device_id) {
+        // Mute THIS device for 10 minutes (10 * 60 * 1000 ms)
+        mutedDevicesRef.current[alert.event.device_id] = Date.now() + 600000;
+    }
 
     // Start exit animation first
     setActiveAlerts(prev => 
