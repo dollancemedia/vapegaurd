@@ -23,7 +23,13 @@ const MobileDashboard = () => {
   
   const { organization } = useOrganization();
   const name = organization?.name || 'School';
-  const school = name.toLowerCase();
+  
+  // Use organization ID for specific sites to match registration data
+  // If org name is Admin, pass 'admin' to see all devices
+  const school = (organization?.name === 'Admin' || organization?.slug === 'admin') 
+    ? 'admin' 
+    : organization?.id;
+    
   // Get Clerk token
   const { getToken } = useAuth();
   const [token, setToken] = useState(null);

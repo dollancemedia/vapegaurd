@@ -1,16 +1,44 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useAuth } from '@clerk/clerk-react';
+import { useAuth, useOrganization } from '@clerk/clerk-react';
 import { useWebSocket } from '../hooks/useWebSocket';
 import SchoolNotificationSystem from './SchoolNotificationSystem';
 import deviceService from '../services/deviceService';
 
 const NotificationController = () => {
   const { getToken } = useAuth();
+  const { organization } = useOrganization();
   const [token, setToken] = useState(null);
   const [events, setEvents] = useState([]);
+  const [allowedDevices, setAllowedDevices] = useState(null);
+  
   // Use ref for tracking time to avoid re-creating the WebSocket handler (which causes reconnects)
   const lastNotificationTimeRef = useRef({}); 
   const offlineDevicesRef = useRef(new Set());
+
+  // Determine school ID
+  const school = (organization?.name === 'Admin' || organization?.slug === 'admin') 
+    ? 'admin' 
+    : organization?.id;
+
+  // Fetch allowed devices for filtering WebSocket events
+  useEffect(() => {
+    const fetchAllowedDevices = async () => {
+        try {
+            if (!school) return;
+            // Fetch devices using the same logic as Devices page
+            const devices = await deviceService.getAllDevices(school);
+            const ids = new Set(devices.map(d => d.id));
+            setAllowedDevices(ids);
+        } catch (err) {
+            console.error("Error fetching allowed devices for notifications:", err);
+        }
+    };
+    
+    fetchAllowedDevices();
+    // Poll for device list updates every 30s to catch new devices
+    const interval = setInterval(fetchAllowedDevices, 30000);
+    return () => clearInterval(interval);
+  }, [school]);
 
   useEffect(() => {
     const fetchToken = async () => {
@@ -53,7 +81,9 @@ const NotificationController = () => {
   useEffect(() => {
     const checkDevices = async () => {
         try {
-            const devices = await deviceService.getAllDevices();
+            // Use the school ID to fetch only relevant devices
+            const devices = await deviceService.getAllDevices(school);
+            
             devices.forEach(device => {
                 const loc = device.location || {};
                 const locationStr = `Building: ${loc.building || '?'}, Room: ${loc.room || '?'}`;
@@ -115,6 +145,13 @@ const NotificationController = () => {
       const reading = payload.sensor_data || payload;
       const deviceId = payload.device_id || (payload.sensor_data && payload.sensor_data.device_id);
       
+      // Filter out devices not belonging to this organization
+      // Exception: If allowedDevices is null, we might be loading, or it might be admin.
+      // But for safety, if we have a set and the device isn't in it, ignore.
+      if (allowedDevices && !allowedDevices.has(deviceId)) {
+          return;
+      }
+
       const predictedClass = reading.predicted_class || (reading.prediction ? reading.prediction.type : 'normal');
       
       // Check for vape or fire detection

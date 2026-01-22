@@ -116,89 +116,78 @@ async def delete_device(device_id: str, user = Depends(validate_token)):
 @router.get("/", response_model=List[dict])
 async def get_device_summary(school: Optional[str] = None):
     """Get a summary of all devices and their recent activity"""
-    allowed_device_ids: Optional[set] = None
+    
+    # 1. First, get the list of RELEVANT DEVICES from the registry
+    query = {}
     if school:
-        allowed_device_ids = set()
-        async for device in db.devices.find({"org_id": school}):
-            device_id = device.get("device_id")
-            if device_id:
-                allowed_device_ids.add(device_id)
-        if school and allowed_device_ids is not None and len(allowed_device_ids) == 0:
-            return []
-
-    pipeline = []
-    if allowed_device_ids:
-        pipeline.append({"$match": {"device_id": {"$in": list(allowed_device_ids)}}})
-    pipeline.extend([
-        {"$group": {"_id": "$device_id"}},
-        {"$project": {"device_id": "$_id", "_id": 0}}
-    ])
+        # If school is "admin" (case-insensitive), show all devices
+        if school.lower() == "admin":
+            pass
+        else:
+            query["org_id"] = school
+        
+    devices_cursor = db.devices.find(query)
     
-    cursor = db.events.aggregate(pipeline)
-    devices = []
+    device_summaries = []
     
-    # For each device, get summary information
-    async for device_doc in cursor:
+    # 2. Iterate through each registered device
+    async for device_doc in devices_cursor:
         device_id = device_doc.get("device_id")
         if not device_id:
             continue
             
-        # Get the most recent event for this device
+        # 3. Fetch metadata and stats for THIS device
+        metadata = await db.device_metadata.find_one({"device_id": device_id})
+        
+        # Get latest event
         latest_event = await db.events.find_one(
             {"device_id": device_id},
             sort=[("timestamp", -1)]
         )
         
-        # Get device metadata (coordinates, name, location)
-        metadata = await db.device_metadata.find_one({"device_id": device_id})
-        
-        # Count total events for this device
+        # Get stats (counts)
         event_count = await db.events.count_documents({"device_id": device_id})
         
-        # Count recent events (last 24 hours)
+        # Calculate recent events (last 24h)
         one_day_ago = (datetime.utcnow() - timedelta(days=1)).isoformat()
         recent_count = await db.events.count_documents({
             "device_id": device_id,
             "timestamp": {"$gte": one_day_ago}
         })
         
-        # Get verification stats
         verified_count = await db.events.count_documents({
             "device_id": device_id,
             "verified": True
         })
-        
-        # Build device summary
-        device_summary = {
+
+        # 4. Build the summary object
+        summary = {
             "device_id": device_id,
             "total_events": event_count,
             "recent_events": recent_count,
             "verified_events": verified_count,
             "last_seen": latest_event.get("timestamp") if latest_event else None,
-            "last_location": latest_event.get("location") if latest_event else None
+            "last_location": latest_event.get("location") if latest_event else None,
+            # Fallback to metadata if no event location
+            "map_location": None, 
+            "name_override": None,
+            "location_override": None
         }
-
-        # Include metadata from metadata collection if available
-        if metadata and isinstance(metadata, dict):
-            # Coordinates
-            x = metadata.get("x")
-            y = metadata.get("y")
-            if x is not None and y is not None:
-                device_summary["map_location"] = {"x": float(x), "y": float(y)}
-            
-            # Name override
-            if metadata.get("name"):
-                device_summary["name_override"] = metadata.get("name")
-                
-            # Location override
-            if metadata.get("location"):
-                device_summary["location_override"] = metadata.get("location")
         
+        # Apply metadata overrides
+        if metadata:
+            if metadata.get("x") is not None and metadata.get("y") is not None:
+                summary["map_location"] = {"x": float(metadata["x"]), "y": float(metadata["y"])}
+            if metadata.get("name"):
+                summary["name_override"] = metadata.get("name")
+            if metadata.get("location"):
+                summary["location_override"] = metadata.get("location")
+                
         # If the latest event has an _id, convert it to string
         if latest_event and "_id" in latest_event:
             latest_event["_id"] = str(latest_event["_id"])
-            device_summary["latest_event"] = latest_event
+            summary["latest_event"] = latest_event
+            
+        device_summaries.append(summary)
         
-        devices.append(device_summary)
-    
-    return devices
+    return device_summaries
