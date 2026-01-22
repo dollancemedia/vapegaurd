@@ -22,7 +22,6 @@ const MobileDashboard = () => {
   const [deviceHistory, setDeviceHistory] = useState({});
   
   const { organization } = useOrganization();
-  const name = organization?.name || 'School';
   
   // Use organization ID for specific sites to match registration data
   // If org name is Admin, pass 'admin' to see all devices

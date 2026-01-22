@@ -172,7 +172,7 @@ const NotificationController = () => {
         processAlert(finalDeviceId, predictedClass, confidence, locationStr, reading.timestamp);
       }
     }
-  }, [processAlert]);
+  }, [processAlert, allowedDevices]);
 
   const { isConnected } = useWebSocket('/ws/events', {
     onMessage: handleWebSocketMessage,
