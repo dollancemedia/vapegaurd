@@ -134,7 +134,7 @@ const NotificationController = () => {
     // Poll every 5 seconds, same as the Devices page
     const intervalId = setInterval(checkDevices, 5000);
     return () => clearInterval(intervalId);
-  }, [processAlert]);
+  }, [processAlert, school]);
 
   const handleWebSocketMessage = useCallback((message) => {
     if (!message) return;
