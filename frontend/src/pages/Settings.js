@@ -1,230 +1,245 @@
-import React, { useState, useCallback, useRef } from 'react';
-import RawDataCard from '../components/RawDataCard';
-import TestAlertButton from '../components/TestAlertButton';
+import React, { useState, useRef, useCallback } from 'react';
+import { useUser, useClerk } from '@clerk/clerk-react';
 import SchoolNotificationSystem from '../components/SchoolNotificationSystem';
+import { ChevronRight, Bell, Shield, Users, LogOut, Volume2, Wifi, AlertTriangle, Zap } from 'lucide-react';
+
 
 const Settings = () => {
-  const [events, setEvents] = useState([]);
-  const [notificationSettings, setNotificationSettings] = useState({
+  const { user } = useUser();
+  const { signOut, openUserProfile, openOrganizationProfile } = useClerk();
+  const notificationSystemRef = useRef(null);
+  
+  // Settings State
+  const [settings, setSettings] = useState({
+    criticalAlerts: true,
+    warningAlerts: true,
+    onlineStatus: true,
     soundEnabled: true,
-    browserNotifications: true,
-    emailAlerts: false,
-    smsAlerts: false,
-    alertThreshold: 60
+    threshold: 75
   });
-  const notificationSystemRef = useRef(null); // DISABLED - removed popup notifications
-  const hasNotifications = typeof window !== 'undefined' && 'Notification' in window;
-  const notificationPermission = hasNotifications ? Notification.permission : 'unsupported';
 
-  // Handle test alerts for demonstration
-  const handleTestAlert = useCallback((testEvent) => {
-    // console.log('Test alert triggered:', testEvent);
-    // Add the test event to the events list for display
-    setEvents(prevEvents => [testEvent, ...prevEvents.slice(0, 4)]); // Keep only 5 test events
-  }, []);
+  const handleToggle = (key) => {
+    setSettings(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
-  // Handle direct alert notifications (bypassing events array) - DISABLED
-  const handleDirectAlert = useCallback((testEvent) => {
-    // console.log('Direct alert triggered (DISABLED):', testEvent);
-    // Notification system disabled - no popup alerts will be shown
+  const handleThresholdChange = (e) => {
+    setSettings(prev => ({ ...prev, threshold: parseInt(e.target.value) }));
+  };
+
+  // Test Notification Logic
+  const handleTestNotification = useCallback(() => {
     if (notificationSystemRef.current) {
-      notificationSystemRef.current.triggerAlert(testEvent);
+      notificationSystemRef.current.triggerAlert({
+        id: 'test-' + Date.now(),
+        type: 'vape',
+        location: 'Settings Test Room',
+        confidence: 98,
+        timestamp: new Date().toISOString()
+      });
     }
   }, []);
 
-  const handleSettingChange = (setting, value) => {
-    setNotificationSettings(prev => ({
-      ...prev,
-      [setting]: value
-    }));
-  };
-
-  const clearTestEvents = () => {
-    setEvents([]);
-  };
-
   return (
-    <div className="settings-page">
-      <SchoolNotificationSystem 
-        ref={notificationSystemRef}
-        events={events} 
-        isConnected={true} 
-      />
-      
-      <div className="container">
-        <div className="settings-header">
-          <h1>Settings</h1>
-          <p className="settings-subtitle">Configure system preferences and test notifications</p>
-        </div>
+    <div className="min-h-screen bg-gray-50 pb-24 md:pb-6 flex flex-col">
+      <SchoolNotificationSystem ref={notificationSystemRef} events={[]} isConnected={true} soundEnabled={settings.soundEnabled} />
 
-        <div className="row">
-          {/* Notification Settings */}
-          <div className="col-md-6">
-            <div className="card">
-              <div className="card-header">
-                <h2>Notification Settings</h2>
-                <span className="card-subtitle">Configure alert preferences</span>
-              </div>
-              <div className="card-body">
-                <div className="setting-group">
-                  <label className="setting-item">
-                    <input
-                      type="checkbox"
-                      checked={notificationSettings.soundEnabled}
-                      onChange={(e) => handleSettingChange('soundEnabled', e.target.checked)}
-                    />
-                    <span>🔊 Sound Alerts</span>
-                  </label>
-                  
-                  <label className="setting-item">
-                    <input
-                      type="checkbox"
-                      disabled={!hasNotifications}
-                      checked={notificationSettings.browserNotifications}
-                      onChange={(e) => {
-                          const checked = e.target.checked;
-                          handleSettingChange('browserNotifications', checked);
-                          if (checked && hasNotifications && Notification.permission !== 'granted') {
-                              Notification.requestPermission();
-                          }
-                      }}
-                    />
-                    <span>📱 Browser Notifications <small style={{
-                         color: notificationPermission === 'granted' ? '#10b981' : (notificationPermission === 'denied' ? '#ef4444' : '#6b7280'), 
-                         fontWeight: '600',
-                         marginLeft: '8px'
-                     }}>
-                        (STATUS: {notificationPermission.toUpperCase()})
-                      </small></span>
-                  </label>
-                  
-                  <label className="setting-item">
-                    <input
-                      type="checkbox"
-                      checked={notificationSettings.emailAlerts}
-                      onChange={(e) => handleSettingChange('emailAlerts', e.target.checked)}
-                    />
-                    <span>📧 Email Alerts</span>
-                  </label>
-                  
-                  <label className="setting-item">
-                    <input
-                      type="checkbox"
-                      checked={notificationSettings.smsAlerts}
-                      onChange={(e) => handleSettingChange('smsAlerts', e.target.checked)}
-                    />
-                    <span>📱 SMS Alerts</span>
-                  </label>
-                </div>
-                
-                <div className="setting-group">
-                  <label className="setting-label">
-                    Alert Confidence Threshold: {notificationSettings.alertThreshold}%
-                  </label>
-                  <input
-                    type="range"
-                    min="50"
-                    max="95"
-                    value={notificationSettings.alertThreshold}
-                    onChange={(e) => handleSettingChange('alertThreshold', parseInt(e.target.value))}
-                    className="threshold-slider"
-                  />
-                  <div className="threshold-labels">
-                    <span>50%</span>
-                    <span>95%</span>
-                  </div>
-                </div>
-              </div>
+      <div className="px-4 py-6 space-y-8 max-w-lg md:max-w-6xl mx-auto w-full flex-1 flex flex-col">
+        
+        {/* Profile Card */}
+        <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="relative">
+              <img 
+                src={user?.imageUrl} 
+                alt="Profile" 
+                className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-sm"
+              />
+              <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 leading-tight">{user?.fullName || 'User'}</h2>
+              <p className="text-sm text-gray-500">{user?.primaryEmailAddress?.emailAddress || 'Administrator'}</p>
             </div>
           </div>
+          <button 
+            onClick={() => openUserProfile()}
+            className="px-4 py-1.5 bg-gray-50 text-gray-600 text-sm font-medium rounded-xl border border-gray-200 hover:bg-gray-100 transition-colors"
+          >
+            Edit
+          </button>
+        </div>
 
-          {/* Test Controls */}
-          <div className="col-md-6">
-            <div className="card">
-              <div className="card-header">
-                <h2>System Testing</h2>
-                <span className="card-subtitle">Test notification system</span>
+        {/* Notification Preferences */}
+        <div>
+          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3 px-2">Notification Preferences</h3>
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
+            
+            {/* Critical Alerts */}
+            <div className="p-4 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-red-50 text-red-500 rounded-full">
+                  <AlertTriangle size={20} />
+                </div>
+                <span className="font-medium text-gray-900">Critical Alerts</span>
               </div>
-              <div className="card-body">
-                <TestAlertButton 
-                  onTestAlert={handleTestAlert} 
-                  onDirectAlert={handleDirectAlert}
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={settings.criticalAlerts}
+                  onChange={() => handleToggle('criticalAlerts')}
+                  className="sr-only peer" 
                 />
-                
-                {events.length > 0 && (
-                  <div className="test-events-section">
-                    <div className="d-flex justify-content-between align-items-center mb-3">
-                      <h4>Recent Test Events</h4>
-                      <button 
-                        className="btn btn-sm btn-outline-secondary"
-                        onClick={clearTestEvents}
-                      >
-                        Clear
-                      </button>
-                    </div>
-                    <div className="test-events-list">
-                      {events.map((event) => (
-                        <div key={event.id} className={`test-event-item ${event.type}`}>
-                          <div className="event-info">
-                            <span className="event-type">
-                              {event.type === 'vape' ? '💨' : '🔥'} {event.type.toUpperCase()}
-                            </span>
-                            <span className="event-location">{event.location}</span>
-                            <span className="event-confidence">{event.confidence}%</span>
-                          </div>
-                          <div className="event-time">
-                            {new Date(event.timestamp).toLocaleTimeString()}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00C2CB]"></div>
+              </label>
             </div>
-          </div>
-        </div>
 
-        {/* Raw Data live feed under System Testing */}
-        <div className="row mt-4">
-          <div className="col-12">
-            <RawDataCard />
-          </div>
-        </div>
-
-        {/* System Information */}
-        <div className="row mt-4">
-          <div className="col-12">
-            <div className="card">
-              <div className="card-header">
-                <h2>System Information</h2>
-                <span className="card-subtitle">Current system status and configuration</span>
-              </div>
-              <div className="card-body">
-                <div className="row">
-                  <div className="col-md-4">
-                    <div className="info-item">
-                      <label>System Version:</label>
-                      <span>VapeGuard v2.1.0</span>
-                    </div>
-                  </div>
-                  <div className="col-md-4">
-                    <div className="info-item">
-                      <label>Last Updated:</label>
-                      <span>{new Date().toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                  <div className="col-md-4">
-                    <div className="info-item">
-                      <label>Active Devices:</label>
-                      <span>6 devices</span>
-                    </div>
-                  </div>
+            {/* Warning Alerts */}
+            <div className="p-4 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-orange-50 text-orange-500 rounded-full">
+                  <Bell size={20} />
                 </div>
+                <span className="font-medium text-gray-900">Warning Alerts</span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={settings.warningAlerts}
+                  onChange={() => handleToggle('warningAlerts')}
+                  className="sr-only peer" 
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00C2CB]"></div>
+              </label>
+            </div>
+
+            {/* Online/Offline Alerts */}
+            <div className="p-4 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-blue-50 text-blue-500 rounded-full">
+                  <Wifi size={20} />
+                </div>
+                <span className="font-medium text-gray-900">Online/Offline Alerts</span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={settings.onlineStatus}
+                  onChange={() => handleToggle('onlineStatus')}
+                  className="sr-only peer" 
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00C2CB]"></div>
+              </label>
+            </div>
+
+            {/* Sound Alerts */}
+            <div className="p-4 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-purple-50 text-purple-500 rounded-full">
+                  <Volume2 size={20} />
+                </div>
+                <span className="font-medium text-gray-900">Sound Effects</span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={settings.soundEnabled}
+                  onChange={() => handleToggle('soundEnabled')}
+                  className="sr-only peer" 
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00C2CB]"></div>
+              </label>
+            </div>
+
+            {/* Alert Threshold Slider */}
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-3">
+                   <div className="p-2 bg-yellow-50 text-yellow-600 rounded-full">
+                     <Zap size={20} />
+                   </div>
+                   <span className="font-medium text-gray-900">Alert Sensitivity</span>
+                </div>
+                <span className="text-sm font-bold text-[#00C2CB]">{settings.threshold}%</span>
+              </div>
+              <input 
+                type="range" 
+                min="50" 
+                max="95" 
+                value={settings.threshold} 
+                onChange={handleThresholdChange}
+                className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-[#00C2CB]"
+                style={{
+                  background: `linear-gradient(to right, #00C2CB 0%, #00C2CB ${((settings.threshold - 50) * 100) / 45}%, #e5e7eb ${((settings.threshold - 50) * 100) / 45}%, #e5e7eb 100%)`
+                }}
+              />
+              <div className="flex justify-between mt-1 text-xs text-gray-400 font-medium">
+                <span>Sensitive (50%)</span>
+                <span>Strict (95%)</span>
               </div>
             </div>
+
+             {/* Test Notification Button */}
+             <button 
+                onClick={handleTestNotification}
+                className="w-full p-4 flex items-center justify-center text-[#00C2CB] font-medium hover:bg-gray-50 transition-colors text-sm"
+             >
+               Test Notification System
+             </button>
+
           </div>
         </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Account Settings */}
+          <div className="flex-grow">
+            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3 px-2">Account</h3>
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
+              
+              <button 
+                onClick={() => openOrganizationProfile()}
+                className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors group"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-teal-50 text-teal-600 rounded-full group-hover:bg-teal-100 transition-colors">
+                    <Users size={20} />
+                  </div>
+                  <span className="font-medium text-gray-900">Manage Organization</span>
+                </div>
+                <ChevronRight size={20} className="text-gray-300 group-hover:text-gray-400" />
+              </button>
+
+              <button 
+                onClick={() => openUserProfile({ label: 'security' })}
+                className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors group"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-indigo-50 text-indigo-600 rounded-full group-hover:bg-indigo-100 transition-colors">
+                    <Shield size={20} />
+                  </div>
+                  <span className="font-medium text-gray-900">Security</span>
+                </div>
+                <ChevronRight size={20} className="text-gray-300 group-hover:text-gray-400" />
+              </button>
+
+            </div>
+          </div>
+
+          {/* Sign Out */}
+          <div className="flex flex-col justify-end">
+            <button 
+              onClick={() => signOut()}
+              className="w-full bg-white rounded-3xl p-4 shadow-sm border border-gray-100 text-red-500 font-bold hover:bg-red-50 transition-colors flex items-center justify-center space-x-2"
+            >
+              <LogOut size={20} />
+              <span>Sign Out</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <div className="text-center text-xs text-gray-400 pb-24 pt-4 md:pb-12">
+        v2.1.0 • Mistio
       </div>
     </div>
   );

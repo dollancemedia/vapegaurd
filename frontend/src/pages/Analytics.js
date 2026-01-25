@@ -176,6 +176,10 @@ const Analytics = () => {
         metric={modalData?.metric}
         deviceId={modalData?.deviceId}
       />
+
+      <div className="text-center text-xs text-gray-400 pb-24 pt-4 md:pb-12">
+        v2.1.0 • Mistio
+      </div>
     </div>
   );
 };

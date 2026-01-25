@@ -383,6 +383,10 @@ const Devices = () => {
         history={selectedDevice ? (deviceHistory[selectedDevice.id] || []) : []}
       />
 
+      <div className="text-center text-xs text-gray-400 pb-12 pt-4">
+        v2.1.0 • Mistio
+      </div>
+
       <AddDeviceModal
         isOpen={isAddDeviceOpen}
         onClose={() => setIsAddDeviceOpen(false)}

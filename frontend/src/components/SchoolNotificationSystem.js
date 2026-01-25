@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 
-const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
+const SchoolNotificationSystem = forwardRef(({ events, isConnected, soundEnabled = true }, ref) => {
   const [activeAlerts, setActiveAlerts] = useState([]);
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [lastEventId, setLastEventId] = useState(null);
   const hasNotifications = typeof window !== 'undefined' && 'Notification' in window;
   const [permissionStatus, setPermissionStatus] = useState(hasNotifications ? Notification.permission : 'unsupported');
@@ -13,6 +12,12 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
   const alertTimeoutRef = useRef({});
   const mutedDevicesRef = useRef({}); // Map of deviceId -> timestamp (when mute expires)
   const globalMuteUntilRef = useRef(0); // Timestamp until which ALL alerts are muted
+
+  const soundEnabledRef = useRef(soundEnabled);
+  
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
 
   const checkPermission = () => {
     if (!hasNotifications) {
@@ -176,7 +181,7 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
     setActiveAlerts(prev => [newAlert, ...prev.slice(0, 4)]); // Keep max 5 alerts
 
     // Play alert sound
-    if (soundEnabled && event.type !== 'offline') {
+    if (soundEnabledRef.current && event.type !== 'offline') {
       playAlertSound(event.type);
     }
 
@@ -360,19 +365,7 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected }, ref) => {
         </div>
       )}
 
-      {/* Notification Settings */}
-      <div className="notification-settings" style={{ display: 'none' }}> {/* Hidden but functional if needed */}
-        <div className="settings-row">
-          <label className="setting-item">
-            <input
-              type="checkbox"
-              checked={soundEnabled}
-              onChange={(e) => setSoundEnabled(e.target.checked)}
-            />
-            <span>🔊 Sound Alerts</span>
-          </label>
-        </div>
-      </div>
+
 
       {/* Active Alerts */}
       {activeAlerts.length > 0 && (

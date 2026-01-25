@@ -217,6 +217,10 @@ const MobileDashboard = () => {
         </div>
       </div>
 
+      <div className="text-center text-xs text-gray-400 py-6">
+        v2.1.0 • Mistio
+      </div>
+
       <DeviceDetailPanel
         device={selectedDevice}
         isOpen={isPanelOpen}
