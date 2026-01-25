@@ -11,7 +11,7 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected, soundEnabled
   const audioRef = useRef(null);
   const alertTimeoutRef = useRef({});
   const mutedDevicesRef = useRef({}); // Map of deviceId -> timestamp (when mute expires)
-  const globalMuteUntilRef = useRef(0); // Timestamp until which ALL alerts are muted
+  // const globalMuteUntilRef = useRef(0); // Timestamp until which ALL alerts are muted - Removed as unused
 
   const soundEnabledRef = useRef(soundEnabled);
   
