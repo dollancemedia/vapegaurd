@@ -93,21 +93,22 @@ def _label_from_feedback_or_verified(event, db):
     if actual_class and actual_class != "none":
         return 1 if actual_class == "vape" else 0
     
-    # Second priority: latest feedback by timestamp
-    eid = str(event.get("_id"))
-    fb_cursor = db.feedback.find({"event_id": eid}).sort("timestamp", -1).limit(1)
-    fb = next(iter(fb_cursor), None)
-    if fb:
-        t = fb.get("feedback_type")
-        if t == "false_positive":
-            return 0
-        if t == "false_negative":
-            return 1
-        if t == "correct_detection":
-            pc = event.get("predicted_class", "normal")
-            return 1 if pc == "vape" else 0
-        # "other" or unknown -> skip
-        return None
+    # takes up hella time and unused
+    # # Second priority: latest feedback by timestamp
+    # eid = str(event.get("_id"))
+    # fb_cursor = db.feedback.find({"event_id": eid}).sort("timestamp", -1).limit(1)
+    # fb = next(iter(fb_cursor), None)
+    # if fb:
+    #     t = fb.get("feedback_type")
+    #     if t == "false_positive":
+    #         return 0
+    #     if t == "false_negative":
+    #         return 1
+    #     if t == "correct_detection":
+    #         pc = event.get("predicted_class", "normal")
+    #         return 1 if pc == "vape" else 0
+    #     # "other" or unknown -> skip
+    #     return None
 
     # Third priority: verified events adopt predicted_class
     if event.get("verified") is True:
