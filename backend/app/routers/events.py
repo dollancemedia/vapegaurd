@@ -2,8 +2,23 @@ from fastapi import APIRouter, HTTPException, Body
 from app.database import db
 from app.inference import predict
 from datetime import datetime
+from pathlib import Path
+import os
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
+
+base_path = Path(__file__).resolve().parent.parent.parent
+class_path = "classifications.txt"
+class_path = base_path / class_path
+CLASSIFICATIONS = []
+if os.path.exists(class_path):
+    with open(class_path, "r") as file:
+        for line in file:
+            CLASSIFICATIONS.append(line.strip())
+else:
+    print(f"file \"{class_path}\" not found")
+    CLASSIFICATIONS = ["normal", "vape"]
+CLASSIFICATIONS.append("none")
 
 router = APIRouter()
 
@@ -101,7 +116,7 @@ async def label_event(event_id: str, actual_class: str = Body(...)):
     """Update the actual_class label of an event"""
     try:
         # Validate actual_class value
-        if actual_class not in ["vape", "normal", "none"]:
+        if actual_class not in CLASSIFICATIONS:
             raise HTTPException(status_code=400, detail="actual_class must be 'vape', 'normal', or 'none'")
         
         result = await db.events.update_one(
@@ -131,7 +146,7 @@ async def label_events_by_time(
     """Bulk label events within a time range (outside label optional)."""
     try:
         # Validate inside label
-        valid_labels = ["vape", "normal", "none"]
+        valid_labels = CLASSIFICATIONS
         if inside_label not in valid_labels:
             raise HTTPException(status_code=400, detail="inside_label must be 'vape', 'normal', or 'none'")
         
