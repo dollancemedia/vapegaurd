@@ -5,6 +5,18 @@ from sklearn.pipeline import Pipeline
 import logging
 import os
 
+base_path = Path(__file__).resolve().parent.parent
+class_path = "classifications.txt"
+class_path = base_path / class_path
+CLASSIFICATIONS = []
+if os.path.exists(class_path):
+    with open(class_path, "r") as file:
+        for line in file:
+            CLASSIFICATIONS.append(line.strip())
+else:
+    print(f"file \"{class_path}\" not found")
+    CLASSIFICATIONS = ["normal", "vape"]
+
 logger = logging.getLogger(__name__)
 
 # Default configuration
@@ -20,6 +32,12 @@ except Exception as e:
 # Global variable to store the loaded model
 _model = None
 _load_error = None
+
+def check_type(test):
+    if test and test != "none":
+        for i in range(len(CLASSIFICATIONS)):
+            if test == CLASSIFICATIONS[i]:
+                return i
 
 def get_model_error():
     """Return the error message if model loading failed."""
@@ -135,13 +153,15 @@ def predict(features: dict) -> dict:
                 prediction = model.predict(model_features)[0]
                 probabilities = model.predict_proba(model_features)[0]
                 
+                prediction_class = ""
+                for i in range(len(CLASSIFICATIONS)):
+                    if prediction == i:
+                        predicted_class = CLASSIFICATIONS[i]
                 # Ensure we have valid probabilities
                 if len(probabilities) >= 2:
-                    predicted_class = "vape" if prediction == 1 else "normal"
                     confidence = float(probabilities[prediction]) * 100  # Probability of vape class
                 else:
                     # Fallback if probabilities are not as expected
-                    predicted_class = "vape" if prediction == 1 else "normal"
                     confidence = 75.0 if predicted_class == "vape" else 25.0
                 
                 return {

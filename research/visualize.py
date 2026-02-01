@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import joblib
+from pathlib import Path
 import xgboost as xgb
 import random
 from dotenv import load_dotenv
@@ -18,6 +19,18 @@ AI_COLORS = {
     'SVC': 'cyan',
     'Linear SVM': 'magenta'
 }
+base_path = Path(__file__).resolve().parent.parent
+class_path = "backend\\classifications.txt"
+class_path = base_path / class_path
+CLASSIFICATIONS = []
+if os.path.exists(class_path):
+    with open(class_path, "r") as file:
+        for line in file:
+            CLASSIFICATIONS.append(line.strip())
+else:
+    print(f"file \"{class_path}\" not found")
+    CLASSIFICATIONS = ["normal", "vape"]
+
 # -----------------
 
 # Load environment variables from backend/.env
@@ -238,7 +251,7 @@ def fetch_episodes(collection_name):
             
             # Determine type
             episode_type = event.get("event_type")
-            if episode_type not in ["vape", "normal"]:
+            if episode_type not in CLASSIFICATIONS:
                 continue
                 
             # Re-query using datetime objects if stored as date, or string if stored as string.
@@ -362,7 +375,7 @@ def plot_single_ax(ax, stats, metric, etypes, colors, show_legend=False):
         grid = data['grid']
         median = data['median']
         bands = data['bands']
-        base_color = colors.get(etype, 'black')
+        base_color = colors.get(etype, 'gray')
         
         # Determine Label
         label = etype.capitalize()

@@ -22,8 +22,10 @@ const EventsTable = ({ events, isLoading, onEventUpdate }) => {
         return '💨';
       case 'fire':
         return '🔥';
-      default:
+      case 'normal':
         return '✓';
+      default:
+        return '⚠️';
     }
   };
   

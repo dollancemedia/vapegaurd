@@ -53,9 +53,12 @@ class RealTimeMonitor:
         if predicted_class == "vape":
             status_icon = "🚨" if confidence > 70 else "⚠️"
             status_color = "HIGH ALERT" if confidence > 70 else "WARNING"
-        else:
+        elif predicted_class == "normal":
             status_icon = "✅"
             status_color = "NORMAL"
+        else:
+            status_icon = "⚠️"
+            status_color = "WARNING"
             
         print(f"\n{status_icon} NEW EVENT DETECTED - {status_color}")
         print(f"📅 Time: {timestamp}")
