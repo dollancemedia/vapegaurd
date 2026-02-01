@@ -12,8 +12,10 @@ DATABASE_NAME = os.getenv("DATABASE_NAME", "vape-alert")
 INVALID_SENTINEL = -1000.0
 # Feature order for training/prediction
 FEATURE_COLS = ["humidity", "pm25", "particle_size", "volume_spike"]
+class_path = "classifications.txt"
+class_path = class_path if os.path.exists(class_path) else ("backend\\" + class_path)
 CLASSIFICATIONS = []
-with open("backend\\classifications.txt", "r") as file:
+with open(class_path, "r") as file:
     for line in file:
         CLASSIFICATIONS.append(line.strip())
 # Threshold to alert if raw particle_size frequently falls outside [100, 400]
