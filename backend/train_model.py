@@ -26,6 +26,12 @@ def get_db():
     client = MongoClient(MONGODB_URI)
     return client[DATABASE_NAME]
 
+def check_type(test):
+    if test and test != "none":
+        for i in range(len(CLASSIFICATIONS)):
+            if test == CLASSIFICATIONS[i]:
+                return i
+
 
 def get_newest_event():
     """Fetch the newest event by timestamp; fallback to _id order if needed."""
@@ -91,7 +97,7 @@ def _label_from_feedback_or_verified(event, db):
     # First priority: actual_class field (human-labeled ground truth)
     actual_class = event.get("actual_class")
     if actual_class and actual_class != "none":
-        return 1 if actual_class == "vape" else 0
+        return check_type(actual_class)
     
     # takes up hella time and unused
     # # Second priority: latest feedback by timestamp
@@ -113,7 +119,7 @@ def _label_from_feedback_or_verified(event, db):
     # Third priority: verified events adopt predicted_class
     if event.get("verified") is True:
         pc = event.get("predicted_class", "normal")
-        return 1 if pc == "vape" else 0
+        return check_type(pc)
 
     return None
 
@@ -211,9 +217,16 @@ def train_and_save_model(limit=None, save=True, skip_predict=False):
         print(msg)
         return {"status": "error", "message": msg}
 
-    vape_count = int(y.sum())
-    normal_count = int(len(y) - vape_count)
-    print(f"Dataset size: {len(y)} (vape={vape_count}, normal={normal_count})")
+    class_count = [0] * len(CLASSIFICATIONS)
+    for i in y:
+        class_count[i] += 1
+    count_str = ""
+    for i in range(len(CLASSIFICATIONS)):
+        count_str += CLASSIFICATIONS[i] + "="
+        count_str += f"{class_count[i]}"
+        if i < len(CLASSIFICATIONS)-1:
+            count_str += ", "
+    print(f"Dataset size: {len(y)} ({count_str})")
 
     # Train XGBoost classifier on historical data
     clf = XGBClassifier(random_state=8, use_label_encoder=False, eval_metric="logloss", missing=INVALID_SENTINEL)
@@ -235,17 +248,27 @@ def train_and_save_model(limit=None, save=True, skip_predict=False):
         X_new = pd.DataFrame([feats_new])[FEATURE_COLS]
         proba = clf.predict_proba(X_new)[0]
         pred = int(clf.predict(X_new)[0])
-        pred_label = "vape" if pred == 1 else "normal"
+        pred_label = ""
+        for i in range(len(CLASSIFICATIONS)):
+            if pred == i:
+                pred_label = CLASSIFICATIONS[i]
         print("\nNewest event prediction:")
         print(f"  event_id: {newest_id}")
         # Show both class probabilities as percentages and a single "confidence" value
-        proba_normal = float(proba[0])
-        proba_vape = float(proba[1])
-        pct_normal = proba_normal * 100.0
-        pct_vape = proba_vape * 100.0
-        # confidence = max class percent
-        confidence = max(pct_vape, pct_normal)
-        print(f"  predicted: {pred_label} | proba_normal={pct_normal:.2f}%, proba_vape={pct_vape:.2f}% | confidence={confidence:.2f}%")
+        probas = [float(item) for item in proba]
+        pcts = [prob*100 for prob in probas]
+        confidence = pcts[0]
+        for pct in pcts:
+            confidence = max(pct, confidence)
+        pct_str = ""
+        for i in range(len(CLASSIFICATIONS)):
+            try:
+                pct_str += f"proba_{CLASSIFICATIONS[i]}={pcts[i]:.2f}%"
+            except:
+                pct_str += f"proba_{CLASSIFICATIONS[i]}=0%"
+            if i < len(CLASSIFICATIONS)-1:
+                pct_str += ", "
+        print(f"  predicted: {pred_label} | {pct_str} | confidence={confidence:.2f}%")
         print("  Raw event preserved; not modifying DB for website learning.")
     elif newest_event is None:
         print("No events found for newest prediction.")
@@ -255,8 +278,8 @@ def train_and_save_model(limit=None, save=True, skip_predict=False):
     return {
         "status": "success",
         "dataset_size": len(y),
-        "vape_count": vape_count,
-        "normal_count": normal_count,
+        # "vape_count": vape_count,
+        # "normal_count": normal_count,
         "model_path": out_path if save else None
     }
 
