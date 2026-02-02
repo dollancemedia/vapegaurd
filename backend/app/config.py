@@ -20,8 +20,8 @@ class Settings(BaseSettings):
     EWMA_ALPHA: float = 0.1
     
     # Uncertainty Thresholds
-    MIN_TOP_PROB: float = 0.60
-    MIN_MARGIN: float = 0.15
+    MIN_TOP_PROB: float = 0.40  # Lowered from 0.60
+    MIN_MARGIN: float = 0.00    # Lowered from 0.15
     
     class Config:
         env_file = ".env"
