@@ -354,12 +354,14 @@ def main():
     rf.fit(X_train, y_train, sample_weight=sample_weights)
     print("RF Accuracy:", rf.score(X_test, y_test))
     
-    # --- SVC ---
-    print("Training SVC...")
-    # NOTE: We remove class_weight='balanced' because we are passing 'sample_weight' which is already balanced.
-    svc = SVC(probability=True, kernel='rbf')
-    svc.fit(X_train, y_train, sample_weight=sample_weights)
-    print("SVC Accuracy:", svc.score(X_test, y_test))
+    # --- KNN ---
+    print("Training KNN...")
+    from sklearn.neighbors import KNeighborsClassifier
+    # Use 5 neighbors (or 3 if dataset is tiny)
+    knn = KNeighborsClassifier(n_neighbors=5) 
+    knn.fit(X_train, y_train) # KNN doesn't typically take sample_weight in fit, but supports it in some versions. Standard sklearn KNN does not use sample_weight for distance, unless using a custom metric. 
+    # Actually, let's keep it simple.
+    print("KNN Accuracy:", knn.score(X_test, y_test))
     
     # 5. Save Models
     models_dir = os.path.join(os.path.dirname(__file__), 'models')
@@ -368,7 +370,7 @@ def main():
     print(f"\nSaving models to {models_dir}...")
     joblib.dump(xgb, os.path.join(models_dir, 'xgb_model.joblib'))
     joblib.dump(rf, os.path.join(models_dir, 'rf_model.joblib'))
-    joblib.dump(svc, os.path.join(models_dir, 'svc_model.joblib'))
+    joblib.dump(knn, os.path.join(models_dir, 'knn_model.joblib'))
     
     print("Done! Models are ready for the backend.")
 

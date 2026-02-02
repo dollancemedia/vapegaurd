@@ -20,7 +20,7 @@ CLASS_ORDER = [CLASSIFICATIONS[1]] + CLASSIFICATIONS[2:] + [CLASSIFICATIONS[0], 
 MODELS = {
     "xgb": "xgb_model.joblib",
     "rf": "rf_model.joblib",
-    "svc": "svc_model.joblib"
+    "knn": "knn_model.joblib"
 }
 
 # Feature order for model input (MUST MATCH TRAINING)
