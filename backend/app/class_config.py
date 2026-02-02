@@ -1,12 +1,20 @@
+import os
+from pathlib import Path
+
 # Class order configuration for consistency across training and inference
-CLASS_ORDER = [
-    "vape",
-    "shower",
-    "hairspray",
-    "cleaning",
-    "normal",
-    "other"
-]
+base_path = Path(__file__).resolve().parent.parent
+class_path = "classifications.txt"
+class_path = base_path / class_path
+CLASSIFICATIONS = []
+if os.path.exists(class_path):
+    with open(class_path, "r") as file:
+        for line in file:
+            CLASSIFICATIONS.append(line.strip())
+else:
+    print(f"file \"{class_path}\" not found")
+    CLASSIFICATIONS = ["normal", "vape", "cologne", "hair spray", "cleaning"]
+
+CLASS_ORDER = [CLASSIFICATIONS[1]] + CLASSIFICATIONS[2:] + [CLASSIFICATIONS[0], "other"]
 
 # Model filenames
 MODELS = {
