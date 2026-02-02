@@ -362,7 +362,7 @@ def main():
     print("SVC Accuracy:", svc.score(X_test, y_test))
     
     # 5. Save Models
-    models_dir = os.path.join(os.path.dirname(__file__), 'app', 'models')
+    models_dir = os.path.join(os.path.dirname(__file__), 'models')
     os.makedirs(models_dir, exist_ok=True)
     
     print(f"\nSaving models to {models_dir}...")
