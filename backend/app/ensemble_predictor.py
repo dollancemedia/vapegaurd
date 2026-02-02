@@ -36,12 +36,8 @@ class EnsemblePredictor:
                     
                     # Validate classes if possible
                     if hasattr(model, "classes_"):
-                        # Check if classes match CLASS_ORDER
-                        # Note: sets might be unordered, so we convert to list and sort or check set equality
-                        # Strict order check:
-                        if list(model.classes_) != CLASS_ORDER:
-                            print(f"WARNING: Model {name} classes {model.classes_} do not match {CLASS_ORDER}. Skipping.")
-                            continue
+                        print(f"Loaded {name} with classes: {model.classes_}")
+                        # We allow subset of classes now, so no strict check here.
                             
                     self.models[name] = model
                     print(f"Loaded {name}")
@@ -80,10 +76,42 @@ class EnsemblePredictor:
                 # predict_proba returns [n_samples, n_classes]
                 probs = model.predict_proba(X)[0]
                 
-                # Verify shape
-                if len(probs) != len(CLASS_ORDER):
-                     print(f"Model {name} returned wrong prob shape: {len(probs)}")
-                     continue
+                # Flexible Class Mapping
+                model_classes = []
+                if hasattr(model, "custom_classes_"):
+                    model_classes = list(model.custom_classes_)
+                elif hasattr(model, "classes_"):
+                    model_classes = list(model.classes_)
+                
+                if model_classes:
+                    # Create full vector initialized to 0
+                    full_probs = np.zeros(len(CLASS_ORDER))
+                    
+                    for i, cls in enumerate(model_classes):
+                        # Find where this class belongs in the master CLASS_ORDER
+                        target_idx = -1
+                        
+                        if isinstance(cls, str):
+                            if cls in CLASS_ORDER:
+                                target_idx = CLASS_ORDER.index(cls)
+                        elif isinstance(cls, (int, np.integer)):
+                            # If int, assume it maps directly to CLASS_ORDER index
+                            if 0 <= cls < len(CLASS_ORDER):
+                                target_idx = int(cls)
+                        
+                        # Handle numpy str/int types just in case
+                        elif str(cls) in CLASS_ORDER:
+                             target_idx = CLASS_ORDER.index(str(cls))
+                                
+                        if target_idx != -1:
+                            full_probs[target_idx] = probs[i]
+                            
+                    probs = full_probs # Use the mapped vector
+                else:
+                    # Fallback for models without classes_ metadata
+                    if len(probs) != len(CLASS_ORDER):
+                         print(f"Model {name} returned wrong prob shape: {len(probs)} and no metadata.")
+                         continue
                 
                 sum_probs += probs
                 valid_models += 1
