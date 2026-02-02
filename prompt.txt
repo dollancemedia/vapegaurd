@@ -1,0 +1,303 @@
+You are modifying an existing FastAPI + MongoDB backend deployed on Railway for “Mistio” vape detection using PMS5003 (pm1/pm25/pm10) + BME680 (temp/humidity/pressure/gas_resistance). Current system is stateless and predicts per-sample, causing jitter/false positives. Upgrade to a stateful, event-based pipeline that outputs multi-class classifications (not binary) and supports both “suspicious” and “confirmed” UI signals.
+
+Non-negotiable constraints
+
+NO pandas anywhere in the request path. No DataFrames. Use deques + simple rolling stats.
+
+Events are NOT defined by model probability. Event onset must be physics-based (delta/slope/ratios). Model runs after the confirm window.
+
+Training/inference parity: the exact same feature vector format must be used offline and in production.
+
+Must run on Railway. In-memory state breaks under multiple workers. Either:
+
+enforce single worker, OR
+
+use Redis for shared per-device state (preferred).
+
+Timestamps are UTC ISO strings → parse to aware UTC datetimes consistently.
+
+Output format: multi-class classifications
+
+The model must output a probability distribution across classes, and the system must publish a top_class plus probs.
+
+Example class set (configurable; keep in one file class_config.py):
+
+vape
+
+shower
+
+hairspray
+
+cleaning
+
+normal
+
+other
+
+You may have more labels in training data, but in production the API must output a single top_class from CLASS_ORDER and probs for each class.
+
+Remove “grey areas” rule
+
+We still must handle uncertainty explicitly:
+
+Always output top_class (argmax).
+
+Also compute:
+
+top_prob = max(probs)
+
+margin = top_prob - second_prob
+
+If top_prob < MIN_TOP_PROB OR margin < MIN_MARGIN, set status="uncertain" (but keep top_class for UI).
+
+This avoids pretending certainty when the model is split.
+
+Device payload (raw values)
+
+ESP sends raw; server computes ratios/features:
+
+{
+  "device_id": "ESP32_C6_001",
+  "timestamp": "2026-02-01T22:10:05.123Z",
+  "pm1": 12.0,
+  "pm25": 37.0,
+  "pm10": 41.0,
+  "humidity": 55.2,
+  "temperature": 23.1,
+  "pressure": 1012.3,
+  "gas_resistance": 81234.0
+}
+
+Mongo collections
+samples
+
+Store all incoming raw samples for debugging/retraining.
+
+index { device_id: 1, timestamp: 1 }
+
+events (detections)
+
+One document per detected event:
+
+event_id, device_id
+
+t_start, t_decision
+
+status: "suspected" | "confirmed" | "rejected" | "uncertain"
+
+phase1_reason (trigger values)
+
+top_class, probs, top_prob, margin
+
+ensemble_detail (per-model probs)
+
+alert_stage_sent: "none"|"suspicious"|"confirmed" (or booleans)
+
+event_features
+
+One doc per event with engineered feature vector:
+
+event_id, device_id, t_start, t_decision
+
+all feature fields
+
+label if ground-truth known (manual), else store top_class
+
+Two-phase runtime pipeline (fast + stable)
+
+Goal: show “suspicious” quickly, confirm within ~20 seconds.
+
+Defaults (configurable):
+
+BASELINE_WINDOW_SEC = 10
+
+CONFIRM_WINDOW_SEC = 20 # decision by 20s (fits 15–30s requirement)
+
+COOLDOWN_SEC = 15
+
+Per-device state machine:
+
+IDLE
+
+CONFIRMING (collecting confirm window after suspicion)
+
+COOLDOWN
+
+Phase 1: suspicion gate (physics-based)
+
+This phase should be fast and sensitive; it starts the confirm window.
+
+Maintain rolling baselines from last ~60 seconds:
+
+rolling median or EWMA for pm25_base, pm1_base, pm10_base, gas_base, rh_base
+Maintain a smoothed derivative (diff over last 3 samples):
+
+pm25_slope_smooth
+
+Compute:
+
+d_pm25 = pm25 - pm25_base
+
+ratios: r_pm1_pm25 = pm1/(pm25+eps), r_pm1_pm10 = pm1/(pm10+eps)
+
+Suspicion trigger (configurable):
+
+d_pm25 >= D_PM25_SUS
+
+AND pm25_slope_smooth >= SLOPE_SUS
+
+optional: ratio gate if pm1 present
+
+When triggered:
+
+freeze t0 = now
+
+freeze baseline snapshot values (pm25_base, etc.)
+
+create events doc with status="suspected" (dashboard update)
+
+move to CONFIRMING
+
+Phase 2: confirmation window (20 seconds)
+
+Collect samples from [t0, t0+20s]. At t_decision, compute event features from:
+
+baseline segment [t0-10s, t0] (or frozen baseline snapshot)
+
+event segment [t0, t0+20s]
+
+Then run the ensemble predictor ONCE and write final event classification.
+
+After decision, enter COOLDOWN.
+
+Feature engineering (event-level, no pandas)
+
+Implement a FeatureEngine that operates on python lists/deques. O(n) is allowed at decision time because window is small (~30s of data), but NOT per sample.
+
+Compute (minimum set; floats; None if uncomputable):
+
+start values: pm1_start, pm25_start, pm10_start, humidity_start, gas_start, temp_start
+
+baselines (median baseline window): pm25_base, pm1_base, pm10_base, gas_base, humidity_base
+
+peaks in confirm window: pm25_peak, pm1_peak, pm10_peak
+
+deltas: d_pm25_peak, d_pm1_peak, d_pm10_peak
+
+time-to-peak: t_to_pm25_peak_sec
+
+rise slope: pm25_rise_slope = d_pm25_peak / max(t_to_peak,1)
+
+AUC above baseline: pm25_auc_above_base (trapezoid)
+
+ratios at start and peak:
+
+r_pm1_pm25_start, r_pm1_pm10_start
+
+r_pm1_pm25_peak, r_pm1_pm10_peak
+
+humidity/gas dynamics: humidity_delta_20s, humidity_slope_0_10s, gas_delta_20s, gas_slope_0_10s
+
+stability: pm25_std_last5s
+
+Ensemble predictor (multi-class soft voting)
+
+Implement EnsemblePredictor that loads multiple models (joblib) and outputs probs over CLASS_ORDER.
+
+Models supported:
+
+XGBoost: xgb_model.joblib
+
+RandomForest: rf_model.joblib
+
+LogisticRegression or SVC(probability): lr_model.joblib or svc_model.joblib
+
+Rules:
+
+Every model must output predict_proba aligned with CLASS_ORDER.
+
+Combine with weighted mean PER CLASS:
+
+p_ens[c] = sum_i w_i * p_i[c] / sum_i w_i
+
+If any model fails to load/predict, skip it. Require at least 1 model. If none, fallback to conservative rules that classify as normal with low confidence.
+
+Return:
+
+{
+  "top_class": "vape|shower|hairspray|cleaning|normal|other",
+  "probs": { "vape":0.0, ... },
+  "top_prob": 0.0,
+  "margin": 0.0,
+  "confidence": 0-100,
+  "per_model": { "xgb": {...}, "rf": {...}, "lr": {...} },
+  "model_version": "ensemble_multiclass_v1"
+}
+
+
+Confidence can be top_prob*100, but include margin logic for uncertainty.
+
+Uncertainty thresholds (configurable):
+
+MIN_TOP_PROB = 0.60
+
+MIN_MARGIN = 0.15
+If below either → set event status="uncertain" (but still output top_class).
+
+Alerts + UI behavior (two user settings)
+
+There are two settings per org/school:
+
+notify_on_suspicion (boolean)
+
+notify_only_if_vape (boolean) # if true, only vape class triggers alerts
+
+Behavior:
+
+On suspected:
+
+always publish dashboard “suspicious”
+
+if notify_on_suspicion true: send “Suspicious activity” notification (no class claims yet)
+
+On decision:
+
+publish dashboard “confirmed” with top_class + probs
+
+if notify_only_if_vape true: only send notification if top_class == "vape" AND status != "uncertain"
+
+if notify_only_if_vape false: notify on any confirmed class (optional)
+
+If an earlier “suspicious” notification was sent, send a follow-up “confirmed: vape” message if vape is confirmed.
+
+Offline training extractor (must match FeatureEngine)
+
+Provide a script that:
+
+takes labeled event start times (for vape, shower, hairspray, etc.)
+
+pulls [t0-10s, t0+20s] from Mongo
+
+uses the SAME FeatureEngine to compute features
+
+trains models with CLASS_ORDER fixed
+
+exports joblib models to backend/models/
+
+validates confusion matrix and prints per-class metrics
+
+Deliverables
+
+state_manager.py (per-device rolling buffer + states; Redis option)
+
+feature_engine.py (no pandas)
+
+detector.py (Phase 1 trigger + Phase 2 decision window + cooldown)
+
+ensemble_predictor.py (multi-class soft voting)
+
+update routers/sensors.py to wire: ingest → store sample → update state → if decide, compute features → ensemble → store event → notify
+
+add unit tests for: feature extraction, trigger logic, ensemble combine, uncertainty rule
+
+provide config defaults + env overrides

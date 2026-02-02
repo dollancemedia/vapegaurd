@@ -1,193 +1,172 @@
 from fastapi import APIRouter, HTTPException, Request
 import logging
-from datetime import datetime, timedelta
-from typing import Any, Dict
+from datetime import datetime
+from typing import Any, Dict, Optional
 
 from app.database import db
-from app.inference import predict
 from app.ws import broadcast_event, broadcast_sensor_reading
+from app.detector import detector
+from app.config import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Alert Configuration (Mock or Env based for now, ideally per-org in DB)
+# In a real app, fetch these from db.org_settings based on org_id
+DEFAULT_NOTIFY_ON_SUSPICION = True
+DEFAULT_NOTIFY_ONLY_IF_VAPE = True
+
+async def process_notifications(event_doc: Dict[str, Any], notification_type: str, org_id: str):
+    """
+    Handles notification logic based on rules.
+    """
+    # TODO: Fetch actual org settings
+    notify_on_suspicion = DEFAULT_NOTIFY_ON_SUSPICION
+    notify_only_if_vape = DEFAULT_NOTIFY_ONLY_IF_VAPE
+    
+    should_notify = False
+    message = ""
+    
+    top_class = event_doc.get("top_class")
+    status = event_doc.get("status")
+
+    if notification_type == "suspicious":
+        if notify_on_suspicion:
+            should_notify = True
+            message = f"Suspicious activity detected at {event_doc.get('device_id')}"
+            
+    elif notification_type == "confirmed":
+        if notify_only_if_vape:
+            if top_class == "vape" and status != "uncertain":
+                should_notify = True
+                message = f"Vape detected at {event_doc.get('device_id')} ({event_doc.get('confidence', 0):.1f}%)"
+        else:
+            # Notify on any confirmed class (excluding uncertain if desired, or include)
+            if status != "uncertain":
+                should_notify = True
+                message = f"{top_class} detected at {event_doc.get('device_id')}"
+
+    if should_notify:
+        logger.info(f"SENDING NOTIFICATION: {message}")
+        # Here you would call email/SMS/Push service
+        # For now, we broadcast a special alert event
+        await broadcast_event("alert", {
+            "message": message,
+            "event_id": event_doc.get("event_id"),
+            "device_id": event_doc.get("device_id"),
+            "level": "warning" if notification_type == "suspicious" else "critical"
+        })
 
 @router.post("/data", status_code=200)
 async def receive_sensor_data(payload: Dict[str, Any], request: Request):
     """
-    Ingest sensor data, run prediction, store to DB, and broadcast updates.
+    Ingest sensor data, run stateful detection, store to DB, and broadcast updates.
     """
     try:
-        # Basic payload logging
-        try:
-            raw_body = await request.body()
-            print(f"[raw-body] len={len(raw_body)} preview={raw_body[:200]!r}")
-        except Exception:
-            pass
-
-        payload_str = str(payload)
-        print(
-            f"[payload] keys={list(payload.keys())} preview={payload_str[:200]}"
-        )
-
+        # 1. Clean & Sanitize Payload
         if not payload:
-            logger.warning("Empty payload received")
-            return {
-                "status": "error",
-                "message": "Empty payload received",
-                "prediction": {"predicted_class": "normal", "confidence": 0},
-            }
+            return {"status": "error", "message": "Empty payload"}
 
-        # Ensure timestamp and device_id
-        payload.setdefault(
-            "timestamp", datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
-        )
+        # Ensure defaults
         payload.setdefault("device_id", "unknown")
+        payload.setdefault("org_id", "unknown")
+        # Ensure timestamp is present (Detector handles parsing, but we need it for raw storage too)
+        if "timestamp" not in payload:
+             payload["timestamp"] = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
 
-        # Clean payload to expected fields
-        expected_fields = [
-            "device_id",
-            "org_id",
-            "timestamp",
-            "humidity",
-            "temperature",
-            "pm25",
-            "pm10",
-            "gas_resistance",
-            "sound_level",
-            "location",
-            "mic_available",
-        ]
-        payload = {k: v for k, v in payload.items() if k in expected_fields}
-        print(f"[cleaned] keys={list(payload.keys())}")
-
-        # Sanitize numeric fields
-        for field in [
-            "humidity",
-            "temperature",
-            "pm25",
-            "pm10",
-            "gas_resistance",
-            "sound_level",
-        ]:
+        # Sanitize numerics
+        numeric_fields = ["humidity", "temperature", "pm25", "pm10", "gas_resistance", "sound_level"]
+        for field in numeric_fields:
+            val = payload.get(field)
             try:
-                if field not in payload or payload[field] is None:
+                if val is None:
                     payload[field] = 0.0
-                elif isinstance(payload[field], str):
-                    payload[field] = float(payload[field])
-                elif not isinstance(payload[field], (int, float)):
-                    payload[field] = 0.0
-                if abs(float(payload[field])) > 10000:
-                    payload[field] = 0.0
-            except Exception:
-                logger.warning(
-                    f"Invalid {field} value: {payload.get(field)}, defaulting to 0"
-                )
+                else:
+                    payload[field] = float(val)
+            except (ValueError, TypeError):
                 payload[field] = 0.0
 
-        # Run prediction
+        # 2. Store Raw Sample (Async)
         try:
-            result = predict(payload)
-        except Exception as predict_error:
-            logger.error(f"Prediction error: {predict_error}")
-            result = {
-                "predicted_class": "normal",
-                "confidence": 0,
-                "model_version": "error_fallback",
-            }
+            # We copy payload to avoid mutation issues if any
+            await db.samples.insert_one(payload.copy())
+        except Exception as e:
+            logger.error(f"Failed to store raw sample: {e}")
 
-        # Build event document
-        doc = {
-            "device_id": payload.get("device_id", "unknown"),
-            "school": payload.get("org_id", "unknown"),
-            "timestamp": datetime.utcnow().isoformat(timespec="milliseconds") + "Z",
-            "humidity": payload.get("humidity", 0.0),
-            "temperature": payload.get("temperature", 0.0),
-            "pm25": payload.get("pm25", 0.0),
-            "pm10": payload.get("pm10", 0.0),
-            "gas_resistance": payload.get("gas_resistance", 0.0),
-            "sound_level": payload.get("sound_level", 0.0),
-            "mic_available": bool(payload.get("mic_available", True)),
-            "predicted_class": result.get("predicted_class", "normal"),
-            "confidence": result.get("confidence", 0.0),
-            "model_version": result.get("model_version", "unknown"),
-            "verified": False,
-            "actual_class": "none",
+        # 3. Run Detector
+        event_doc, notification_type = detector.process_sample(payload.get("device_id"), payload)
+        
+        # 4. Handle Events
+        stored_event_id = None
+        if event_doc:
+            # Add org_id to event doc
+            event_doc["school"] = payload.get("org_id")
+            
+            try:
+                # Store event
+                res = await db.events.insert_one(event_doc)
+                stored_event_id = str(res.inserted_id)
+                event_doc["_id"] = stored_event_id
+                
+                # Broadcast Event Update to Dashboard
+                await broadcast_event("sensor_data", event_doc)
+                
+                # Handle Notifications
+                await process_notifications(event_doc, notification_type, payload.get("org_id"))
+                
+            except Exception as e:
+                logger.error(f"Failed to process event storage/broadcast: {e}")
+
+        # 5. Broadcast Raw Reading (for live charts)
+        # We construct a reading object compatible with frontend expectations
+        sensor_reading = {
+            "device_id": payload.get("device_id"),
+            "school": payload.get("org_id"),
+            "timestamp": payload.get("timestamp"),
+            "humidity": payload.get("humidity"),
+            "pm25": payload.get("pm25"),
+            "pm10": payload.get("pm10"),
+            "gas_resistance": payload.get("gas_resistance"),
+            "temperature": payload.get("temperature"),
+            "sound_level": payload.get("sound_level", 0),
+            # Add prediction info if available from an event, else "normal"
+            "prediction": {
+                "type": event_doc.get("top_class", "normal") if event_doc else "normal",
+                "confidence": event_doc.get("confidence", 0) if event_doc else 0,
+                "status": event_doc.get("status", "idle") if event_doc else "idle"
+            }
         }
-
-        stored = False
-        doc_id = None
-
-        # Store and broadcast (non-fatal on failure)
+        
         try:
-            insert_result = await db.events.insert_one(doc)
-            doc_id = str(insert_result.inserted_id)
-            stored = True
-        except Exception as db_error:
-            logger.error(f"DB insert failed: {db_error}")
-
-        try:
-            mic_available = bool(doc.get("mic_available", True))
-            sensor_reading = {
-                "device_id": doc.get("device_id", "unknown"),
-                "school": doc.get("school", "unknown"),
-                "timestamp": doc.get("timestamp"),
-                "humidity": float(doc.get("humidity", 0)),
-                "pm25": float(doc.get("pm25", 0)),
-                "particle_size": float(doc.get("gas_resistance", 0)) / 10,
-                "volume_spike": float(doc.get("sound_level", 0)) if mic_available else 0.0,
-                "temperature": float(doc.get("temperature", 0)),
-                "gas_resistance": float(doc.get("gas_resistance", 0)),
-                "pm10": float(doc.get("pm10", 0)),
-                "sound_level": float(doc.get("sound_level", 0)),
-                "prediction": {
-                    "type": doc.get("predicted_class", "normal"),
-                    "predicted_class": doc.get("predicted_class", "normal"),
-                    "confidence": float(doc.get("confidence", 0)),
-                },
-            }
-            await broadcast_sensor_reading(
-                sensor_reading.get("device_id", "unknown"), sensor_reading
-            )
-            if stored:
-                await broadcast_event("sensor_data", {**doc, "_id": doc_id})
-        except Exception as broadcast_error:
-            logger.error(f"WebSocket broadcast failed: {broadcast_error}")
+            await broadcast_sensor_reading(payload.get("device_id"), sensor_reading)
+        except Exception as e:
+            logger.error(f"Broadcast reading failed: {e}")
 
         return {
             "status": "success",
-            "message": "Sensor data processed" + (" (not stored)" if not stored else ""),
-            "event_id": doc_id,
-            "prediction": {
-                "predicted_class": result.get("predicted_class", "normal"),
-                "confidence": result.get("confidence", 0),
-            },
+            "message": "Processed",
+            "event_id": stored_event_id,
+            "state": notification_type or "monitoring"
         }
 
     except Exception as e:
-        logger.exception(f"Error processing sensor data, payload={payload}")
-        return {
-            "status": "error",
-            "message": f"Error processing sensor data: {e}",
-            "prediction": {"predicted_class": "normal", "confidence": 0},
-        }
-
+        logger.exception(f"Error processing sensor data: {e}")
+        return {"status": "error", "message": str(e)}
 
 @router.get("/status")
 async def get_sensor_status():
     """Basic status for recent sensor ingestion."""
     try:
-        one_hour_ago = (
-            datetime.utcnow() - timedelta(hours=1)
-        ).isoformat(timespec="milliseconds") + "Z"
+        # Use simple utcnow
+        one_hour_ago = (datetime.utcnow() - timedelta(hours=1)).isoformat()
         recent_count = await db.events.count_documents({"timestamp": {"$gte": one_hour_ago}})
         return {
             "status": "active",
             "recent_events": recent_count,
-            "last_updated": datetime.utcnow().isoformat(timespec="milliseconds") + "Z",
+            "last_updated": datetime.utcnow().isoformat()
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting sensor status: {e}")
-
 
 @router.get("/sensor-data")
 async def get_sensor_data(limit: int = 50):
@@ -196,22 +175,18 @@ async def get_sensor_data(limit: int = 50):
         cursor = db.events.find().sort("timestamp", -1).limit(limit)
         sensor_data = []
         async for doc in cursor:
+            # Format for frontend
             sensor_reading = {
                 "device_id": doc.get("device_id", "unknown"),
                 "timestamp": doc.get("timestamp"),
                 "humidity": doc.get("humidity", 0),
                 "pm25": doc.get("pm25", 0),
-                "particle_size": doc.get("gas_resistance", 0) / 10,
-                "volume_spike": doc.get("sound_level", 0),
                 "temperature": doc.get("temperature", 0),
-                "gas_resistance": doc.get("gas_resistance", 0),
-                "pm10": doc.get("pm10", 0),
-                "sound_level": doc.get("sound_level", 0),
                 "prediction": {
-                    "type": doc.get("predicted_class", "normal"),
-                    "predicted_class": doc.get("predicted_class", "normal"),
+                    "type": doc.get("top_class", "normal"),
                     "confidence": doc.get("confidence", 0),
-                },
+                    "status": doc.get("status")
+                }
             }
             sensor_data.append(sensor_reading)
         return sensor_data

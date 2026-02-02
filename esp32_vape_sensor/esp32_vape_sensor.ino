@@ -304,10 +304,11 @@ void readAndSendSensorData() {
   }
   
   // Read PMS5003
-  float pm25 = -999, pm10 = -999;
+  float pm1 = -999, pm25 = -999, pm10 = -999;
   if (readPMSdata(&pmsSerial)) {
+    pm1 = data.pm10_env;
     pm25 = data.pm25_env;
-    pm10 = data.pm10_env;
+    pm10 = data.pm100_env;
   }
   
   // Check if microphone is connected and handle sound level
@@ -362,6 +363,7 @@ Serial.println(isConnected ? "YES" : "NO");
   Serial.println("Temperature: " + String(temperature) + "°C");
   Serial.println("Humidity: " + String(humidity) + "%");
   Serial.println("Pressure: " + String(pressure) + " hPa");
+  Serial.println("PM1.0: " + String(pm1) + " μg/m³");
   Serial.println("PM2.5: " + String(pm25) + " μg/m³");
   Serial.println("PM10: " + String(pm10) + " μg/m³");
   Serial.println("Sound Level: " + String(soundLevel) + "%");
@@ -378,6 +380,7 @@ Serial.println(isConnected ? "YES" : "NO");
   doc["temperature"] = (temperature > -999) ? temperature : 0;
   doc["humidity"] = (humidity > -999) ? humidity : 0;
   doc["pressure"] = (pressure > -999) ? pressure : 0;
+  doc["pm1"] = (pm1 > -999) ? pm1 : 0;
   doc["pm25"] = (pm25 > -999) ? pm25 : 0;
   doc["pm10"] = (pm10 > -999) ? pm10 : 0;
   doc["sound_level"] = soundLevel;
