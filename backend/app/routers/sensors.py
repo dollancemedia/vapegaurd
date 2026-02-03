@@ -118,6 +118,25 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
                 logger.error(f"Failed to process event storage/broadcast: {e}")
 
         # 5. Broadcast Raw Reading (for live charts)
+        # Get real-time state
+        current_state = state_manager.get_state(payload.get("device_id"))
+        current_status = current_state.get("status", "IDLE") if current_state else "IDLE"
+        
+        display_type = "normal"
+        if current_status == "CALIBRATING":
+            display_type = "calibrating"
+        elif current_status == "CONFIRMING":
+             display_type = "suspected"
+             
+        # Override with specific event details if this sample triggered an event
+        if event_doc:
+             if event_doc.get("status") == "confirmed":
+                 display_type = event_doc.get("top_class", "vape")
+             elif event_doc.get("status") == "uncertain":
+                 display_type = "uncertain"
+             elif event_doc.get("status") == "suspected":
+                 display_type = "suspected"
+
         # We construct a reading object compatible with frontend expectations
         sensor_reading = {
             "device_id": payload.get("device_id"),
@@ -129,11 +148,11 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
             "gas_resistance": payload.get("gas_resistance"),
             "temperature": payload.get("temperature"),
             "sound_level": payload.get("sound_level", 0),
-            # Add prediction info if available from an event, else "normal"
+            # Add prediction info
             "prediction": {
-                "type": event_doc.get("top_class", "normal") if event_doc else "normal",
-                "confidence": event_doc.get("confidence", 0) if event_doc else 0,
-                "status": event_doc.get("status", "idle") if event_doc else "idle"
+                "type": display_type,
+                "confidence": event_doc.get("top_prob", 0) * 100 if event_doc else 0,
+                "status": current_status
             }
         }
         

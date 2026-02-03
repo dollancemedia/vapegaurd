@@ -31,16 +31,20 @@ const SensorReadings = ({ sensorData, isLoading }) => {
         tension: 0.3,
       },
       {
-        label: 'Prediction Status (0=Norm, 1=Vape, 2=Fire)',
+        label: 'Prediction Status',
         data: sensorData.map((data) => {
-          if (data.predictedClass === 'fire') return 2;
-          if (data.predictedClass === 'vape') return 1;
+          if (data.predictedClass === 'fire') return 4;
+          if (data.predictedClass === 'vape') return 3;
+          if (data.predictedClass === 'suspected') return 2;
+          if (data.predictedClass === 'uncertain') return 1;
+          if (data.predictedClass === 'calibrating') return 0.5;
           return 0;
         }).reverse(),
         borderColor: 'rgb(255, 159, 64)',
         backgroundColor: 'rgba(255, 159, 64, 0.5)',
         tension: 0.1,
         stepped: true,
+        yAxisID: 'y1', // Assign to secondary axis if possible, or just scale
       },
     ],
   };
@@ -73,6 +77,21 @@ const SensorReadings = ({ sensorData, isLoading }) => {
         mode: 'index',
         intersect: false,
         backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        callbacks: {
+            label: function(context) {
+                let label = context.dataset.label || '';
+                if (label === 'Prediction Status') {
+                    const val = context.raw;
+                    if (val === 4) return 'Status: Fire';
+                    if (val === 3) return 'Status: Vape';
+                    if (val === 2) return 'Status: Suspected';
+                    if (val === 1) return 'Status: Uncertain';
+                    if (val === 0.5) return 'Status: Calibrating';
+                    return 'Status: Normal';
+                }
+                return label + ': ' + context.formattedValue;
+            }
+        },
         titleFont: {
           size: 14,
         },

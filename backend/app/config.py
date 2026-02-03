@@ -18,10 +18,14 @@ class Settings(BaseSettings):
     # EWMA Alpha (Smoothing factor for Phase 1 baseline)
     # Higher = follows data faster, Lower = more stable baseline
     EWMA_ALPHA: float = 0.1
+    EWMA_ALPHA_CALIBRATION: float = 0.5 # Faster adaptation during startup
     
     # Uncertainty Thresholds
     MIN_TOP_PROB: float = 0.40  # Lowered from 0.60
     MIN_MARGIN: float = 0.00    # Lowered from 0.15
+
+    # Calibration Duration
+    CALIBRATION_DURATION_SEC: int = 60
     
     class Config:
         env_file = ".env"

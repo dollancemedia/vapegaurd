@@ -55,7 +55,7 @@ async def broadcast_sensor_reading(device_id: str, sensor_data: Dict[str, Any]) 
     await broadcast_event("sensor_data", {
         "device_id": device_id,
         "sensor_data": sensor_data,
-        "status": "normal"
+        "status": sensor_data.get("prediction", {}).get("type", "normal")
     })
 
 @router.websocket("/ws/events")

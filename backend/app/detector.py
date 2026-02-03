@@ -37,13 +37,28 @@ class Detector:
         
         # 3. Get current state
         state = state_manager.get_state(device_id)
-        status = state.get("status", "IDLE")
+        
+        # Initialize state if new
+        if not state:
+            state = {
+                "status": "CALIBRATING", 
+                "calibration_start": self._get_now().isoformat(),
+                "ewma_pm25": None
+            }
+            state_manager.update_state(device_id, state)
+            
+        status = state.get("status", "CALIBRATING")
         
         event_doc = None
         notification_type = None
         
         # 4. State Machine
-        if status == "IDLE":
+        if status == "CALIBRATING":
+             self._handle_calibrating(device_id, sample, state)
+             # During calibration, we don't trigger events, but we want the dashboard to know
+             # We can return a special notification type or just let the state update reflect in next poll
+             
+        elif status == "IDLE":
             event_doc, notification_type = self._handle_idle(device_id, sample, state)
             
         elif status == "CONFIRMING":
@@ -53,6 +68,46 @@ class Detector:
             self._handle_cooldown(device_id, state, current_ts)
 
         return event_doc, notification_type
+
+    def _handle_calibrating(self, device_id: str, sample: Dict[str, Any], state: Dict[str, Any]):
+        # Update EWMA aggressively
+        pm25 = sample.get('pm25')
+        if pm25 is None:
+            return
+
+        prev_ewma = state.get('ewma_pm25')
+        # Use faster alpha during calibration
+        new_ewma = FeatureEngine.update_ewma(pm25, prev_ewma, settings.EWMA_ALPHA_CALIBRATION)
+        
+        updates = {"ewma_pm25": new_ewma}
+        
+        # Check time
+        cal_start_str = state.get("calibration_start")
+        if cal_start_str:
+            try:
+                cal_start = datetime.fromisoformat(cal_start_str)
+                now = sample['timestamp']
+                
+                # Ensure timezones match
+                if not cal_start.tzinfo:
+                    cal_start = cal_start.replace(tzinfo=timezone.utc)
+                
+                elapsed = (now - cal_start).total_seconds()
+                
+                # Log calibration progress occasionally
+                if int(elapsed) % 5 == 0:
+                     print(f"[Detector] CALIBRATING | Dev: {device_id} | PM2.5: {pm25} | Base: {new_ewma:.2f} | T+{elapsed:.1f}s")
+
+                if elapsed >= settings.CALIBRATION_DURATION_SEC:
+                    print(f"[Detector] CALIBRATION COMPLETE | Dev: {device_id} | Final Base: {new_ewma:.2f}")
+                    updates["status"] = "IDLE"
+            except ValueError:
+                # If date parsing fails, reset calibration
+                updates["calibration_start"] = self._get_now().isoformat()
+        else:
+             updates["calibration_start"] = self._get_now().isoformat()
+             
+        state_manager.update_state(device_id, updates)
 
     def _handle_idle(self, device_id: str, sample: Dict[str, Any], state: Dict[str, Any]):
         # Update EWMA

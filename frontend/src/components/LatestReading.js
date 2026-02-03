@@ -8,9 +8,37 @@ const LatestReading = ({ latestReading, isLoading }) => {
         return 'alert-warning';
       case 'fire':
         return 'alert-danger';
+      case 'suspected':
+        return 'alert-orange'; // We will need to ensure this class exists or use inline styles
+      case 'calibrating':
+        return 'alert-info';
+      case 'uncertain':
+        return 'alert-secondary';
       default:
         return 'alert-info';
     }
+  };
+
+  const getStatusColor = (type) => {
+      switch(type) {
+          case 'vape': return '#EF4444';
+          case 'fire': return '#dc2626';
+          case 'suspected': return '#F97316'; // Orange
+          case 'calibrating': return '#EAB308'; // Yellow
+          case 'uncertain': return '#3B82F6'; // Blue
+          default: return '#00C2CB'; // Teal
+      }
+  };
+
+  const getStatusIcon = (type) => {
+      switch(type) {
+          case 'vape': return '💨';
+          case 'fire': return '🔥';
+          case 'suspected': return '⚠️';
+          case 'calibrating': return '⚙️';
+          case 'uncertain': return '❓';
+          default: return '✅';
+      }
   };
 
   return (
@@ -52,13 +80,11 @@ const LatestReading = ({ latestReading, isLoading }) => {
               
               <div className="reading-item">
                 <div className="reading-icon status-icon">
-                  {latestReading.prediction?.type === 'vape' ? '💨' : 
-                   (latestReading.prediction?.type === 'fire' ? '🔥' : '✅')}
+                  {getStatusIcon(latestReading.prediction?.type)}
                 </div>
                 <div className="reading-name">Status</div>
                 <div className="reading-data" style={{
-                  color: latestReading.prediction?.type === 'vape' ? '#EF4444' : 
-                         (latestReading.prediction?.type === 'fire' ? '#dc2626' : '#00C2CB'),
+                  color: getStatusColor(latestReading.prediction?.type),
                   textTransform: 'uppercase',
                   fontWeight: 'bold',
                   fontSize: '0.9rem'
@@ -69,21 +95,26 @@ const LatestReading = ({ latestReading, isLoading }) => {
             </div>
             
             {latestReading.prediction && (
-              <div className={`prediction-alert ${getAlertClass(latestReading.prediction.type)}`}>
+              <div className={`prediction-alert ${getAlertClass(latestReading.prediction.type)}`} style={{
+                  backgroundColor: latestReading.prediction.type === 'suspected' ? 'rgba(249, 115, 22, 0.1)' : undefined,
+                  borderColor: latestReading.prediction.type === 'suspected' ? 'rgba(249, 115, 22, 0.2)' : undefined,
+                  color: latestReading.prediction.type === 'suspected' ? '#c2410c' : undefined
+              }}>
                 <div className="prediction-type">
-                  {latestReading.prediction.type === 'vape' && '💨'}
-                  {latestReading.prediction.type === 'fire' && '🔥'}
-                  {latestReading.prediction.type === 'normal' && '✓'}
+                  {getStatusIcon(latestReading.prediction.type)}
                   <span>{latestReading.prediction.type?.toUpperCase() || 'UNKNOWN'}</span>
                 </div>
                 <div className="prediction-confidence">
                   <div className="confidence-bar">
                     <div 
                       className="confidence-fill" 
-                      style={{width: `${latestReading.prediction.confidence || 0}%`}}
+                      style={{
+                          width: `${latestReading.prediction.confidence || 0}%`,
+                          backgroundColor: getStatusColor(latestReading.prediction.type)
+                      }}
                     ></div>
                   </div>
-                  <span>{latestReading.prediction.confidence || 0}% confidence</span>
+                  <span>{Math.round(latestReading.prediction.confidence || 0)}% confidence</span>
                 </div>
               </div>
             )}
