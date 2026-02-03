@@ -3,3 +3,4 @@ vape
 cologne
 hair spray
 cleaning
+shower
