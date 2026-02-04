@@ -152,67 +152,33 @@ async def get_device_summary(school: Optional[str] = None):
         )
         
         # Determine which data to show
-        # If we have a recent sample, it's likely newer than the last "event"
-        # We want to show the physics values from the sample, but maybe status from event?
-        # Actually, simpler: if sample is newer, use sample values. 
-        # But sample doesn't have "status" or "top_class" usually.
+        # We want the NEWEST info, whether it's a raw sample or a confirmed event
+        current_data = {}
         
-        current_data = latest_event
-        
-        # Check if sample is newer or if event doesn't exist
-        is_sample_newer = False
-        if latest_sample:
-            if not latest_event:
-                is_sample_newer = True
+        # 1. Determine base data source
+        if latest_sample and latest_event:
+            t_sample = latest_sample.get("timestamp", "")
+            t_event = latest_event.get("timestamp", "")
+            if t_sample > t_event:
+                 current_data = latest_sample.copy()
             else:
-                # Compare timestamps (assuming ISO strings)
-                t_sample = latest_sample.get("timestamp", "")
-                t_event = latest_event.get("timestamp", "")
-                if t_sample > t_event:
-                    is_sample_newer = True
-        
-        if is_sample_newer:
-            # Base the display object on the sample
+                 current_data = latest_event.copy()
+        elif latest_sample:
             current_data = latest_sample.copy()
+        elif latest_event:
+            current_data = latest_event.copy()
             
-            # Get real-time state from State Manager
-            # This ensures we see "CALIBRATING" or "CONFIRMING" even if no event is generated yet
-            real_time_state = state_manager.get_state(device_id)
-            rt_status = "monitoring"
-            if real_time_state:
-                rt_status = real_time_state.get("status", "monitoring")
+        # 2. Get Real-Time State (Override status)
+        # This ensures we see "CALIBRATING" or "CONFIRMING" immediately
+        rt_state = state_manager.get_state(device_id)
+        if rt_state:
+            current_data["status"] = rt_state.get("status", "monitoring")
+        elif "status" not in current_data:
+            current_data["status"] = "monitoring"
             
-            # Default status fields
-            current_data.setdefault("status", rt_status)
-            current_data.setdefault("top_class", "normal")
-            current_data.setdefault("confidence", 0)
-            
-            # If there was a recent event (e.g. within 1 minute), maybe we should persist the status?
-            # But "monitoring" is safer if we are just polling.
-            # The detector updates state_manager, we could query that for "CALIBRATING" etc.
-            # For now, let's just ensure we have DATA (non-zero physics).
-
-        # Get stats (counts)raw sample (for real-time values even if no event)
-        latest_sample = await db.samples.find_one(
-            {"device_id": device_id},
-            sort=[("timestamp", -1)]
-        )
-        
-        # Use sample as source of truth for current readings if it's newer
-        current_data = latest_event
-        if latest_sample:
-            # If no event or sample is newer
-            if not latest_event or (latest_sample.get("timestamp", "") > latest_event.get("timestamp", "")):
-                # Construct a display object from sample
-                current_data = latest_sample.copy()
-                # Add default event fields to satisfy frontend
-                if "status" not in current_data:
-                    current_data["status"] = "monitoring" 
-                if "top_class" not in current_data:
-                    current_data["top_class"] = "normal"
-                if "confidence" not in current_data:
-                    current_data["confidence"] = 0
-
+        # 3. Ensure defaults for frontend
+        current_data.setdefault("top_class", "normal")
+        current_data.setdefault("confidence", 0)
         
         # Get stats (counts)
         event_count = await db.events.count_documents({"device_id": device_id})
@@ -235,13 +201,22 @@ async def get_device_summary(school: Optional[str] = None):
             "total_events": event_count,
             "recent_events": recent_count,
             "verified_events": verified_count,
-            "last_seen": device_doc.get("last_seen") or (latest_event.get("timestamp") if latest_event else None),
+            "last_seen": device_doc.get("last_seen"),
             "last_location": latest_event.get("location") if latest_event else None,
-            # Fallback to metadata if no event location
             "map_location": None, 
             "name_override": None,
             "location_override": None
         }
+        
+        # Attach current_data as "latest_event" for frontend compatibility
+        if current_data:
+            if "_id" in current_data:
+                current_data["_id"] = str(current_data["_id"])
+            summary["latest_event"] = current_data
+            
+            # If device_doc.last_seen is old or missing, use the data timestamp
+            if not summary["last_seen"]:
+                summary["last_seen"] = current_data.get("timestamp")
         
         # Apply metadata overrides
         if metadata:
@@ -251,11 +226,6 @@ async def get_device_summary(school: Optional[str] = None):
                 summary["name_override"] = metadata.get("name")
             if metadata.get("location"):
                 summary["location_override"] = metadata.get("location")
-                
-        # If the latest event has an _id, convert it to string
-        if latest_event and "_id" in latest_event:
-            latest_event["_id"] = str(latest_event["_id"])
-            summary["latest_event"] = latest_event
             
         device_summaries.append(summary)
         
