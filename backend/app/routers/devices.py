@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Body, Depends
 from app.database import db
 from app.auth import validate_token
+from app.state_manager import state_manager
 from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 from pydantic import BaseModel
@@ -125,7 +126,7 @@ async def get_device_summary(school: Optional[str] = None):
             pass
         else:
             query["org_id"] = school
-        
+            
     devices_cursor = db.devices.find(query)
     
     device_summaries = []
