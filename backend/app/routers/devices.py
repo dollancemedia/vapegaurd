@@ -156,17 +156,24 @@ async def get_device_summary(school: Optional[str] = None):
         current_data = {}
         
         # 1. Determine base data source
-        if latest_sample and latest_event:
-            t_sample = latest_sample.get("timestamp", "")
-            t_event = latest_event.get("timestamp", "")
-            if t_sample > t_event:
-                 current_data = latest_sample.copy()
-            else:
-                 current_data = latest_event.copy()
-        elif latest_sample:
-            current_data = latest_sample.copy()
-        elif latest_event:
-            current_data = latest_event.copy()
+        try:
+            if latest_sample and latest_event:
+                # Safe comparison: Convert to strings or compare if same type
+                # Timestamps are likely ISO strings if inserted by sensors.py
+                t_sample = str(latest_sample.get("timestamp", ""))
+                t_event = str(latest_event.get("timestamp", ""))
+                
+                if t_sample > t_event:
+                     current_data = latest_sample.copy()
+                else:
+                     current_data = latest_event.copy()
+            elif latest_sample:
+                current_data = latest_sample.copy()
+            elif latest_event:
+                current_data = latest_event.copy()
+        except Exception:
+             # Fallback if comparison fails
+             current_data = latest_sample.copy() if latest_sample else (latest_event.copy() if latest_event else {})
             
         # 2. Get Real-Time State (Override status)
         # This ensures we see "CALIBRATING" or "CONFIRMING" immediately
