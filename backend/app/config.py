@@ -8,7 +8,6 @@ class Settings(BaseSettings):
     
     # Physics Thresholds
     D_PM25_SUS: float = 10.0      # Sudden jump in PM2.5
-    PM25_ABSOLUTE_THRESHOLD: float = 35.0 # Absolute limit for triggering suspicion
     SLOPE_SUS: float = 2.0        # Slope of PM2.5 rise
     
     # Time Windows (in seconds)
