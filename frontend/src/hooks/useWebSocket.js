@@ -24,6 +24,7 @@ export const useWebSocket = (url, options = {}) => {
     heartbeatInterval = 30000,
     protocols = [],
     queryParams = null,
+    enabled = true,
   } = options;
 
   // Stable memoized values
@@ -87,6 +88,8 @@ export const useWebSocket = (url, options = {}) => {
   }, [sendMessage]);
 
   const connect = useCallback(() => {
+    if (!enabled) return;
+
     // Prevent duplicate sockets
     if (
       wsRef.current &&
@@ -178,6 +181,7 @@ export const useWebSocket = (url, options = {}) => {
     reconnectInterval,
     maxReconnectAttempts,
     sendHeartbeat,
+    enabled
   ]);
 
   const disconnect = useCallback(() => {

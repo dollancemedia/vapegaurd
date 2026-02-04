@@ -106,31 +106,31 @@ export const deviceService = {
     }
 
     // Add Test Sensor for UI changes (Always added, even if backend fails)
-    mappedDevices.push({
-      id: 'test-sensor-001',
-      name: 'UI Test Sensor',
-      type: 'detector',
-      status: 'online',
-      location: {
-        building: 'Test Building',
-        floor: '1',
-        room: '101',
-      },
-      mapLocation: null,
-      lastSeen: new Date().toISOString(),
-      uptime: '99.9%',
-      sensorData: {
-        humidity: 45,
-        temperature: 22,
-        pm25: 12,
-        particleSize: 0.5,
-        volumeSpike: false,
-        gasResistance: 10000,
-        predictedClass: 'normal',
-        confidence: 0.95,
-        timestamp: new Date().toISOString(),
-      },
-    });
+    // mappedDevices.push({
+    //   id: 'test-sensor-001',
+    //   name: 'UI Test Sensor',
+    //   type: 'detector',
+    //   status: 'online',
+    //   location: {
+    //     building: 'Test Building',
+    //     floor: '1',
+    //     room: '101',
+    //   },
+    //   mapLocation: null,
+    //   lastSeen: new Date().toISOString(),
+    //   uptime: '99.9%',
+    //   sensorData: {
+    //     humidity: 45,
+    //     temperature: 22,
+    //     pm25: 12,
+    //     particleSize: 0.5,
+    //     volumeSpike: false,
+    //     gasResistance: 10000,
+    //     predictedClass: 'normal',
+    //     confidence: 0.95,
+    //     timestamp: new Date().toISOString(),
+    //   },
+    // });
 
     return mappedDevices;
   },

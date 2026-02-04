@@ -128,9 +128,19 @@ class Detector:
 
         # Trigger Check
         is_triggered = False
+        
+        # Trigger 1: Sudden Jump (Delta)
         if d_pm25 >= settings.D_PM25_SUS:
             print(f"[Detector] TRIGGERED! | Delta {d_pm25:.2f} >= Threshold {settings.D_PM25_SUS}")
             is_triggered = True
+            
+        # Trigger 2: Absolute High Value (Safety Net)
+        # Only trigger if we are not already calibrated to this high level (i.e., if we are rising or just joined)
+        # But if EWMA is already high, we might be in a steady high state.
+        # To avoid loops, we rely on the classifier to distinguish Vape vs Ambient.
+        elif pm25 >= settings.PM25_ABSOLUTE_THRESHOLD and d_pm25 > 1.0:
+             print(f"[Detector] TRIGGERED! | Absolute {pm25:.2f} >= {settings.PM25_ABSOLUTE_THRESHOLD} & Rising")
+             is_triggered = True
         
         # Update State with new EWMA
         updates = {"ewma_pm25": new_ewma}

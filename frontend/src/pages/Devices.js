@@ -194,7 +194,8 @@ const Devices = () => {
 
   useWebSocket('/ws/events', {
     onMessage: handleWebSocketMessage,
-    queryParams: { token }
+    queryParams: { token },
+    enabled: !!token
   });
 
   // Determine overall system status
