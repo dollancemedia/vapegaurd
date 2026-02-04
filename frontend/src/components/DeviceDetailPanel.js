@@ -107,9 +107,7 @@ const Icons = {
   )
 };
 
-const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, onDeleteDevice, history = [] }) => {
-  const [isPinging, setIsPinging] = useState(false);
-  const [showFullLog, setShowFullLog] = useState(false);
+const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = [] }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({ name: '', building: '', floor: '', room: '' });
 
@@ -214,33 +212,6 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, onDeleteDevi
         grid: { drawOnChartArea: false },
       },
     },
-  };
-
-  // Handle ping device
-  const handlePing = async () => {
-    setIsPinging(true);
-    try {
-      await onPingDevice(device.id);
-    } catch (error) {
-      console.error('Ping failed:', error);
-    } finally {
-      setIsPinging(false);
-    }
-  };
-
-  // Handle delete device
-  const handleDelete = async () => {
-    if (window.confirm('Are you sure you want to delete this sensor? This action cannot be undone.')) {
-        try {
-            await onDeleteDevice(device.id);
-            onClose();
-        } catch (error) {
-            console.error('Failed to delete device:', error);
-            // Extract meaningful error message
-            const errorMessage = error.message || (error.response?.data?.message) || 'Unknown error occurred';
-            alert(`Failed to delete device: ${errorMessage}`);
-        }
-    }
   };
   
   // Handle save edit
