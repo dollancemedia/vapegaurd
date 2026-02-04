@@ -334,8 +334,12 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, onDeleteDevi
               ${device.status === 'offline'
                 ? 'bg-gray-50 border-gray-200 ring-1 ring-gray-300'
                 : device.sensorData.predictedClass === 'vape' 
-                  ? 'bg-red-50 border-red-100 ring-1 ring-red-200' 
-                  : 'bg-[#00C2CB]/5 border-[#00C2CB]/20 ring-1 ring-[#00C2CB]/20'
+                  ? 'bg-red-50 border-red-100 ring-1 ring-red-200'
+                  : device.sensorData.predictedClass === 'calibrating'
+                    ? 'bg-blue-50 border-blue-100 ring-1 ring-blue-200'
+                    : device.sensorData.predictedClass === 'suspected'
+                      ? 'bg-orange-50 border-orange-100 ring-1 ring-orange-200'
+                      : 'bg-[#00C2CB]/5 border-[#00C2CB]/20 ring-1 ring-[#00C2CB]/20'
               }
             `}>
               <div className="flex justify-between items-center relative z-10">
@@ -343,24 +347,39 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, onDeleteDevi
                   <div className={`
                     p-2 rounded-full
                     ${device.status === 'offline' ? 'bg-gray-200 text-gray-500' :
-                      device.sensorData.predictedClass === 'vape' ? 'bg-red-100 text-red-600' : 'bg-[#00C2CB]/10 text-[#00C2CB]'}
+                      device.sensorData.predictedClass === 'vape' ? 'bg-red-100 text-red-600' :
+                      device.sensorData.predictedClass === 'calibrating' ? 'bg-blue-100 text-blue-600' :
+                      device.sensorData.predictedClass === 'suspected' ? 'bg-orange-100 text-orange-600' :
+                      'bg-[#00C2CB]/10 text-[#00C2CB]'}
                   `}>
                     {device.status === 'offline' ? <Icons.Close /> :
-                     device.sensorData.predictedClass === 'vape' ? <Icons.Warning /> : <Icons.Check />}
+                     device.sensorData.predictedClass === 'vape' ? <Icons.Warning /> :
+                     device.sensorData.predictedClass === 'calibrating' ? <span className="text-xl">⚙️</span> :
+                     device.sensorData.predictedClass === 'suspected' ? <span className="text-xl">⚠️</span> :
+                     <Icons.Check />}
                   </div>
                   <div>
                     <h3 className={`text-sm font-semibold uppercase tracking-wide
                       ${device.status === 'offline' ? 'text-gray-600' :
-                        device.sensorData.predictedClass === 'vape' ? 'text-red-800' : 'text-[#00C2CB]'}
+                        device.sensorData.predictedClass === 'vape' ? 'text-red-800' :
+                        device.sensorData.predictedClass === 'calibrating' ? 'text-blue-800' :
+                        device.sensorData.predictedClass === 'suspected' ? 'text-orange-800' :
+                        'text-[#00C2CB]'}
                     `}>
                       Current Status
                     </h3>
                     <p className={`text-lg font-bold
                       ${device.status === 'offline' ? 'text-gray-700' :
-                        device.sensorData.predictedClass === 'vape' ? 'text-red-700' : 'text-[#00C2CB]'}
+                        device.sensorData.predictedClass === 'vape' ? 'text-red-700' :
+                        device.sensorData.predictedClass === 'calibrating' ? 'text-blue-700' :
+                        device.sensorData.predictedClass === 'suspected' ? 'text-orange-700' :
+                        'text-[#00C2CB]'}
                     `}>
                       {device.status === 'offline' ? 'Device Offline' :
-                       device.sensorData.predictedClass === 'vape' ? 'Vape Detected' : 'Normal Atmosphere'}
+                       device.sensorData.predictedClass === 'vape' ? 'Vape Detected' :
+                       device.sensorData.predictedClass === 'calibrating' ? 'Calibrating...' :
+                       device.sensorData.predictedClass === 'suspected' ? 'Suspected Activity' :
+                       'Normal Atmosphere'}
                     </p>
                   </div>
                 </div>
@@ -368,7 +387,10 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, onDeleteDevi
                   <span className="block text-xs font-medium text-gray-500 uppercase">Confidence</span>
                   <span className={`text-2xl font-bold
                     ${device.status === 'offline' ? 'text-gray-400' :
-                      device.sensorData.predictedClass === 'vape' ? 'text-red-700' : 'text-emerald-700'}
+                      device.sensorData.predictedClass === 'vape' ? 'text-red-700' :
+                      device.sensorData.predictedClass === 'calibrating' ? 'text-blue-700' :
+                      device.sensorData.predictedClass === 'suspected' ? 'text-orange-700' :
+                      'text-emerald-700'}
                   `}>
                     {device.sensorData.confidence}%
                   </span>
@@ -496,44 +518,45 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, onDeleteDevi
 
           {/* Actions Section */}
           <div className="pb-8">
-            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">Device Actions</h3>
+            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">Historical Logs</h3>
             <div className="grid grid-cols-1 gap-3">
-              <button 
-                onClick={handlePing}
-                disabled={isPinging}
-                className={`
-                  w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-lg font-medium transition-all
-                  ${isPinging 
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                    : 'bg-[#00C2CB] text-white hover:bg-[#009FA6] shadow-sm hover:shadow-md'
-                  }
-                `}
-              >
-                <Icons.Ping />
-                <span>{isPinging ? 'Pinging Device...' : 'Ping Device'}</span>
-              </button>
-              
-              <button 
-                onClick={() => setShowFullLog(!showFullLog)}
-                className="w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-lg font-medium bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all"
-              >
-                <Icons.Log />
-                <span>{showFullLog ? 'Hide Sensor Logs' : 'View Full Sensor Logs'}</span>
-              </button>
-              
-              {device.status === 'alarm' && (
-                <button className="w-full py-3 px-4 rounded-lg font-medium bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-all">
-                  Acknowledge Alarm
-                </button>
-              )}
-              
-              <button 
-                onClick={handleDelete}
-                className="w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-lg font-medium bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 transition-all"
-              >
-                <Icons.Trash />
-                <span>Delete Sensor</span>
-              </button>
+              <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                {history.map((reading, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors">
+                    <div className="flex items-center space-x-3">
+                      <div className={`
+                        w-2 h-2 rounded-full
+                        ${reading.predictedClass === 'vape' ? 'bg-red-500' :
+                          reading.predictedClass === 'calibrating' ? 'bg-blue-500' :
+                          reading.predictedClass === 'suspected' ? 'bg-orange-500' :
+                          'bg-green-500'}
+                      `}></div>
+                      <div>
+                        <span className="block text-xs text-gray-500 font-medium">
+                          {new Date(reading.timestamp).toLocaleTimeString()}
+                        </span>
+                        <span className="block text-sm text-gray-700">
+                          Hum: {Number(reading.humidity).toFixed(1)}% • PM2.5: {reading.pm25}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <span className={`
+                        inline-flex items-center px-2 py-1 rounded text-xs font-medium
+                        ${reading.predictedClass === 'vape' ? 'bg-red-100 text-red-700' :
+                          reading.predictedClass === 'calibrating' ? 'bg-blue-100 text-blue-700' :
+                          reading.predictedClass === 'suspected' ? 'bg-orange-100 text-orange-700' :
+                          'bg-green-100 text-green-700'}
+                      `}>
+                        {reading.predictedClass === 'vape' ? 'Vape Detected' :
+                         reading.predictedClass === 'calibrating' ? 'Calibrating' :
+                         reading.predictedClass === 'suspected' ? 'Suspected' :
+                         'Normal'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
