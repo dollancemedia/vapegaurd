@@ -90,8 +90,18 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
         try:
             # We copy payload to avoid mutation issues if any
             await db.samples.insert_one(payload.copy())
+            
+            # Update Device 'last_seen' to keep it Online in Dashboard
+            await db.devices.update_one(
+                {"device_id": payload.get("device_id")},
+                {"$set": {
+                    "last_seen": datetime.utcnow().isoformat() + "Z",
+                    "updated_at": datetime.utcnow().isoformat() + "Z"
+                }},
+                upsert=False 
+            )
         except Exception as e:
-            logger.error(f"Failed to store raw sample: {e}")
+            logger.error(f"Failed to store raw sample or update device: {e}")
 
         # 3. Run Detector
         event_doc, notification_type = detector.process_sample(payload.get("device_id"), payload)

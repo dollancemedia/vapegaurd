@@ -166,7 +166,7 @@ async def get_device_summary(school: Optional[str] = None):
             "total_events": event_count,
             "recent_events": recent_count,
             "verified_events": verified_count,
-            "last_seen": latest_event.get("timestamp") if latest_event else None,
+            "last_seen": device_doc.get("last_seen") or (latest_event.get("timestamp") if latest_event else None),
             "last_location": latest_event.get("location") if latest_event else None,
             # Fallback to metadata if no event location
             "map_location": None, 
