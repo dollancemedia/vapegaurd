@@ -247,8 +247,6 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
     return new Date(timestamp).toLocaleString();
   };
 
-  const sensorHistory = history.length > 0 ? history : [];
-
   return (
     <>
       {/* Backdrop */}
@@ -530,31 +528,6 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
               </div>
             </div>
           </div>
-
-          {/* Sensor History (if expanded) */}
-          {showFullLog && (
-            <div className="border-t border-gray-100 pt-6">
-              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">Historical Logs</h3>
-              <div className="max-h-80 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100 bg-white">
-                {sensorHistory.map((reading, index) => (
-                  <div key={index} className="p-3 hover:bg-gray-50 transition-colors flex justify-between items-center text-xs">
-                    <span className="text-gray-500 font-mono">
-                      {new Date(reading.timestamp).toLocaleTimeString()}
-                    </span>
-                    <div className="flex space-x-3">
-                      <span className="font-medium text-gray-700">H: {reading.humidity}%</span>
-                      <span className="font-medium text-gray-700">PM: {reading.pm25}</span>
-                      <span className={`px-2 py-0.5 rounded-full font-medium ${
-                        reading.predictedClass === 'vape' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-                      }`}>
-                        {reading.predictedClass === 'vape' ? 'Vape' : 'Normal'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
       
