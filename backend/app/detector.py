@@ -54,22 +54,22 @@ class Detector:
         
         # 4. State Machine
         if status == "CALIBRATING":
-             self._handle_calibrating(device_id, sample, state)
+             self._handle_calibrating(device_id, sample, state, current_ts)
              # During calibration, we don't trigger events, but we want the dashboard to know
              # We can return a special notification type or just let the state update reflect in next poll
              
         elif status == "IDLE":
-            event_doc, notification_type = self._handle_idle(device_id, sample, state)
+            event_doc, notification_type = self._handle_idle(device_id, sample, state, current_ts)
             
         elif status == "CONFIRMING":
-            event_doc, notification_type = self._handle_confirming(device_id, sample, state)
+            event_doc, notification_type = self._handle_confirming(device_id, sample, state, current_ts)
             
         elif status == "COOLDOWN":
             self._handle_cooldown(device_id, state, current_ts)
 
         return event_doc, notification_type
 
-    def _handle_calibrating(self, device_id: str, sample: Dict[str, Any], state: Dict[str, Any]):
+    def _handle_calibrating(self, device_id: str, sample: Dict[str, Any], state: Dict[str, Any], current_ts: datetime):
         # Update EWMA aggressively
         pm25 = sample.get('pm25')
         if pm25 is None:
@@ -86,7 +86,8 @@ class Detector:
         if cal_start_str:
             try:
                 cal_start = datetime.fromisoformat(cal_start_str)
-                now = sample['timestamp']
+                # Use server time (current_ts) for reliable duration
+                now = current_ts
                 
                 # Ensure timezones match
                 if not cal_start.tzinfo:
@@ -109,7 +110,7 @@ class Detector:
              
         state_manager.update_state(device_id, updates)
 
-    def _handle_idle(self, device_id: str, sample: Dict[str, Any], state: Dict[str, Any]):
+    def _handle_idle(self, device_id: str, sample: Dict[str, Any], state: Dict[str, Any], current_ts: datetime):
         # Update EWMA
         pm25 = sample.get('pm25')
         if pm25 is None:
@@ -139,7 +140,7 @@ class Detector:
         
         if is_triggered:
             # Transition to CONFIRMING
-            t0 = sample['timestamp']
+            t0 = current_ts # Use server time for state tracking
             event_id = str(uuid.uuid4())
             
             updates.update({
@@ -172,14 +173,14 @@ class Detector:
             state_manager.update_state(device_id, updates)
             return None, None
 
-    def _handle_confirming(self, device_id: str, sample: Dict[str, Any], state: Dict[str, Any]):
+    def _handle_confirming(self, device_id: str, sample: Dict[str, Any], state: Dict[str, Any], current_ts: datetime):
         t0 = state.get("t0")
         if not t0:
             # Error state, reset
             state_manager.clear_state(device_id)
             return None, None
             
-        now = sample['timestamp']
+        now = current_ts # Use server time
         duration = (now - t0).total_seconds()
         
         # Log progress every ~5 seconds

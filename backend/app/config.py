@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     MIN_MARGIN: float = 0.00    # Lowered from 0.15
 
     # Calibration Duration
-    CALIBRATION_DURATION_SEC: int = 60
+    CALIBRATION_DURATION_SEC: int = 120
     
     class Config:
         env_file = ".env"

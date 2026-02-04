@@ -488,7 +488,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
           {/* Actions Section */}
           <div className="pb-8">
             <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">Historical Logs</h3>
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 gap-3 mb-6">
               <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                 {history.map((reading, i) => (
                   <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors">
@@ -526,6 +526,26 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                   </div>
                 ))}
               </div>
+            </div>
+
+             {/* Delete Button */}
+             <div className="pt-4 border-t border-gray-100">
+              <button 
+                onClick={() => {
+                  if (window.confirm('Are you sure you want to delete this device? This action cannot be undone.')) {
+                    deviceService.deleteDevice(device.id)
+                      .then(() => {
+                        onClose();
+                        if (onPingDevice) onPingDevice(); // Trigger refresh if needed
+                      })
+                      .catch(err => alert('Failed to delete device'));
+                  }
+                }}
+                className="w-full py-3 px-4 flex items-center justify-center space-x-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors"
+              >
+                <Icons.Trash />
+                <span className="font-medium">Delete Device</span>
+              </button>
             </div>
           </div>
         </div>
