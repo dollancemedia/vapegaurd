@@ -199,22 +199,28 @@ async def get_sensor_status():
 
 @router.get("/sensor-data")
 async def get_sensor_data(limit: int = 50):
-    """Recent sensor data formatted for the frontend dashboard."""
+    """Recent sensor data formatted for the frontend dashboard.
+    Fetches from 'samples' collection to show raw environmental data history.
+    """
     try:
-        cursor = db.events.find().sort("timestamp", -1).limit(limit)
+        # Fetch from SAMPLES, not EVENTS, so we see the continuous stream
+        cursor = db.samples.find().sort("timestamp", -1).limit(limit)
         sensor_data = []
         async for doc in cursor:
             # Format for frontend
+            # Note: Raw samples might not have 'status' or 'top_class', default to normal
             sensor_reading = {
                 "device_id": doc.get("device_id", "unknown"),
                 "timestamp": doc.get("timestamp"),
                 "humidity": doc.get("humidity", 0),
                 "pm25": doc.get("pm25", 0),
+                "pm10": doc.get("pm10", 0),
                 "temperature": doc.get("temperature", 0),
+                "gas_resistance": doc.get("gas_resistance", 0),
                 "prediction": {
-                    "type": doc.get("top_class", "normal"),
+                    "type": doc.get("top_class", "normal"), # Samples usually don't have this
                     "confidence": doc.get("confidence", 0),
-                    "status": doc.get("status")
+                    "status": doc.get("status", "monitoring")
                 }
             }
             sensor_data.append(sensor_reading)

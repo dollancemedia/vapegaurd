@@ -139,11 +139,80 @@ async def get_device_summary(school: Optional[str] = None):
         # 3. Fetch metadata and stats for THIS device
         metadata = await db.device_metadata.find_one({"device_id": device_id})
         
-        # Get latest event
+        # Get latest event (for status/alerts)
         latest_event = await db.events.find_one(
             {"device_id": device_id},
             sort=[("timestamp", -1)]
         )
+        
+        # Get latest raw sample (for real-time values even if no event)
+        latest_sample = await db.samples.find_one(
+            {"device_id": device_id},
+            sort=[("timestamp", -1)]
+        )
+        
+        # Determine which data to show
+        # If we have a recent sample, it's likely newer than the last "event"
+        # We want to show the physics values from the sample, but maybe status from event?
+        # Actually, simpler: if sample is newer, use sample values. 
+        # But sample doesn't have "status" or "top_class" usually.
+        
+        current_data = latest_event
+        
+        # Check if sample is newer or if event doesn't exist
+        is_sample_newer = False
+        if latest_sample:
+            if not latest_event:
+                is_sample_newer = True
+            else:
+                # Compare timestamps (assuming ISO strings)
+                t_sample = latest_sample.get("timestamp", "")
+                t_event = latest_event.get("timestamp", "")
+                if t_sample > t_event:
+                    is_sample_newer = True
+        
+        if is_sample_newer:
+            # Base the display object on the sample
+            current_data = latest_sample.copy()
+            
+            # Get real-time state from State Manager
+            # This ensures we see "CALIBRATING" or "CONFIRMING" even if no event is generated yet
+            real_time_state = state_manager.get_state(device_id)
+            rt_status = "monitoring"
+            if real_time_state:
+                rt_status = real_time_state.get("status", "monitoring")
+            
+            # Default status fields
+            current_data.setdefault("status", rt_status)
+            current_data.setdefault("top_class", "normal")
+            current_data.setdefault("confidence", 0)
+            
+            # If there was a recent event (e.g. within 1 minute), maybe we should persist the status?
+            # But "monitoring" is safer if we are just polling.
+            # The detector updates state_manager, we could query that for "CALIBRATING" etc.
+            # For now, let's just ensure we have DATA (non-zero physics).
+
+        # Get stats (counts)raw sample (for real-time values even if no event)
+        latest_sample = await db.samples.find_one(
+            {"device_id": device_id},
+            sort=[("timestamp", -1)]
+        )
+        
+        # Use sample as source of truth for current readings if it's newer
+        current_data = latest_event
+        if latest_sample:
+            # If no event or sample is newer
+            if not latest_event or (latest_sample.get("timestamp", "") > latest_event.get("timestamp", "")):
+                # Construct a display object from sample
+                current_data = latest_sample.copy()
+                # Add default event fields to satisfy frontend
+                if "status" not in current_data:
+                    current_data["status"] = "monitoring" 
+                if "top_class" not in current_data:
+                    current_data["top_class"] = "normal"
+                if "confidence" not in current_data:
+                    current_data["confidence"] = 0
+
         
         # Get stats (counts)
         event_count = await db.events.count_documents({"device_id": device_id})

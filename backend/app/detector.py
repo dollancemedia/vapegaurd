@@ -20,17 +20,24 @@ class Detector:
             event_doc: Dict to save to 'events' collection (or None)
             notification_type: 'suspicious', 'confirmed', or None
         """
-        # 1. Parse timestamp
-        if isinstance(sample.get('timestamp'), str):
+        # 1. Parse timestamp (Local variable, do not modify sample in place)
+        # This 'ts_val' is the DATA timestamp from the sensor.
+        ts_val = sample.get('timestamp')
+        if isinstance(ts_val, str):
             try:
-                sample['timestamp'] = datetime.fromisoformat(sample['timestamp'])
+                data_ts = datetime.fromisoformat(ts_val)
             except ValueError:
-                sample['timestamp'] = self._get_now() # Fallback
+                data_ts = self._get_now()
+        elif isinstance(ts_val, datetime):
+            data_ts = ts_val
+        else:
+            data_ts = self._get_now()
         
-        if not sample.get('timestamp').tzinfo:
-            sample['timestamp'] = sample['timestamp'].replace(tzinfo=timezone.utc)
-
-        current_ts = sample['timestamp']
+        if not data_ts.tzinfo:
+            data_ts = data_ts.replace(tzinfo=timezone.utc)
+            
+        # Use SERVER time for all State Machine logic to prevent "freezing" if sensor clock is stuck
+        server_now = self._get_now()
         
         # 2. Add to rolling buffer
         state_manager.add_sample(device_id, sample)
@@ -42,7 +49,7 @@ class Detector:
         if not state:
             state = {
                 "status": "CALIBRATING", 
-                "calibration_start": self._get_now().isoformat(),
+                "calibration_start": server_now.isoformat(),
                 "ewma_pm25": None
             }
             state_manager.update_state(device_id, state)
@@ -53,19 +60,18 @@ class Detector:
         notification_type = None
         
         # 4. State Machine
+        # PASS server_now for logic control, but methods can access sample['timestamp'] if needed for records
         if status == "CALIBRATING":
-             self._handle_calibrating(device_id, sample, state, current_ts)
-             # During calibration, we don't trigger events, but we want the dashboard to know
-             # We can return a special notification type or just let the state update reflect in next poll
+             self._handle_calibrating(device_id, sample, state, server_now)
              
         elif status == "IDLE":
-            event_doc, notification_type = self._handle_idle(device_id, sample, state, current_ts)
+            event_doc, notification_type = self._handle_idle(device_id, sample, state, server_now)
             
         elif status == "CONFIRMING":
-            event_doc, notification_type = self._handle_confirming(device_id, sample, state, current_ts)
+            event_doc, notification_type = self._handle_confirming(device_id, sample, state, server_now)
             
         elif status == "COOLDOWN":
-            self._handle_cooldown(device_id, state, current_ts)
+            self._handle_cooldown(device_id, state, server_now)
 
         return event_doc, notification_type
 
