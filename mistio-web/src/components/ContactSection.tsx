@@ -30,13 +30,13 @@ export const ContactSection = () => {
               <ContactItem 
                 icon={<Phone className="w-6 h-6" />}
                 title="Call Us"
-                content="(555) 123-4567"
-                href="tel:+15551234567"
+                content="(408) 507 8922"
+                href="tel:4085078922"
               />
               <ContactItem 
                 icon={<MapPin className="w-6 h-6" />}
                 title="Headquarters"
-                content="San Francisco, CA"
+                content="Fremont, CA"
               />
             </div>
           </div>

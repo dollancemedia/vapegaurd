@@ -12,6 +12,23 @@ export const Navbar = () => {
     { name: 'Contact', href: '#contact' },
   ];
 
+  const handleScroll = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    e.preventDefault();
+    const targetId = href.replace('#', '');
+    const element = document.getElementById(targetId);
+    if (element) {
+      const offset = 80; // Height of the navbar
+      const elementPosition = element.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - offset;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth'
+      });
+      setIsOpen(false);
+    }
+  };
+
   return (
     <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -42,6 +59,7 @@ export const Navbar = () => {
               <a
                 key={link.name}
                 href={link.href}
+                onClick={(e) => handleScroll(e, link.href)}
                 className="text-gray-600 hover:text-mistio-teal px-3 py-2 rounded-md text-sm font-medium transition-colors"
               >
                 {link.name}
@@ -79,6 +97,7 @@ export const Navbar = () => {
               <a
                 key={link.name}
                 href={link.href}
+                onClick={(e) => handleScroll(e, link.href)}
                 className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-mistio-teal hover:bg-gray-50"
               >
                 {link.name}
