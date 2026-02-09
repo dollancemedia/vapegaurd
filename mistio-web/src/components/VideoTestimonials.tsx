@@ -73,7 +73,7 @@ export const VideoTestimonials = () => {
                 ref={videoRef}
                 className="w-full h-full object-cover"
                 poster="https://images.unsplash.com/photo-1577896335477-2858506f9793?q=80&w=2069&auto=format&fit=crop"
-                src="https://assets.mixkit.co/videos/preview/mixkit-group-of-students-walking-in-university-hallway-4654-large.mp4"
+                src="/community-stories.mp4"
                 loop
                 playsInline
                 onClick={togglePlay}

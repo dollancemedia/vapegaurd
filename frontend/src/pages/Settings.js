@@ -10,13 +10,32 @@ const Settings = () => {
   const notificationSystemRef = useRef(null);
   
   // Settings State
-  const [settings, setSettings] = useState({
-    criticalAlerts: true,
-    warningAlerts: true,
-    onlineStatus: true,
-    soundEnabled: true,
-    threshold: 75
+  const [settings, setSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('notificationSettings');
+      return saved ? JSON.parse(saved) : {
+        criticalAlerts: true,
+        warningAlerts: true,
+        onlineStatus: true,
+        soundEnabled: true,
+        threshold: 75
+      };
+    } catch (e) {
+      return {
+        criticalAlerts: true,
+        warningAlerts: true,
+        onlineStatus: true,
+        soundEnabled: true,
+        threshold: 75
+      };
+    }
   });
+
+  // Save to localStorage whenever settings change
+  React.useEffect(() => {
+    localStorage.setItem('notificationSettings', JSON.stringify(settings));
+    window.dispatchEvent(new Event('notificationSettingsChanged'));
+  }, [settings]);
 
   const handleToggle = (key) => {
     setSettings(prev => ({ ...prev, [key]: !prev[key] }));

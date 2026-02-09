@@ -73,11 +73,22 @@ export const deviceService = {
           room: 'Unknown',
         };
 
+        // Determine status: prioritize specific backend states if online
+        let status = isOnline ? 'online' : 'offline';
+        if (isOnline && latest.status) {
+           // If backend reports specific state, use it
+           if (['CALIBRATING', 'CONFIRMING', 'ALARM', 'IDLE'].includes(latest.status)) {
+             status = latest.status;
+           } else if (latest.status === 'monitoring') {
+             status = 'online';
+           }
+        }
+
         return {
           id: device.device_id,
           name: deviceName,
           type: 'detector',
-          status: isOnline ? 'online' : 'offline',
+          status: status,
           location,
           mapLocation: device.map_location || null,
           lastSeen: device.last_seen || new Date().toISOString(),
@@ -86,6 +97,7 @@ export const deviceService = {
             humidity: latest.humidity || 0,
             temperature: latest.temperature || 0,
             pm25: latest.pm25 || 0,
+            ewma_pm25: latest.ewma_pm25, // Add baseline
             particleSize: latest.particle_size || latest.particleSize || 0,
             volumeSpike: latest.volume_spike || latest.volumeSpike || false,
             gasResistance: latest.gas_resistance || 0,
@@ -257,6 +269,17 @@ export const deviceService = {
     } catch (error) {
       console.error('Error testing device connection:', error);
       throw new Error(error.response?.data?.message || 'Failed to test device connection');
+    }
+  },
+
+  // Recalibrate device
+  async recalibrateDevice(deviceId) {
+    try {
+      const response = await apiClient.post(`/devices/${deviceId}/recalibrate`);
+      return response.data;
+    } catch (error) {
+      console.error('Error recalibrating device:', error);
+      throw new Error(error.response?.data?.message || 'Failed to recalibrate device');
     }
   },
 

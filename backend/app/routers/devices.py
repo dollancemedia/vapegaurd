@@ -181,6 +181,7 @@ async def get_device_summary(school: Optional[str] = None):
         rt_state = state_manager.get_state(device_id)
         if rt_state:
             current_data["status"] = rt_state.get("status", "monitoring")
+            current_data["ewma_pm25"] = rt_state.get("ewma_pm25")
         elif "status" not in current_data:
             current_data["status"] = "monitoring"
             

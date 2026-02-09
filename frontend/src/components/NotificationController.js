@@ -11,6 +11,34 @@ const NotificationController = () => {
   const [events, setEvents] = useState([]);
   const [allowedDevices, setAllowedDevices] = useState(null);
   
+  // Notification Settings
+  const [settings, setSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('notificationSettings');
+      return saved ? JSON.parse(saved) : {
+        criticalAlerts: true,
+        warningAlerts: true,
+        onlineStatus: true
+      };
+    } catch (e) {
+      return { criticalAlerts: true, warningAlerts: true, onlineStatus: true };
+    }
+  });
+
+  // Listen for settings changes
+  useEffect(() => {
+    const handleStorageChange = () => {
+      try {
+        const saved = localStorage.getItem('notificationSettings');
+        if (saved) {
+          setSettings(JSON.parse(saved));
+        }
+      } catch (e) { console.error(e); }
+    };
+    window.addEventListener('notificationSettingsChanged', handleStorageChange);
+    return () => window.removeEventListener('notificationSettingsChanged', handleStorageChange);
+  }, []);
+
   // Use ref for tracking time to avoid re-creating the WebSocket handler (which causes reconnects)
   const lastNotificationTimeRef = useRef({}); 
   const offlineDevicesRef = useRef(new Set());
@@ -53,6 +81,15 @@ const NotificationController = () => {
   }, [getToken]);
 
   const processAlert = useCallback((deviceId, predictedClass, confidence, locationStr, timestamp) => {
+      // Filter based on settings
+      if (predictedClass === 'offline' && !settings.onlineStatus) return;
+      
+      const isCritical = ['vape', 'fire', 'alarm'].includes(predictedClass);
+      const isWarning = ['suspected', 'CONFIRMING', 'calibrating', 'CALIBRATING'].includes(predictedClass);
+      
+      if (isCritical && !settings.criticalAlerts) return;
+      if (isWarning && !settings.warningAlerts) return;
+
       const now = Date.now();
       const lastTime = lastNotificationTimeRef.current[deviceId] || 0;
           
@@ -75,7 +112,7 @@ const NotificationController = () => {
 
       // Update events state (SchoolNotificationSystem watches this)
       setEvents([newEvent]);
-  }, []);
+  }, [settings]);
 
   // Polling backup to ensure we catch persistent vape states even if WS misses them
   useEffect(() => {
@@ -116,10 +153,15 @@ const NotificationController = () => {
                     return; // Data is too old, likely a stale state
                 }
 
-                if (device.sensorData && (device.sensorData.predictedClass === 'vape' || device.sensorData.predictedClass === 'fire')) {
+                const pClass = device.sensorData?.predictedClass;
+                const status = device.status;
+                const isAlarm = pClass === 'vape' || pClass === 'fire';
+                const isSuspicious = pClass === 'suspected' || status === 'CONFIRMING';
+
+                if (device.sensorData && (isAlarm || isSuspicious)) {
                     processAlert(
                         device.id,
-                        device.sensorData.predictedClass,
+                        isAlarm ? pClass : 'suspected',
                         device.sensorData.confidence,
                         locationStr,
                         device.sensorData.timestamp
