@@ -77,12 +77,25 @@ export const deviceService = {
         let status = isOnline ? 'online' : 'offline';
         if (isOnline && latest.status) {
            // If backend reports specific state, use it
-           if (['CALIBRATING', 'CONFIRMING', 'ALARM', 'IDLE'].includes(latest.status)) {
+           if (['CALIBRATING', 'CONFIRMING', 'ALARM', 'IDLE', 'COOLDOWN'].includes(latest.status)) {
              status = latest.status;
+           } else if (latest.status === 'suspected') {
+             status = 'CONFIRMING';
            } else if (latest.status === 'monitoring') {
              status = 'online';
            }
         }
+
+        const predictedClass =
+          latest.predicted_class ||
+          latest.top_class ||
+          (latest.prediction ? latest.prediction.type : 'normal');
+
+        const confidence = (
+          latest.confidence ??
+          (typeof latest.top_prob === 'number' ? latest.top_prob * 100 : undefined) ??
+          (latest.prediction ? latest.prediction.confidence : 0)
+        );
 
         return {
           id: device.device_id,
@@ -101,12 +114,8 @@ export const deviceService = {
             particleSize: latest.particle_size || latest.particleSize || 0,
             volumeSpike: latest.volume_spike || latest.volumeSpike || false,
             gasResistance: latest.gas_resistance || 0,
-            predictedClass:
-              latest.predicted_class ||
-              (latest.prediction ? latest.prediction.type : 'normal'),
-            confidence:
-              latest.confidence ||
-              (latest.prediction ? latest.prediction.confidence : 0),
+            predictedClass,
+            confidence,
             timestamp: latest.timestamp || device.last_seen,
           },
         };

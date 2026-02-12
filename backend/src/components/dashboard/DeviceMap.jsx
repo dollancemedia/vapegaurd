@@ -62,12 +62,25 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh }) => {
     // Prioritize offline status
     if (device.status === 'offline') return { color: '#9CA3AF', pulse: false, icon: '💤' }; // Gray
 
-    const isVape = device.sensorData?.predictedClass === 'vape';
+    const predictedClass = device.sensorData?.predictedClass;
     const isAlarm = device.status === 'alarm';
     
-    if (isVape) return { color: '#EF4444', pulse: true, icon: '⚠️' }; // Red
-    if (isAlarm) return { color: '#EF4444', pulse: true, icon: '🚨' }; // Red
-    if (device.status === 'online') return { color: '#10B981', pulse: false, icon: '📡' }; // Green
+    // Check for specific states from the detector
+    if (predictedClass === 'vape' || isAlarm) {
+      return { color: '#EF4444', pulse: true, icon: '⚠️' }; // Red
+    }
+    
+    if (predictedClass === 'suspected' || predictedClass === 'suspicious') {
+      return { color: '#F97316', pulse: true, icon: '❓' }; // Orange
+    }
+    
+    if (predictedClass === 'calibrating') {
+      return { color: '#EAB308', pulse: true, icon: '⚙️' }; // Yellow
+    }
+    
+    if (device.status === 'online') {
+      return { color: '#10B981', pulse: false, icon: '📡' }; // Green
+    }
     
     return { color: '#9CA3AF', pulse: false, icon: '?' };
   };

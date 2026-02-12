@@ -13,6 +13,11 @@ class Detector:
     def _get_now(self):
         return datetime.now(timezone.utc)
 
+    def _iso_utc(self, dt: datetime) -> str:
+        if not dt.tzinfo:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
     def process_sample(self, device_id: str, sample: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[str]]:
         """
         Main pipeline entry point.
@@ -43,10 +48,20 @@ class Detector:
         state_manager.add_sample(device_id, sample)
         
         # 3. Get current state
-        state = state_manager.get_state(device_id)
-        
-        # Initialize state if new
-        if not state:
+        state = state_manager.get_state(device_id) or {}
+
+        # Initialize state if new/default
+        if (
+            not state
+            or "status" not in state
+            or (
+                state.get("status") == "IDLE"
+                and state.get("ewma_pm25") is None
+                and state.get("t0") is None
+                and state.get("cooldown_until") is None
+                and not state.get("calibration_start")
+            )
+        ):
             state = {
                 "status": "CALIBRATING", 
                 "calibration_start": server_now.isoformat(),
@@ -166,6 +181,7 @@ class Detector:
                 "event_id": event_id,
                 "device_id": device_id,
                 "t_start": t0,
+                "timestamp": self._iso_utc(t0),
                 "status": "suspected",
                 "phase1_reason": {
                     "d_pm25": d_pm25,
@@ -236,6 +252,7 @@ class Detector:
             "device_id": device_id,
             "t_start": t0,
             "t_decision": decision_time,
+            "timestamp": self._iso_utc(decision_time),
             "status": prediction["status"], # confirmed or uncertain
             "top_class": prediction["top_class"],
             "probs": prediction["probs"],

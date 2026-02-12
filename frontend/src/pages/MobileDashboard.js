@@ -103,12 +103,34 @@ const MobileDashboard = () => {
 
   // WebSocket handler
   const handleWebSocketMessage = useCallback((message) => {
-    // console.log('WebSocket update:', message);
-    if (message.type === 'device_update') {
-      const { device_id, ...updates } = message.data;
-      if (device_id) {
-        updateDeviceStatus(device_id, updates);
-      }
+    if (!message) return;
+
+    if (message.type === 'sensor_data' || message.type === 'newSensorData') {
+      const payload = message.data || message;
+      const reading = payload.sensor_data || payload;
+      const deviceId = payload.device_id || (payload.sensor_data && payload.sensor_data.device_id);
+      if (!deviceId) return;
+
+      const wsState = reading?.prediction?.status;
+      const derivedStatus =
+        wsState === 'CALIBRATING' || wsState === 'CONFIRMING' || wsState === 'COOLDOWN' || wsState === 'IDLE'
+          ? wsState
+          : 'online';
+
+      updateDeviceStatus(deviceId, {
+        sensorData: {
+          humidity: reading.humidity,
+          temperature: reading.temperature || 0,
+          pm25: reading.pm25,
+          particleSize: reading.particle_size || reading.particleSize || 0,
+          volumeSpike: reading.volume_spike || reading.volumeSpike || false,
+          predictedClass: reading.predicted_class || (reading.prediction ? reading.prediction.type : 'normal'),
+          timestamp: reading.timestamp || new Date().toISOString(),
+          confidence: reading.confidence || (reading.prediction && reading.prediction.confidence) || 0
+        },
+        lastSeen: new Date().toISOString(),
+        status: derivedStatus
+      });
     }
   }, [updateDeviceStatus]);
 

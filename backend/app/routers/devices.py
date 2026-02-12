@@ -60,6 +60,29 @@ class DeviceInfoUpdate(BaseModel):
     name: Optional[str] = None
     location: Optional[Dict[str, str]] = None
 
+@router.post("/{device_id}/recalibrate")
+async def recalibrate_device(device_id: str):
+    """Force device back to calibration mode by resetting baseline state."""
+    device_exists = await db.devices.find_one({"device_id": device_id}, {"_id": 1})
+    if not device_exists:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    now = datetime.utcnow().isoformat() + "Z"
+    state_manager.update_state(device_id, {
+        "status": "CALIBRATING",
+        "calibration_start": now,
+        "ewma_pm25": None,
+        "t0": None,
+        "cooldown_until": None
+    })
+
+    return {
+        "status": "success",
+        "device_id": device_id,
+        "message": "Recalibration started",
+        "calibration_start": now
+    }
+
 @router.put("/{device_id}/info")
 async def update_device_info(device_id: str, info: DeviceInfoUpdate):
     """Update device name and location info"""
@@ -143,7 +166,7 @@ async def get_device_summary(school: Optional[str] = None):
         # Get latest event (for status/alerts)
         latest_event = await db.events.find_one(
             {"device_id": device_id},
-            sort=[("timestamp", -1)]
+            sort=[("timestamp", -1), ("created_at", -1)]
         )
         
         # Get latest raw sample (for real-time values even if no event)
@@ -155,19 +178,42 @@ async def get_device_summary(school: Optional[str] = None):
         # Determine which data to show
         # We want the NEWEST info, whether it's a raw sample or a confirmed event
         current_data = {}
+
+        def to_dt(value):
+            if isinstance(value, datetime):
+                return value
+            if isinstance(value, str):
+                try:
+                    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+                except ValueError:
+                    return None
+            return None
+
+        def best_ts(doc: Optional[dict]):
+            if not doc:
+                return None
+            return (
+                to_dt(doc.get("timestamp"))
+                or to_dt(doc.get("t_decision"))
+                or to_dt(doc.get("created_at"))
+                or to_dt(doc.get("t_start"))
+            )
         
         # 1. Determine base data source
         try:
             if latest_sample and latest_event:
-                # Safe comparison: Convert to strings or compare if same type
-                # Timestamps are likely ISO strings if inserted by sensors.py
-                t_sample = str(latest_sample.get("timestamp", ""))
-                t_event = str(latest_event.get("timestamp", ""))
+                t_sample = best_ts(latest_sample)
+                t_event = best_ts(latest_event)
                 
-                if t_sample > t_event:
+                if t_sample and t_event:
+                    if t_sample > t_event:
+                        current_data = latest_sample.copy()
+                    else:
+                        current_data = latest_event.copy()
+                elif t_sample:
                      current_data = latest_sample.copy()
                 else:
-                     current_data = latest_event.copy()
+                    current_data = latest_event.copy()
             elif latest_sample:
                 current_data = latest_sample.copy()
             elif latest_event:
@@ -187,6 +233,12 @@ async def get_device_summary(school: Optional[str] = None):
             
         # 3. Ensure defaults for frontend
         current_data.setdefault("top_class", "normal")
+        current_data.setdefault("predicted_class", current_data.get("top_class", "normal"))
+        if "confidence" not in current_data and current_data.get("top_prob") is not None:
+            try:
+                current_data["confidence"] = float(current_data.get("top_prob", 0)) * 100.0
+            except (TypeError, ValueError):
+                current_data["confidence"] = 0
         current_data.setdefault("confidence", 0)
         
         # Get stats (counts)

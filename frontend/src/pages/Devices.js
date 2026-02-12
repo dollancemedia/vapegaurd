@@ -141,6 +141,11 @@ const Devices = () => {
       if (deviceId) {
         // Extract sensor reading
         const reading = payload.sensor_data || payload;
+        const wsState = reading?.prediction?.status;
+        const derivedStatus =
+          wsState === 'CALIBRATING' || wsState === 'CONFIRMING' || wsState === 'COOLDOWN' || wsState === 'IDLE'
+            ? wsState
+            : 'online';
         
         // Map to format expected by DeviceDetailPanel
         const updates = {
@@ -155,7 +160,7 @@ const Devices = () => {
             confidence: reading.confidence || (reading.prediction && reading.prediction.confidence) || 0
           },
           lastSeen: new Date().toISOString(),
-          status: 'online'
+          status: derivedStatus
         };
         
         // Update device in the list

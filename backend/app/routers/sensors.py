@@ -1,12 +1,13 @@
 from fastapi import APIRouter, HTTPException, Request
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from app.database import db
 from app.ws import broadcast_event, broadcast_sensor_reading
 from app.detector import detector
 from app.config import settings
+from app.state_manager import state_manager
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -36,10 +37,14 @@ async def process_notifications(event_doc: Dict[str, Any], notification_type: st
             message = f"Suspicious activity detected at {event_doc.get('device_id')}"
             
     elif notification_type == "confirmed":
+        confidence = event_doc.get("confidence")
+        if confidence is None:
+            confidence = float(event_doc.get("top_prob", 0) or 0) * 100.0
+
         if notify_only_if_vape:
             if top_class == "vape" and status != "uncertain":
                 should_notify = True
-                message = f"Vape detected at {event_doc.get('device_id')} ({event_doc.get('confidence', 0):.1f}%)"
+                message = f"Vape detected at {event_doc.get('device_id')} ({confidence:.1f}%)"
         else:
             # Notify on any confirmed class (excluding uncertain if desired, or include)
             if status != "uncertain":

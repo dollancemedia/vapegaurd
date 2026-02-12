@@ -5,11 +5,38 @@ const LatestReading = ({ latestReading, isLoading }) => {
   const getAlertClass = (type) => {
     switch (type) {
       case 'vape':
-        return 'alert-warning';
+        return 'alert-danger'; // Changed to danger for vape as it's critical
       case 'fire':
         return 'alert-danger';
+      case 'suspected':
+      case 'suspicious':
+        return 'alert-warning';
+      case 'calibrating':
+        return 'alert-info'; // Or a custom class if needed, info is blue usually
       default:
-        return 'alert-info';
+        return 'alert-success';
+    }
+  };
+
+  const getStatusColor = (type) => {
+    switch (type) {
+      case 'vape': return '#EF4444'; // Red
+      case 'fire': return '#DC2626'; // Dark Red
+      case 'suspected': 
+      case 'suspicious': return '#F97316'; // Orange
+      case 'calibrating': return '#EAB308'; // Yellow
+      default: return '#10B981'; // Green
+    }
+  };
+
+  const getStatusIcon = (type) => {
+     switch (type) {
+      case 'vape': return '💨';
+      case 'fire': return '🔥';
+      case 'suspected': 
+      case 'suspicious': return '❓';
+      case 'calibrating': return '⚙️';
+      default: return '✅';
     }
   };
 
@@ -52,13 +79,11 @@ const LatestReading = ({ latestReading, isLoading }) => {
               
               <div className="reading-item">
                 <div className="reading-icon status-icon">
-                  {latestReading.prediction?.type === 'vape' ? '💨' : 
-                   (latestReading.prediction?.type === 'fire' ? '🔥' : '✅')}
+                  {getStatusIcon(latestReading.prediction?.type)}
                 </div>
                 <div className="reading-name">Status</div>
                 <div className="reading-data" style={{
-                  color: latestReading.prediction?.type === 'vape' ? '#d97706' : 
-                         (latestReading.prediction?.type === 'fire' ? '#dc2626' : '#10b981'),
+                  color: getStatusColor(latestReading.prediction?.type),
                   textTransform: 'uppercase',
                   fontWeight: 'bold',
                   fontSize: '0.9rem'
@@ -71,9 +96,7 @@ const LatestReading = ({ latestReading, isLoading }) => {
             {latestReading.prediction && (
               <div className={`prediction-alert ${getAlertClass(latestReading.prediction.type)}`}>
                 <div className="prediction-type">
-                  {latestReading.prediction.type === 'vape' && '💨'}
-                  {latestReading.prediction.type === 'fire' && '🔥'}
-                  {latestReading.prediction.type === 'normal' && '✓'}
+                  {getStatusIcon(latestReading.prediction.type)}
                   <span>{latestReading.prediction.type?.toUpperCase() || 'UNKNOWN'}</span>
                 </div>
                 <div className="prediction-confidence">

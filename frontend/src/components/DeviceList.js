@@ -145,6 +145,9 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
             const isSelected = selectedDevice?.id === device.id;
             const isAlarm = device.status === 'alarm';
             const isOffline = device.status === 'offline';
+            const isCalibrating = device.status === 'CALIBRATING' || device.sensorData?.predictedClass === 'calibrating';
+            const isSuspicious = device.status === 'CONFIRMING' || device.sensorData?.predictedClass === 'suspected';
+            const isVape = device.sensorData?.predictedClass === 'vape';
             
             return (
               <div
@@ -163,7 +166,7 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
                 <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full 
                   ${isOffline 
                     ? 'bg-gray-300' 
-                    : (device.sensorData?.predictedClass === 'vape' ? 'bg-red-500' : 'bg-[#00C2CB]')
+                    : (isVape ? 'bg-red-500' : isSuspicious ? 'bg-orange-500' : isCalibrating ? 'bg-yellow-500' : 'bg-[#00C2CB]')
                   }
                 `} />
 
@@ -172,7 +175,10 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
                     <div className="flex items-center space-x-3">
                       <div className={`
                         p-2 rounded-lg 
-                        ${isAlarm ? 'bg-red-100 text-red-600' : (isOffline ? 'bg-gray-100 text-gray-500' : 'bg-[#00C2CB]/20 text-[#00C2CB]')}
+                        ${isAlarm || isVape ? 'bg-red-100 text-red-600' :
+                          (isOffline ? 'bg-gray-100 text-gray-500' :
+                           (isSuspicious ? 'bg-orange-100 text-orange-600' :
+                            (isCalibrating ? 'bg-yellow-100 text-yellow-700' : 'bg-[#00C2CB]/20 text-[#00C2CB]')))}
                       `}>
                         {device.type === 'admin' ? <Icons.Admin /> : <Icons.Detector />}
                       </div>
@@ -192,17 +198,27 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
                     {/* Status Badge */}
                     <div className={`
                       flex items-center px-2.5 py-1 rounded-full text-xs font-medium border
-                      ${isAlarm 
+                      ${isAlarm || isVape
                         ? 'bg-red-50 text-red-700 border-red-100' 
                         : (isOffline 
                           ? 'bg-gray-50 text-gray-600 border-gray-100' 
-                          : 'bg-[#00C2CB]/10 text-[#00C2CB] border-[#00C2CB]/20')
+                          : (isSuspicious
+                            ? 'bg-orange-50 text-orange-700 border-orange-100'
+                            : (isCalibrating
+                              ? 'bg-yellow-50 text-yellow-700 border-yellow-100'
+                              : 'bg-[#00C2CB]/10 text-[#00C2CB] border-[#00C2CB]/20')))
                       }
                     `}>
                       <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                        isAlarm ? 'bg-red-500 animate-pulse' : (isOffline ? 'bg-gray-400' : 'bg-[#00C2CB]')
+                        isAlarm || isVape ? 'bg-red-500 animate-pulse' :
+                        (isOffline ? 'bg-gray-400' :
+                         (isSuspicious ? 'bg-orange-500 animate-pulse' :
+                          (isCalibrating ? 'bg-yellow-500 animate-pulse' : 'bg-[#00C2CB]')))
                       }`} />
-                      {device.status === 'alarm' ? 'Alert' : (device.status === 'online' ? 'Online' : 'Offline')}
+                      {isVape ? 'Vape' :
+                        (isSuspicious ? 'Suspected' :
+                         (isCalibrating ? 'Calibrating' :
+                          (device.status === 'alarm' ? 'Alert' : (device.status === 'online' ? 'Online' : 'Offline'))))}
                     </div>
                   </div>
 
