@@ -24,8 +24,9 @@ class Settings(BaseSettings):
     MIN_TOP_PROB: float = 0.40  # Lowered from 0.60
     MIN_MARGIN: float = 0.00    # Lowered from 0.15
 
-    # Calibration Duration
-    CALIBRATION_DURATION_SEC: int = 120
+    # Startup handling
+    WARMUP_DURATION_SEC: int = 120
+    CALIBRATION_DURATION_SEC: int = 60
     
     class Config:
         env_file = ".env"

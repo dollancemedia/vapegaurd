@@ -143,7 +143,7 @@ const Devices = () => {
         const reading = payload.sensor_data || payload;
         const wsState = reading?.prediction?.status;
         const derivedStatus =
-          wsState === 'CALIBRATING' || wsState === 'CONFIRMING' || wsState === 'COOLDOWN' || wsState === 'IDLE'
+          wsState === 'WARMUP' || wsState === 'CALIBRATING' || wsState === 'CONFIRMING' || wsState === 'COOLDOWN' || wsState === 'IDLE'
             ? wsState
             : 'online';
         

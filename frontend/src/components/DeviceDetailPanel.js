@@ -318,6 +318,8 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                 ? 'bg-gray-50 border-gray-200 ring-1 ring-gray-300'
                 : device.sensorData.predictedClass === 'vape' 
                   ? 'bg-red-50 border-red-100 ring-1 ring-red-200'
+                  : device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup'
+                    ? 'bg-yellow-50 border-yellow-100 ring-1 ring-yellow-200'
                   : device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating'
                     ? 'bg-yellow-50 border-yellow-100 ring-1 ring-yellow-200'
                     : device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected'
@@ -331,12 +333,14 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                     p-2 rounded-full
                     ${device.status === 'offline' ? 'bg-gray-200 text-gray-500' :
                       device.sensorData.predictedClass === 'vape' ? 'bg-red-100 text-red-600' :
+                      device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? 'bg-yellow-100 text-yellow-600' :
                       device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? 'bg-yellow-100 text-yellow-600' :
                       device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? 'bg-orange-100 text-orange-600' :
                       'bg-[#00C2CB]/10 text-[#00C2CB]'}
                   `}>
                     {device.status === 'offline' ? <Icons.Close /> :
                      device.sensorData.predictedClass === 'vape' ? <Icons.Warning /> :
+                     device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? <span className="text-xl">⏳</span> :
                      device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? <span className="text-xl">⚙️</span> :
                      device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? <span className="text-xl">⚠️</span> :
                      <Icons.Check />}
@@ -345,6 +349,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                     <h3 className={`text-sm font-semibold uppercase tracking-wide
                       ${device.status === 'offline' ? 'text-gray-600' :
                         device.sensorData.predictedClass === 'vape' ? 'text-red-800' :
+                        device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? 'text-yellow-800' :
                         device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? 'text-yellow-800' :
                         device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? 'text-orange-800' :
                         'text-[#00C2CB]'}
@@ -354,12 +359,14 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                     <p className={`text-lg font-bold
                       ${device.status === 'offline' ? 'text-gray-700' :
                         device.sensorData.predictedClass === 'vape' ? 'text-red-700' :
+                        device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? 'text-yellow-700' :
                         device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? 'text-yellow-700' :
                         device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? 'text-orange-700' :
                         'text-[#00C2CB]'}
                     `}>
                       {device.status === 'offline' ? 'Device Offline' :
                        device.sensorData.predictedClass === 'vape' ? 'Vape Detected' :
+                       device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? 'Warming Up...' :
                        device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? 'Calibrating...' :
                        device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? 'Confirming Event...' :
                        'Normal Atmosphere'}
@@ -379,6 +386,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                     <span className={`text-2xl font-bold
                       ${device.status === 'offline' ? 'text-gray-400' :
                         device.sensorData.predictedClass === 'vape' ? 'text-red-700' :
+                        device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? 'text-yellow-700' :
                         device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? 'text-yellow-700' :
                         device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? 'text-orange-700' :
                         'text-emerald-700'}

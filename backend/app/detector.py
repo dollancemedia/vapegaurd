@@ -18,6 +18,21 @@ class Detector:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
+    def _parse_state_dt(self, raw_val: Any) -> Optional[datetime]:
+        if isinstance(raw_val, datetime):
+            dt = raw_val
+        elif isinstance(raw_val, str):
+            try:
+                dt = datetime.fromisoformat(raw_val.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        else:
+            return None
+
+        if not dt.tzinfo:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+
     def process_sample(self, device_id: str, sample: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[str]]:
         """
         Main pipeline entry point.
@@ -59,24 +74,28 @@ class Detector:
                 and state.get("ewma_pm25") is None
                 and state.get("t0") is None
                 and state.get("cooldown_until") is None
+                and not state.get("warmup_start")
                 and not state.get("calibration_start")
             )
         ):
             state = {
-                "status": "CALIBRATING", 
-                "calibration_start": server_now.isoformat(),
+                "status": "WARMUP",
+                "warmup_start": server_now.isoformat(),
                 "ewma_pm25": None
             }
             state_manager.update_state(device_id, state)
             
-        status = state.get("status", "CALIBRATING")
+        status = state.get("status", "WARMUP")
         
         event_doc = None
         notification_type = None
         
         # 4. State Machine
         # PASS server_now for logic control, but methods can access sample['timestamp'] if needed for records
-        if status == "CALIBRATING":
+        if status == "WARMUP":
+            self._handle_warmup(device_id, state, server_now)
+
+        elif status == "CALIBRATING":
              self._handle_calibrating(device_id, sample, state, server_now)
              
         elif status == "IDLE":
@@ -89,6 +108,32 @@ class Detector:
             self._handle_cooldown(device_id, state, server_now)
 
         return event_doc, notification_type
+
+    def _handle_warmup(self, device_id: str, state: Dict[str, Any], current_ts: datetime):
+        warmup_start_str = state.get("warmup_start")
+        updates: Dict[str, Any] = {}
+
+        if warmup_start_str:
+            warmup_start = self._parse_state_dt(warmup_start_str)
+            if warmup_start:
+                elapsed = (current_ts - warmup_start).total_seconds()
+
+                if int(elapsed) % 10 == 0:
+                    print(f"[Detector] WARMUP | Dev: {device_id} | T+{elapsed:.1f}s")
+
+                if elapsed >= settings.WARMUP_DURATION_SEC:
+                    updates.update({
+                        "status": "CALIBRATING",
+                        "calibration_start": current_ts.isoformat(),
+                        "ewma_pm25": None
+                    })
+            else:
+                updates["warmup_start"] = self._get_now().isoformat()
+        else:
+            updates["warmup_start"] = self._get_now().isoformat()
+
+        if updates:
+            state_manager.update_state(device_id, updates)
 
     def _handle_calibrating(self, device_id: str, sample: Dict[str, Any], state: Dict[str, Any], current_ts: datetime):
         # Update EWMA aggressively
@@ -105,14 +150,10 @@ class Detector:
         # Check time
         cal_start_str = state.get("calibration_start")
         if cal_start_str:
-            try:
-                cal_start = datetime.fromisoformat(cal_start_str)
+            cal_start = self._parse_state_dt(cal_start_str)
+            if cal_start:
                 # Use server time (current_ts) for reliable duration
                 now = current_ts
-                
-                # Ensure timezones match
-                if not cal_start.tzinfo:
-                    cal_start = cal_start.replace(tzinfo=timezone.utc)
                 
                 elapsed = (now - cal_start).total_seconds()
                 
@@ -123,7 +164,7 @@ class Detector:
                 if elapsed >= settings.CALIBRATION_DURATION_SEC:
                     print(f"[Detector] CALIBRATION COMPLETE | Dev: {device_id} | Final Base: {new_ewma:.2f}")
                     updates["status"] = "IDLE"
-            except ValueError:
+            else:
                 # If date parsing fails, reset calibration
                 updates["calibration_start"] = self._get_now().isoformat()
         else:

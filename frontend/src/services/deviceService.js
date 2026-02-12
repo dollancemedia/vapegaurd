@@ -77,7 +77,7 @@ export const deviceService = {
         let status = isOnline ? 'online' : 'offline';
         if (isOnline && latest.status) {
            // If backend reports specific state, use it
-           if (['CALIBRATING', 'CONFIRMING', 'ALARM', 'IDLE', 'COOLDOWN'].includes(latest.status)) {
+           if (['WARMUP', 'CALIBRATING', 'CONFIRMING', 'ALARM', 'IDLE', 'COOLDOWN'].includes(latest.status)) {
              status = latest.status;
            } else if (latest.status === 'suspected') {
              status = 'CONFIRMING';

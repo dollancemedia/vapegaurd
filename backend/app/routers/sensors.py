@@ -138,7 +138,9 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
         current_status = current_state.get("status", "IDLE") if current_state else "IDLE"
         
         display_type = "normal"
-        if current_status == "CALIBRATING":
+        if current_status == "WARMUP":
+            display_type = "warmup"
+        elif current_status == "CALIBRATING":
             display_type = "calibrating"
         elif current_status == "CONFIRMING":
              display_type = "suspected"

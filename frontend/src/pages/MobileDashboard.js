@@ -113,7 +113,7 @@ const MobileDashboard = () => {
 
       const wsState = reading?.prediction?.status;
       const derivedStatus =
-        wsState === 'CALIBRATING' || wsState === 'CONFIRMING' || wsState === 'COOLDOWN' || wsState === 'IDLE'
+        wsState === 'WARMUP' || wsState === 'CALIBRATING' || wsState === 'CONFIRMING' || wsState === 'COOLDOWN' || wsState === 'IDLE'
           ? wsState
           : 'online';
 

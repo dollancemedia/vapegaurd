@@ -77,11 +77,12 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditi
     const predictedClass = device.sensorData?.predictedClass;
 
     if (predictedClass === 'vape' || predictedClass === 'fire') return { color: '#EF4444', pulse: true, icon: '⚠️' }; // Red
-    if (status === 'alarm') return { color: '#EF4444', pulse: true, icon: '🚨' }; // Red
+    if (status === 'alarm') return { color: '#EF4444', pulse: false, icon: '🚨' }; // Red
     
     // New States
-    if (status === 'CALIBRATING') return { color: '#EAB308', pulse: true, icon: '⚙️' }; // Yellow
-    if (status === 'CONFIRMING' || predictedClass === 'suspected') return { color: '#F97316', pulse: true, icon: '👀' }; // Orange
+    if (status === 'WARMUP' || predictedClass === 'warmup') return { color: '#EAB308', pulse: false, icon: '⏳' }; // Yellow
+    if (status === 'CALIBRATING') return { color: '#EAB308', pulse: false, icon: '⚙️' }; // Yellow
+    if (status === 'CONFIRMING' || predictedClass === 'suspected') return { color: '#F97316', pulse: false, icon: '👀' }; // Orange
     
     if (status === 'online' || status === 'monitoring' || status === 'IDLE') return { color: '#10B981', pulse: false, icon: '📡' }; // Green
     
