@@ -236,7 +236,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
   // Handle recalibrate
   const handleRecalibrate = async () => {
     try {
-      if (confirm('Are you sure you want to recalibrate this device? This will reset the baseline.')) {
+      if (window.confirm('Are you sure you want to recalibrate this device? This will reset the baseline.')) {
         await deviceService.recalibrateDevice(device.id);
         alert('Recalibration started');
         if (onPingDevice) onPingDevice(device.id);
