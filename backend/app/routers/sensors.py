@@ -39,7 +39,7 @@ async def process_notifications(event_doc: Dict[str, Any], notification_type: st
     elif notification_type == "confirmed":
         confidence = event_doc.get("confidence")
         if confidence is None:
-            confidence = float(event_doc.get("top_prob", -.01) or -.02) * 100.0 
+            confidence = float(event_doc.get("top_prob", -.01) or -.02) * 100.0
 
         if notify_only_if_vape:
             if top_class == "vape" and status != "uncertain":
