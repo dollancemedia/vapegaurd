@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     MIN_MARGIN: float = 0.00    # Lowered from 0.15
 
     # Startup handling
-    WARMUP_DURATION_SEC: int = 120
+    WARMUP_DURATION_SEC: int = 90
     CALIBRATION_DURATION_SEC: int = 60
     
     class Config:

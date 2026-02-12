@@ -130,7 +130,10 @@ class DeviceStateManager:
             "t0": None,
             "cooldown_until": None,
             "ewma_pm25": None,
-            "ewma_pm25_slope": None
+            "ewma_pm25_slope": None,
+            "warmup_start": None,
+            "calibration_start": None,
+            "event_id": None
             # Add other EWMAs as needed
         }
         
@@ -147,6 +150,9 @@ class DeviceStateManager:
                 "cooldown_until": self._parse_dt(stored.get("cooldown_until")),
                 "ewma_pm25": float(stored.get("ewma_pm25")) if stored.get("ewma_pm25") else None,
                 "ewma_pm25_slope": float(stored.get("ewma_pm25_slope")) if stored.get("ewma_pm25_slope") else None,
+                "warmup_start": self._parse_dt(stored.get("warmup_start")),
+                "calibration_start": self._parse_dt(stored.get("calibration_start")),
+                "event_id": stored.get("event_id") or None,
             }
         else:
             return self._local_state.get(device_id, default_state)
