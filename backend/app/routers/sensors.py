@@ -109,7 +109,13 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
             logger.error(f"Failed to store raw sample or update device: {e}")
 
         # 3. Run Detector
-        event_doc, notification_type = detector.process_sample(payload.get("device_id"), payload)
+        # Keep streaming alive even if detector logic throws.
+        event_doc = None
+        notification_type = None
+        try:
+            event_doc, notification_type = detector.process_sample(payload.get("device_id"), payload)
+        except Exception as e:
+            logger.exception(f"Detector processing failed; continuing with raw stream: {e}")
         
         # 4. Handle Events
         stored_event_id = None
@@ -155,10 +161,13 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
                  display_type = "suspected"
 
         # We construct a reading object compatible with frontend expectations
+        server_ts = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
         sensor_reading = {
             "device_id": payload.get("device_id"),
             "school": payload.get("org_id"),
-            "timestamp": payload.get("timestamp"),
+            # Use server timestamp for live UI freshness; keep device timestamp too.
+            "timestamp": server_ts,
+            "sensor_timestamp": payload.get("timestamp"),
             "humidity": payload.get("humidity"),
             "pm25": payload.get("pm25"),
             "pm10": payload.get("pm10"),

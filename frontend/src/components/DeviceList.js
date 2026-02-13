@@ -144,7 +144,8 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
           devices.map((device) => {
             const isSelected = selectedDevice?.id === device.id;
             const isAlarm = device.status === 'alarm';
-            const isOffline = device.status === 'offline';
+            const isOffline = device.status === 'offline' || device.isOnline === false;
+            const isCooldown = device.status === 'COOLDOWN';
             const isWarmup = device.status === 'WARMUP' || device.sensorData?.predictedClass === 'warmup';
             const isCalibrating = device.status === 'CALIBRATING' || device.sensorData?.predictedClass === 'calibrating';
             const isSuspicious = device.status === 'CONFIRMING' || device.sensorData?.predictedClass === 'suspected';
@@ -157,7 +158,9 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
                   ? 'Warmup'
                   : isCalibrating
                     ? 'Calibrating'
-                    : (device.status === 'alarm' ? 'Alert' : (device.status === 'online' ? 'Online' : 'Offline'));
+                    : isCooldown
+                      ? 'Cooldown'
+                      : (device.status === 'alarm' ? 'Alert' : (isOffline ? 'Offline' : 'Online'));
             
             return (
               <div
@@ -176,7 +179,7 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
                 <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full 
                   ${isOffline 
                     ? 'bg-gray-300' 
-                    : (isVape ? 'bg-red-500' : isSuspicious ? 'bg-orange-500' : (isWarmup || isCalibrating) ? 'bg-yellow-500' : 'bg-[#00C2CB]')
+                    : (isVape ? 'bg-red-500' : isSuspicious ? 'bg-orange-500' : (isWarmup || isCalibrating) ? 'bg-yellow-500' : isCooldown ? 'bg-blue-500' : 'bg-[#00C2CB]')
                   }
                 `} />
 
@@ -188,7 +191,8 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
                         ${isAlarm || isVape ? 'bg-red-100 text-red-600' :
                           (isOffline ? 'bg-gray-100 text-gray-500' :
                            (isSuspicious ? 'bg-orange-100 text-orange-600' :
-                            ((isWarmup || isCalibrating) ? 'bg-yellow-100 text-yellow-700' : 'bg-[#00C2CB]/20 text-[#00C2CB]')))}
+                            ((isWarmup || isCalibrating) ? 'bg-yellow-100 text-yellow-700' :
+                              (isCooldown ? 'bg-blue-100 text-blue-700' : 'bg-[#00C2CB]/20 text-[#00C2CB]'))))}
                       `}>
                         {device.type === 'admin' ? <Icons.Admin /> : <Icons.Detector />}
                       </div>
@@ -216,14 +220,17 @@ const DeviceList = ({ devices, selectedDevice, onDeviceSelect, filters, onFilter
                             ? 'bg-orange-50 text-orange-700 border-orange-100'
                             : ((isWarmup || isCalibrating)
                               ? 'bg-yellow-50 text-yellow-700 border-yellow-100'
-                              : 'bg-[#00C2CB]/10 text-[#00C2CB] border-[#00C2CB]/20')))
+                              : (isCooldown
+                                ? 'bg-blue-50 text-blue-700 border-blue-100'
+                                : 'bg-[#00C2CB]/10 text-[#00C2CB] border-[#00C2CB]/20'))))
                       }
                     `}>
                       <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
                         isAlarm || isVape ? 'bg-red-500 animate-pulse' :
                         (isOffline ? 'bg-gray-400' :
                          (isSuspicious ? 'bg-orange-500' :
-                          ((isWarmup || isCalibrating) ? 'bg-yellow-500' : 'bg-[#00C2CB]')))
+                          ((isWarmup || isCalibrating) ? 'bg-yellow-500' :
+                            (isCooldown ? 'bg-blue-500' : 'bg-[#00C2CB]'))))
                       }`} />
                       {statusLabel}
                     </div>

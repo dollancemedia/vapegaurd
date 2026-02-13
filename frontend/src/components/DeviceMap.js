@@ -83,6 +83,7 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditi
     if (status === 'WARMUP' || predictedClass === 'warmup') return { color: '#EAB308', pulse: false, icon: '⏳' }; // Yellow
     if (status === 'CALIBRATING') return { color: '#EAB308', pulse: false, icon: '⚙️' }; // Yellow
     if (status === 'CONFIRMING' || predictedClass === 'suspected') return { color: '#F97316', pulse: false, icon: '👀' }; // Orange
+    if (status === 'COOLDOWN') return { color: '#3B82F6', pulse: false, icon: '🧊' }; // Blue
     
     if (status === 'online' || status === 'monitoring' || status === 'IDLE') return { color: '#10B981', pulse: false, icon: '📡' }; // Green
     
@@ -372,8 +373,9 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditi
                   <p className="text-xs text-gray-500">{hoveredDevice.type === 'admin' ? 'Admin Console' : 'Vape Detector'}</p>
                 </div>
                 <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
-                  hoveredDevice.status === 'online' ? 'bg-green-100 text-green-700' :
+                  hoveredDevice.status === 'online' || hoveredDevice.status === 'IDLE' ? 'bg-green-100 text-green-700' :
                   hoveredDevice.status === 'alarm' ? 'bg-red-100 text-red-700' :
+                  hoveredDevice.status === 'COOLDOWN' ? 'bg-blue-100 text-blue-700' :
                   'bg-gray-100 text-gray-600'
                 }`}>
                   {hoveredDevice.status}

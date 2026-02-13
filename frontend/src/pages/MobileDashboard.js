@@ -129,6 +129,7 @@ const MobileDashboard = () => {
           confidence: reading.confidence || (reading.prediction && reading.prediction.confidence) || 0
         },
         lastSeen: new Date().toISOString(),
+        isOnline: true,
         status: derivedStatus
       });
     }
@@ -176,7 +177,7 @@ const MobileDashboard = () => {
     return matchesStatus && matchesType && matchesSearch;
   }).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
-  const isSystemOnline = devices.some(device => device.status === 'online');
+  const isSystemOnline = devices.some(device => device.isOnline !== false);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 flex flex-col"> {/* pb-20 for bottom nav space */}

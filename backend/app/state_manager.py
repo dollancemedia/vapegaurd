@@ -133,7 +133,12 @@ class DeviceStateManager:
             "ewma_pm25_slope": None,
             "warmup_start": None,
             "calibration_start": None,
-            "event_id": None
+            "event_id": None,
+            "baseline_pm25": None,
+            "baseline_pm10": None,
+            "baseline_humidity": None,
+            "baseline_temperature": None,
+            "baseline_gas_resistance": None
             # Add other EWMAs as needed
         }
         
@@ -153,6 +158,11 @@ class DeviceStateManager:
                 "warmup_start": self._parse_dt(stored.get("warmup_start")),
                 "calibration_start": self._parse_dt(stored.get("calibration_start")),
                 "event_id": stored.get("event_id") or None,
+                "baseline_pm25": float(stored.get("baseline_pm25")) if stored.get("baseline_pm25") else None,
+                "baseline_pm10": float(stored.get("baseline_pm10")) if stored.get("baseline_pm10") else None,
+                "baseline_humidity": float(stored.get("baseline_humidity")) if stored.get("baseline_humidity") else None,
+                "baseline_temperature": float(stored.get("baseline_temperature")) if stored.get("baseline_temperature") else None,
+                "baseline_gas_resistance": float(stored.get("baseline_gas_resistance")) if stored.get("baseline_gas_resistance") else None,
             }
         else:
             return self._local_state.get(device_id, default_state)

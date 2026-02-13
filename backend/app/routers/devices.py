@@ -228,6 +228,11 @@ async def get_device_summary(school: Optional[str] = None):
         if rt_state:
             current_data["status"] = rt_state.get("status", "monitoring")
             current_data["ewma_pm25"] = rt_state.get("ewma_pm25")
+            current_data["baseline_pm25"] = rt_state.get("baseline_pm25")
+            current_data["baseline_pm10"] = rt_state.get("baseline_pm10")
+            current_data["baseline_humidity"] = rt_state.get("baseline_humidity")
+            current_data["baseline_temperature"] = rt_state.get("baseline_temperature")
+            current_data["baseline_gas_resistance"] = rt_state.get("baseline_gas_resistance")
         elif "status" not in current_data:
             current_data["status"] = "monitoring"
             

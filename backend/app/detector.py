@@ -163,7 +163,15 @@ class Detector:
 
                 if elapsed >= settings.CALIBRATION_DURATION_SEC:
                     print(f"[Detector] CALIBRATION COMPLETE | Dev: {device_id} | Final Base: {new_ewma:.2f}")
-                    updates["status"] = "IDLE"
+                    updates.update({
+                        "status": "IDLE",
+                        # Freeze baseline after calibration until explicit recalibration
+                        "baseline_pm25": new_ewma,
+                        "baseline_pm10": sample.get("pm10"),
+                        "baseline_humidity": sample.get("humidity"),
+                        "baseline_temperature": sample.get("temperature"),
+                        "baseline_gas_resistance": sample.get("gas_resistance")
+                    })
             else:
                 # If date parsing fails, reset calibration
                 updates["calibration_start"] = self._get_now().isoformat()
@@ -173,17 +181,18 @@ class Detector:
         state_manager.update_state(device_id, updates)
 
     def _handle_idle(self, device_id: str, sample: Dict[str, Any], state: Dict[str, Any], current_ts: datetime):
-        # Update EWMA
+        # Use frozen baseline from calibration (not rolling) unless missing.
         pm25 = sample.get('pm25')
         if pm25 is None:
             return None, None
-            
-        prev_ewma = state.get('ewma_pm25')
-        new_ewma = FeatureEngine.update_ewma(pm25, prev_ewma, settings.EWMA_ALPHA)
-        
+
+        baseline_pm25 = state.get('baseline_pm25')
+        prev_ewma = baseline_pm25 if baseline_pm25 is not None else state.get('ewma_pm25')
+        if prev_ewma is None:
+            prev_ewma = pm25
+
         # Calculate Delta
-        # If no previous EWMA (first sample), delta is 0
-        d_pm25 = (pm25 - prev_ewma) if prev_ewma is not None else 0.0
+        d_pm25 = pm25 - prev_ewma
         
         # Verbose Logging for IDLE state (sampled to avoid flooding)
         if prev_ewma is not None and abs(d_pm25) > 1.0:
@@ -197,8 +206,10 @@ class Detector:
             print(f"[Detector] TRIGGERED! | Delta {d_pm25:.2f} >= Threshold {settings.D_PM25_SUS}")
             is_triggered = True
         
-        # Update State with new EWMA
-        updates = {"ewma_pm25": new_ewma}
+        updates = {
+            # Keep ewma_pm25 aligned to display baseline; do not roll in IDLE.
+            "ewma_pm25": prev_ewma
+        }
         
         if is_triggered:
             # Transition to CONFIRMING
@@ -210,7 +221,7 @@ class Detector:
                 "t0": t0,
                 "event_id": event_id,
                 # Snapshot baselines
-                "snapshot_pm25_base": new_ewma, 
+                "snapshot_pm25_base": prev_ewma,
                 "snapshot_pm1_base": sample.get('pm1'), # Approx
                 "snapshot_pm10_base": sample.get('pm10') # Approx
             })

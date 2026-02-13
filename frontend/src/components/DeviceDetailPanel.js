@@ -318,6 +318,8 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                 ? 'bg-gray-50 border-gray-200 ring-1 ring-gray-300'
                 : device.sensorData.predictedClass === 'vape' 
                   ? 'bg-red-50 border-red-100 ring-1 ring-red-200'
+                  : device.status === 'COOLDOWN'
+                    ? 'bg-blue-50 border-blue-100 ring-1 ring-blue-200'
                   : device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup'
                     ? 'bg-yellow-50 border-yellow-100 ring-1 ring-yellow-200'
                   : device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating'
@@ -333,6 +335,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                     p-2 rounded-full
                     ${device.status === 'offline' ? 'bg-gray-200 text-gray-500' :
                       device.sensorData.predictedClass === 'vape' ? 'bg-red-100 text-red-600' :
+                      device.status === 'COOLDOWN' ? 'bg-blue-100 text-blue-600' :
                       device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? 'bg-yellow-100 text-yellow-600' :
                       device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? 'bg-yellow-100 text-yellow-600' :
                       device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? 'bg-orange-100 text-orange-600' :
@@ -349,6 +352,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                     <h3 className={`text-sm font-semibold uppercase tracking-wide
                       ${device.status === 'offline' ? 'text-gray-600' :
                         device.sensorData.predictedClass === 'vape' ? 'text-red-800' :
+                        device.status === 'COOLDOWN' ? 'text-blue-800' :
                         device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? 'text-yellow-800' :
                         device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? 'text-yellow-800' :
                         device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? 'text-orange-800' :
@@ -359,6 +363,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                     <p className={`text-lg font-bold
                       ${device.status === 'offline' ? 'text-gray-700' :
                         device.sensorData.predictedClass === 'vape' ? 'text-red-700' :
+                        device.status === 'COOLDOWN' ? 'text-blue-700' :
                         device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? 'text-yellow-700' :
                         device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? 'text-yellow-700' :
                         device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? 'text-orange-700' :
@@ -366,6 +371,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                     `}>
                       {device.status === 'offline' ? 'Device Offline' :
                        device.sensorData.predictedClass === 'vape' ? 'Vape Detected' :
+                       device.status === 'COOLDOWN' ? 'Cooldown' :
                        device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? 'Warming Up...' :
                        device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? 'Calibrating...' :
                        device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? 'Confirming Event...' :
@@ -386,6 +392,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                     <span className={`text-2xl font-bold
                       ${device.status === 'offline' ? 'text-gray-400' :
                         device.sensorData.predictedClass === 'vape' ? 'text-red-700' :
+                        device.status === 'COOLDOWN' ? 'text-blue-700' :
                         device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? 'text-yellow-700' :
                         device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? 'text-yellow-700' :
                         device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? 'text-orange-700' :
@@ -421,6 +428,11 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                     <span className="text-blue-500"><Icons.Humidity /></span>
                   </div>
                   <div className="text-2xl font-bold text-gray-900">{Number(device.sensorData.humidity).toFixed(2)}<span className="text-sm font-normal text-gray-500 ml-1">%</span></div>
+                  {device.sensorData.baseline_humidity !== undefined && device.sensorData.baseline_humidity !== null && (
+                    <span className="text-xs text-gray-500 font-medium">
+                      Baseline: {Number(device.sensorData.baseline_humidity).toFixed(1)}
+                    </span>
+                  )}
                 </div>
                 
                 <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-purple-200 hover:shadow-sm transition-all">
@@ -430,9 +442,9 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                   </div>
                   <div className="flex flex-col">
                     <div className="text-2xl font-bold text-gray-900">{device.sensorData.pm25}<span className="text-sm font-normal text-gray-500 ml-1">μg/m³</span></div>
-                    {device.sensorData.ewma_pm25 !== undefined && (
+                    {(device.sensorData.baseline_pm25 !== undefined || device.sensorData.ewma_pm25 !== undefined) && (
                       <span className="text-xs text-gray-500 font-medium">
-                        Baseline: {Number(device.sensorData.ewma_pm25).toFixed(1)}
+                        Baseline: {Number(device.sensorData.baseline_pm25 ?? device.sensorData.ewma_pm25).toFixed(1)}
                       </span>
                     )}
                   </div>
@@ -452,6 +464,11 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                       </span>
                     )}
                   </div>
+                  {device.sensorData.baseline_temperature !== undefined && device.sensorData.baseline_temperature !== null && (
+                    <span className="text-xs text-gray-500 font-medium">
+                      Baseline: {Number(device.sensorData.baseline_temperature).toFixed(1)}°C
+                    </span>
+                  )}
                 </div>
 
                 <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-green-200 hover:shadow-sm transition-all">
@@ -463,6 +480,11 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                     {formatGasResistance(device.sensorData.gasResistance).split(' ')[0]}
                     <span className="text-sm font-normal text-gray-500 ml-1">kΩ</span>
                   </div>
+                  {device.sensorData.baseline_gas_resistance !== undefined && device.sensorData.baseline_gas_resistance !== null && (
+                    <span className="text-xs text-gray-500 font-medium">
+                      Baseline: {Number(device.sensorData.baseline_gas_resistance).toFixed(0)}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -661,3 +683,4 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
 };
 
 export default DeviceDetailPanel;
+

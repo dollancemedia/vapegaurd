@@ -160,6 +160,7 @@ const Devices = () => {
             confidence: reading.confidence || (reading.prediction && reading.prediction.confidence) || 0
           },
           lastSeen: new Date().toISOString(),
+          isOnline: true,
           status: derivedStatus
         };
         
@@ -205,7 +206,7 @@ const Devices = () => {
 
   // Determine overall system status
   // Show "Live" if ANY device is online, otherwise "Offline"
-  const isSystemOnline = devices.some(device => device.status === 'online');
+  const isSystemOnline = devices.some(device => device.isOnline !== false);
 
   if (isMobile) {
     return <MobileDashboard />;

@@ -102,6 +102,7 @@ export const deviceService = {
           name: deviceName,
           type: 'detector',
           status: status,
+          isOnline,
           location,
           mapLocation: device.map_location || null,
           lastSeen: device.last_seen || new Date().toISOString(),
@@ -114,9 +115,14 @@ export const deviceService = {
             particleSize: latest.particle_size || latest.particleSize || 0,
             volumeSpike: latest.volume_spike || latest.volumeSpike || false,
             gasResistance: latest.gas_resistance || 0,
+            baseline_humidity: latest.baseline_humidity,
             predictedClass,
             confidence,
             timestamp: latest.timestamp || device.last_seen,
+            baseline_pm25: latest.baseline_pm25 ?? latest.ewma_pm25,
+            baseline_pm10: latest.baseline_pm10,
+            baseline_temperature: latest.baseline_temperature,
+            baseline_gas_resistance: latest.baseline_gas_resistance,
           },
         };
       });
