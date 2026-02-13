@@ -316,9 +316,13 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
               relative overflow-hidden rounded-2xl p-5 border
               ${device.status === 'offline'
                 ? 'bg-gray-50 border-gray-200 ring-1 ring-gray-300'
-                : device.sensorData.predictedClass === 'vape' 
+                : (device.sensorData.predictedClass === 'vape' 
                   ? 'bg-red-50 border-red-100 ring-1 ring-red-200' 
-                  : 'bg-emerald-50 border-emerald-100 ring-1 ring-emerald-200'
+                  : (device.sensorData.predictedClass === 'suspected' || device.sensorData.predictedClass === 'suspicious'
+                    ? 'bg-orange-50 border-orange-100 ring-1 ring-orange-200'
+                    : (device.sensorData.predictedClass === 'calibrating'
+                      ? 'bg-yellow-50 border-yellow-100 ring-1 ring-yellow-200'
+                      : 'bg-emerald-50 border-emerald-100 ring-1 ring-emerald-200')))
               }
             `}>
               <div className="flex justify-between items-center relative z-10">
@@ -326,21 +330,29 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                   <div className={`
                     p-2 rounded-full
                     ${device.status === 'offline' ? 'bg-gray-200 text-gray-500' :
-                      device.sensorData.predictedClass === 'vape' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}
+                      (device.sensorData.predictedClass === 'vape' ? 'bg-red-100 text-red-600' : 
+                      (device.sensorData.predictedClass === 'suspected' || device.sensorData.predictedClass === 'suspicious' ? 'bg-orange-100 text-orange-600' :
+                      (device.sensorData.predictedClass === 'calibrating' ? 'bg-yellow-100 text-yellow-600' : 'bg-emerald-100 text-emerald-600')))}
                   `}>
                     {device.status === 'offline' ? <Icons.Close /> :
-                     device.sensorData.predictedClass === 'vape' ? <Icons.Warning /> : <Icons.Check />}
+                     (device.sensorData.predictedClass === 'vape' ? <Icons.Warning /> : 
+                     (device.sensorData.predictedClass === 'suspected' || device.sensorData.predictedClass === 'suspicious' ? <Icons.Warning /> :
+                     (device.sensorData.predictedClass === 'calibrating' ? <Icons.Detector /> : <Icons.Check />)))}
                   </div>
                   <div>
                     <h3 className={`text-sm font-semibold uppercase tracking-wide
                       ${device.status === 'offline' ? 'text-gray-600' :
-                        device.sensorData.predictedClass === 'vape' ? 'text-red-800' : 'text-emerald-800'}
+                        (device.sensorData.predictedClass === 'vape' ? 'text-red-800' : 
+                        (device.sensorData.predictedClass === 'suspected' || device.sensorData.predictedClass === 'suspicious' ? 'text-orange-800' :
+                        (device.sensorData.predictedClass === 'calibrating' ? 'text-yellow-800' : 'text-emerald-800')))}
                     `}>
                       Current Status
                     </h3>
                     <p className={`text-lg font-bold
                       ${device.status === 'offline' ? 'text-gray-700' :
-                        device.sensorData.predictedClass === 'vape' ? 'text-red-700' : 'text-emerald-700'}
+                        (device.sensorData.predictedClass === 'vape' ? 'text-red-700' : 
+                        (device.sensorData.predictedClass === 'suspected' || device.sensorData.predictedClass === 'suspicious' ? 'text-orange-700' :
+                        (device.sensorData.predictedClass === 'calibrating' ? 'text-yellow-700' : 'text-emerald-700')))}
                     `}>
                       {device.status === 'offline' ? 'Device Offline' :
                        device.sensorData.predictedClass === 'vape' ? 'Vape Detected' : 'Normal Atmosphere'}
