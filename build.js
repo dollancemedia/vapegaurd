@@ -1,17 +1,17 @@
 const { execSync } = require('child_process');
 const path = require('path');
 
-console.log('Building Vape Detection System for Vercel...');
+console.log('Building Vape Detection System (Backend/Vite) for Vercel...');
 
 try {
-  // Change to frontend directory and build
-  console.log('Building React frontend...');
-  process.chdir(path.join(__dirname, 'frontend'));
+  // Change to backend directory and build
+  console.log('Building Vite frontend in backend/...');
+  process.chdir(path.join(__dirname, 'backend'));
   execSync('npm install', { stdio: 'inherit' });
   execSync('npm run build', { stdio: 'inherit' });
   
   console.log('✅ Build completed successfully!');
-  console.log('📦 Frontend built in frontend/build/');
+  console.log('📦 Frontend built in backend/dist/');
   console.log('🚀 Ready for Vercel deployment!');
   
 } catch (error) {

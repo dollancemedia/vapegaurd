@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion, useInView } from 'framer-motion';
+import { motion, useInView, Variants } from 'framer-motion';
 import { animateCounter } from '../../utils/svgAnimations';
 import AnimatedSection from '../animations/AnimatedSection';
 
@@ -21,7 +21,7 @@ const ProblemStatementSection: React.FC = () => {
   }, []);
 
   // Define variants for children
-  const itemVariants = {
+  const itemVariants: Variants = {
     hidden: { opacity: 0, y: 30 },
     visible: { 
       opacity: 1, 

@@ -1,50 +1,9 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "api/index.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "frontend/build"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/health",
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/dashboard",
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/docs",
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/api/(.*)",
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/static/(.*)",
-      "dest": "/static/$1"
-    },
-    {
-      "src": "/(.*\\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot))",
-      "dest": "/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
-  ],
-  "env": {
-    "MONGODB_URI": "mongodb+srv://vape_user:00i4UfE7eNQg3MeF@vape-alert.xntahp3.mongodb.net/?retryWrites=true&w=majority&appName=vape-alert",
-    "DATABASE_NAME": "vape-alert"
-  }
+  "framework": null,
+  "buildCommand": "cd backend && npm install && npm run build",
+  "outputDirectory": "backend/dist",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index.py" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
