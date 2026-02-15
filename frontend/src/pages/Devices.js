@@ -11,6 +11,16 @@ import { useAuth, useOrganization } from '@clerk/clerk-react';
 import MobileDashboard from './MobileDashboard';
 import { useMediaQuery } from 'react-responsive';
 
+const pickDefined = (obj = {}) =>
+  Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => value !== undefined && value !== null)
+  );
+
+const mergeDefined = (base = {}, patch = {}) => ({
+  ...base,
+  ...pickDefined(patch)
+});
+
 const Devices = () => {
   const isMobile = useMediaQuery({ maxWidth: 768 });
   
@@ -149,16 +159,23 @@ const Devices = () => {
         
         // Map to format expected by DeviceDetailPanel
         const updates = {
-          sensorData: {
+          sensorData: pickDefined({
             humidity: reading.humidity,
-            temperature: reading.temperature || 0,
+            temperature: reading.temperature,
             pm25: reading.pm25,
-            particleSize: reading.particle_size || reading.particleSize || 0,
-            volumeSpike: reading.volume_spike || reading.volumeSpike || false,
-            predictedClass: reading.predicted_class || (reading.prediction ? reading.prediction.type : 'normal'),
+            particleSize: reading.particle_size ?? reading.particleSize,
+            volumeSpike: reading.volume_spike ?? reading.volumeSpike,
+            predictedClass: reading.predicted_class ?? (reading.prediction ? reading.prediction.type : undefined),
             timestamp: reading.timestamp || new Date().toISOString(),
-            confidence: reading.confidence || (reading.prediction && reading.prediction.confidence) || 0
-          },
+            confidence: reading.confidence ?? (reading.prediction && reading.prediction.confidence),
+            gasResistance: reading.gas_resistance ?? reading.gasResistance,
+            ewma_pm25: reading.ewma_pm25,
+            baseline_humidity: reading.baseline_humidity,
+            baseline_pm25: reading.baseline_pm25,
+            baseline_pm10: reading.baseline_pm10,
+            baseline_temperature: reading.baseline_temperature,
+            baseline_gas_resistance: reading.baseline_gas_resistance
+          }),
           lastSeen: new Date().toISOString(),
           isOnline: true,
           status: derivedStatus
@@ -170,11 +187,11 @@ const Devices = () => {
         // Update history for this device
         setDeviceHistory(prev => {
           const currentHistory = prev[deviceId] || [];
+          const latestKnown = currentHistory[0] || {};
+          const mergedReading = mergeDefined(latestKnown, updates.sensorData);
+          mergedReading.timestamp = updates.sensorData.timestamp || new Date().toISOString();
           // Prepend new reading, keep last 50
-          const newHistory = [{
-            ...updates.sensorData,
-            timestamp: updates.sensorData.timestamp // Ensure timestamp is included
-          }, ...currentHistory].slice(0, 50);
+          const newHistory = [mergedReading, ...currentHistory].slice(0, 50);
           
           return {
             ...prev,
@@ -188,6 +205,7 @@ const Devices = () => {
             return {
               ...prev,
               ...updates,
+              sensorData: mergeDefined(prev.sensorData || {}, updates.sensorData || {}),
               // Merge location if present in payload, otherwise keep existing
               location: reading.location ? { ...prev.location, ...reading.location } : prev.location
             };

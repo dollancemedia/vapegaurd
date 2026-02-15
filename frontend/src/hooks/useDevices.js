@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { deviceService } from '../services/deviceService';
 
+const mergeDefined = (base = {}, patch = {}) => {
+  const next = { ...base };
+  Object.entries(patch || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      next[key] = value;
+    }
+  });
+  return next;
+};
+
 export const useDevices = (school) => {
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -68,8 +78,18 @@ export const useDevices = (school) => {
   const updateDeviceStatus = useCallback((deviceId, updates) => {
     setDevices(prevDevices => 
       prevDevices.map(device => 
-        device.id === deviceId 
-          ? { ...device, ...updates, lastSeen: new Date().toISOString() }
+        device.id === deviceId
+          ? {
+              ...device,
+              ...updates,
+              sensorData: updates?.sensorData
+                ? mergeDefined(device.sensorData || {}, updates.sensorData)
+                : device.sensorData,
+              location: updates?.location
+                ? { ...(device.location || {}), ...updates.location }
+                : device.location,
+              lastSeen: updates?.lastSeen || new Date().toISOString()
+            }
           : device
       )
     );
