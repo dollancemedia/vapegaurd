@@ -141,15 +141,14 @@ const Devices = () => {
   const handleWebSocketMessage = useCallback((message) => {
     if (!message) return;
 
-    // Check for sensor data updates
-    // Message format: { type: 'sensor_data', data: { device_id: '...', sensor_data: { ... } } }
     if (message.type === 'sensor_data' || message.type === 'newSensorData') {
       const payload = message.data || message;
-      // Handle both nested sensor_data structure and flat structure
       const deviceId = payload.device_id || (payload.sensor_data && payload.sensor_data.device_id);
       
       if (deviceId) {
-        // Extract sensor reading
+        const deviceFromState = devices.find(d => d.id === deviceId);
+        const latestFullSensorData = deviceFromState?.sensorData || {};
+
         const reading = payload.sensor_data || payload;
         const wsState = reading?.prediction?.status;
         const derivedStatus =
@@ -175,47 +174,36 @@ const Devices = () => {
             baseline_gas_resistance: reading.baseline_gas_resistance
         };
 
+        const newCompleteSensorData = mergeDefined(latestFullSensorData, sensorDataUpdate);
+
         const updates = {
-          sensorData: sensorDataUpdate,
+          sensorData: newCompleteSensorData,
           lastSeen: new Date().toISOString(),
           isOnline: true,
           status: derivedStatus
         };
-        
-        // Update device in the list
+
         updateDeviceStatus(deviceId, updates);
-        
-        // Update history for this device
+
         setDeviceHistory(prev => {
           const currentHistory = prev[deviceId] || [];
-          const latestKnown = currentHistory[0] || {};
-          const mergedReading = mergeDefined(latestKnown, sensorDataUpdate);
-          mergedReading.timestamp = sensorDataUpdate.timestamp || new Date().toISOString();
-          // Prepend new reading, keep last 50
-          const newHistory = [mergedReading, ...currentHistory].slice(0, 50);
-          
-          return {
-            ...prev,
-            [deviceId]: newHistory
-          };
+          const newHistoryEntry = { ...newCompleteSensorData, timestamp: sensorDataUpdate.timestamp };
+          const newHistory = [newHistoryEntry, ...currentHistory].slice(0, 50);
+          return { ...prev, [deviceId]: newHistory };
         });
 
-        // Update selected device if it matches
         setSelectedDevice(prev => {
           if (prev && prev.id === deviceId) {
             return {
               ...prev,
               ...updates,
-              sensorData: mergeDefined(prev.sensorData || {}, updates.sensorData || {}),
-              // Merge location if present in payload, otherwise keep existing
-              location: reading.location ? { ...prev.location, ...reading.location } : prev.location
             };
           }
           return prev;
         });
       }
     }
-  }, [updateDeviceStatus]);
+  }, [devices, updateDeviceStatus]);
 
   useWebSocket('/ws/events', {
     onMessage: handleWebSocketMessage,
