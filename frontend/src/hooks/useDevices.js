@@ -77,21 +77,19 @@ export const useDevices = (school) => {
   // Update device status (for real-time updates)
   const updateDeviceStatus = useCallback((deviceId, updates) => {
     setDevices(prevDevices => 
-      prevDevices.map(device => 
-        device.id === deviceId
-          ? {
-              ...device,
-              ...updates,
-              sensorData: updates?.sensorData
-                ? mergeDefined(device.sensorData || {}, updates.sensorData)
-                : device.sensorData,
-              location: updates?.location
-                ? { ...(device.location || {}), ...updates.location }
-                : device.location,
-              lastSeen: updates?.lastSeen || new Date().toISOString()
-            }
-          : device
-      )
+      prevDevices.map(device => {
+        if (device.id !== deviceId) return device;
+
+        // Deep merge sensorData to preserve fields from previous states
+        const newSensorData = mergeDefined(device.sensorData, updates.sensorData);
+
+        return {
+          ...device,
+          ...updates,
+          sensorData: newSensorData,
+          lastSeen: updates.lastSeen || device.lastSeen,
+        };
+      })
     );
   }, []);
 
