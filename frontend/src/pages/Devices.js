@@ -11,15 +11,15 @@ import { useAuth, useOrganization } from '@clerk/clerk-react';
 import MobileDashboard from './MobileDashboard';
 import { useMediaQuery } from 'react-responsive';
 
-const pickDefined = (obj = {}) =>
-  Object.fromEntries(
-    Object.entries(obj).filter(([, value]) => value !== undefined && value !== null)
-  );
-
-const mergeDefined = (base = {}, patch = {}) => ({
-  ...base,
-  ...pickDefined(patch)
-});
+const mergeDefined = (base = {}, patch = {}) => {
+  const result = { ...base };
+  for (const key in patch) {
+    if (patch[key] !== undefined && patch[key] !== null) {
+      result[key] = patch[key];
+    }
+  }
+  return result;
+};
 
 const Devices = () => {
   const isMobile = useMediaQuery({ maxWidth: 768 });
@@ -157,9 +157,7 @@ const Devices = () => {
             ? wsState
             : 'online';
         
-        // Map to format expected by DeviceDetailPanel
-        const updates = {
-          sensorData: pickDefined({
+        const sensorDataUpdate = {
             humidity: reading.humidity,
             temperature: reading.temperature,
             pm25: reading.pm25,
@@ -175,7 +173,10 @@ const Devices = () => {
             baseline_pm10: reading.baseline_pm10,
             baseline_temperature: reading.baseline_temperature,
             baseline_gas_resistance: reading.baseline_gas_resistance
-          }),
+        };
+
+        const updates = {
+          sensorData: sensorDataUpdate,
           lastSeen: new Date().toISOString(),
           isOnline: true,
           status: derivedStatus
@@ -188,8 +189,8 @@ const Devices = () => {
         setDeviceHistory(prev => {
           const currentHistory = prev[deviceId] || [];
           const latestKnown = currentHistory[0] || {};
-          const mergedReading = mergeDefined(latestKnown, updates.sensorData);
-          mergedReading.timestamp = updates.sensorData.timestamp || new Date().toISOString();
+          const mergedReading = mergeDefined(latestKnown, sensorDataUpdate);
+          mergedReading.timestamp = sensorDataUpdate.timestamp || new Date().toISOString();
           // Prepend new reading, keep last 50
           const newHistory = [mergedReading, ...currentHistory].slice(0, 50);
           
