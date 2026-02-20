@@ -3,6 +3,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
+from pydantic import BaseModel, Field, field_validator
+
 from app.database import db
 from app.ws import broadcast_event, broadcast_sensor_reading
 from app.detector import detector
@@ -11,6 +13,51 @@ from app.state_manager import state_manager
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+class SensorPayload(BaseModel):
+    """Validated, range-checked sensor reading from an ESP32 device."""
+
+    device_id: str = "unknown"
+    org_id: str = "unknown"
+    location: Optional[str] = None
+    sensor_type: Optional[str] = None
+
+    # Environmental sensors – physical bounds enforced
+    humidity: float = Field(default=0.0, ge=0.0, le=100.0)
+    temperature: float = Field(default=0.0, ge=-50.0, le=100.0)
+    pressure: Optional[float] = Field(default=None, ge=800.0, le=1200.0)
+    gas_resistance: float = Field(default=0.0, ge=0.0)
+
+    # Particulate matter (µg/m³) – WHO worst-case upper bounds
+    pm1: float = Field(default=0.0, ge=0.0, le=1000.0)
+    pm25: float = Field(default=0.0, ge=0.0, le=1000.0)
+    pm10: float = Field(default=0.0, ge=0.0, le=2000.0)
+
+    # Sound level (0–100 %)
+    sound_level: float = Field(default=0.0, ge=0.0, le=100.0)
+
+    # Optional derived / helper fields sent by firmware
+    wifi_rssi: Optional[int] = None
+    mic_available: Optional[bool] = None
+    temp_humidity_ratio: Optional[float] = None
+    gas_temp_interaction: Optional[float] = None
+    pm_ratio: Optional[float] = None
+    air_quality_index: Optional[float] = Field(default=None, ge=0.0)
+
+    # Timestamp is optional – backend fills it in if absent
+    timestamp: Optional[str] = None
+
+    model_config = {"extra": "allow"}  # Accept any additional fields
+
+    @field_validator("humidity", "pm25", "pm10", "gas_resistance", "sound_level", mode="before")
+    @classmethod
+    def coerce_numeric(cls, v: Any) -> float:
+        """Silently coerce bad values to 0.0 instead of raising a 422."""
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
 
 # Alert Configuration (Mock or Env based for now, ideally per-org in DB)
 # In a real app, fetch these from db.org_settings based on org_id
@@ -63,33 +110,15 @@ async def process_notifications(event_doc: Dict[str, Any], notification_type: st
         })
 
 @router.post("/data", status_code=200)
-async def receive_sensor_data(payload: Dict[str, Any], request: Request):
+async def receive_sensor_data(sensor: SensorPayload, request: Request):
     """
     Ingest sensor data, run stateful detection, store to DB, and broadcast updates.
     """
     try:
-        # 1. Clean & Sanitize Payload
-        if not payload:
-            return {"status": "error", "message": "Empty payload"}
-
-        # Ensure defaults
-        payload.setdefault("device_id", "unknown")
-        payload.setdefault("org_id", "unknown")
-        # Ensure timestamp is present (Detector handles parsing, but we need it for raw storage too)
-        if "timestamp" not in payload:
-             payload["timestamp"] = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
-
-        # Sanitize numerics
-        numeric_fields = ["humidity", "temperature", "pm25", "pm10", "gas_resistance", "sound_level"]
-        for field in numeric_fields:
-            val = payload.get(field)
-            try:
-                if val is None:
-                    payload[field] = 0.0
-                else:
-                    payload[field] = float(val)
-            except (ValueError, TypeError):
-                payload[field] = 0.0
+        # 1. Convert validated model to dict and add server timestamp if missing
+        payload: Dict[str, Any] = sensor.model_dump(exclude_none=False)
+        if not payload.get("timestamp"):
+            payload["timestamp"] = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
 
         # 2. Store Raw Sample (Async)
         try:

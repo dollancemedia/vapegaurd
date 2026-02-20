@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.database import db
+from app.database import db, create_indexes
 from app.inference import load_model, get_model_error
 from pymongo.errors import PyMongoError
 from datetime import datetime
@@ -10,6 +10,7 @@ from app.routers.sensors import router as sensors_router
 from app.dashboard import router as dashboard_router
 from app.ws import router as ws_router
 from app.routers.admin import router as admin_router
+from app.config import settings
 
 app = FastAPI(
     title="Vape/Fire Detection API",
@@ -17,28 +18,37 @@ app = FastAPI(
     version="1.0.2"
 )
 
-# CORS middleware with explicit origins for development and production
+# ---------------------------------------------------------------------------
+# CORS – origins are read from the CORS_ORIGINS env var (comma-separated).
+# Fall back to a safe localhost-only list when the variable is not set so
+# that local development keeps working out of the box.
+# ---------------------------------------------------------------------------
+_DEFAULT_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://localhost:3002",
+    "http://127.0.0.1:3002",
+]
+
+if settings.CORS_ORIGINS:
+    allowed_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+else:
+    allowed_origins = _DEFAULT_ORIGINS
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://10.0.0.43:3000",
-        "http://localhost:3002",
-        "http://127.0.0.1:3002",
-        "http://10.0.0.43:3002",
-        "https://mistio.app",
-        "https://dashboard.mistio.app",
-        "https://vapegaurd-x6wi.vercel.app",
-        "https://vapegaurd-x6wi-4iihr8nqn-rahuls-projects-d9f10f54.vercel.app",
-        "https://vapegaurd-production.up.railway.app"
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["*"]
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    expose_headers=["X-Request-ID"],
 )
+
+
+@app.on_event("startup")
+async def startup_event():
+    await create_indexes()
 
 @app.get("/")
 async def root():

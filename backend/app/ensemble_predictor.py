@@ -6,26 +6,21 @@ from .config import settings
 from .class_config import CLASS_ORDER, MODELS, FEATURE_ORDER
 
 class EnsemblePredictor:
-    def __init__(self, models_dir: str = "../models"):
+    def __init__(self, models_dir: Optional[str] = None):
         self.models = {}
-        self.models_dir = models_dir
+        # Resolve models directory relative to this source file so the path
+        # is stable regardless of the working directory or deployment layout.
+        # Layout: backend/app/ensemble_predictor.py → backend/models/
+        _here = os.path.dirname(os.path.abspath(__file__))
+        self.models_dir = models_dir or os.path.normpath(os.path.join(_here, "../models"))
         self.load_models()
 
     def load_models(self):
         """Loads models from disk and validates them."""
-        # Adjust path if running from app directory
         if not os.path.exists(self.models_dir):
-            # Try finding models relative to this file
-            base_path = os.path.dirname(os.path.abspath(__file__))
-            # backend/app -> backend/models
-            alt_path = os.path.join(base_path, "../models")
-            if os.path.exists(alt_path):
-                self.models_dir = alt_path
-            else:
-                 # Try backend/models from CWD (common in docker)
-                 if os.path.exists("backend/models"):
-                     self.models_dir = "backend/models"
-            
+            print(f"WARNING: Models directory not found: {self.models_dir}")
+            return
+
         print(f"Loading models from {self.models_dir}...")
         
         for name, filename in MODELS.items():

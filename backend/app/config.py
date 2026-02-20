@@ -1,10 +1,19 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import List, Optional
 
 class Settings(BaseSettings):
     MONGODB_URI: str
     DATABASE_NAME: str = "vape-alert"
     REDIS_URL: Optional[str] = None
+
+    # Authentication
+    # Clerk JWKS URL – set to your Clerk frontend API JWKS endpoint, e.g.:
+    #   https://<your-clerk-frontend-api>/.well-known/jwks.json
+    CLERK_JWKS_URL: Optional[str] = None
+
+    # CORS – comma-separated list of allowed origins.
+    # Falls back to a safe set of localhost origins for local development.
+    CORS_ORIGINS: Optional[str] = None
     
     # Physics Thresholds
     D_PM25_SUS: float = 10.0      # Sudden jump in PM2.5

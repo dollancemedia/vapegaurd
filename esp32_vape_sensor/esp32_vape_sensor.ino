@@ -12,10 +12,28 @@
 #include <SPI.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
+#include <Preferences.h>  // ESP32 non-volatile storage
 
-// WiFi Configuration
-const char* ssid = "sweethome";  // Replace with your WiFi network name
-const char* password = "rahul2008";  // Replace with your WiFi password
+// ---------------------------------------------------------------------------
+// WiFi credentials are stored in NVS (non-volatile storage) using the
+// Preferences library so that they are never hard-coded in source.
+//
+// First-time setup – send either command over the Serial monitor (115200 baud):
+//   SETWIFI:<ssid>,<password>     – persist credentials and reboot
+//   CLEARWIFI                     – erase stored credentials and reboot
+//
+// Credentials survive power cycles.  They must be set once per device.
+// ---------------------------------------------------------------------------
+Preferences prefs;
+
+// Runtime buffers populated from NVS in setup()
+char wifiSSID[64]     = "";
+char wifiPassword[64] = "";
+
+// Provisioning mode: entered when no credentials are stored in NVS.
+// In provisioning mode the device prints instructions and waits for Serial
+// input rather than attempting a WiFi connection.
+bool provisioningMode = false;
 
 // API Configuration
 // Local FastAPI backend on your PC (LAN testing)
@@ -125,7 +143,29 @@ void setup() {
   // Removed while (!Serial) to avoid blocking on ESP32-C6 native USB; can cause watchdog resets if the host isn't attached
   Serial.println("[Init] Serial started at 115200");
   delay(1000);
-  
+
+  // ------------------------------------------------------------------
+  // Load WiFi credentials from NVS
+  // ------------------------------------------------------------------
+  prefs.begin("wifi", /* readOnly= */ true);
+  String storedSSID = prefs.getString("ssid", "");
+  String storedPass = prefs.getString("password", "");
+  prefs.end();
+
+  if (storedSSID.length() == 0) {
+    provisioningMode = true;
+    Serial.println("\n=== PROVISIONING MODE ===");
+    Serial.println("No WiFi credentials found in NVS.");
+    Serial.println("Send:  SETWIFI:<ssid>,<password>  to configure and reboot.");
+    Serial.println("Example:  SETWIFI:MyNetwork,MyPassword");
+    // Stay in provisioning loop – do not attempt WiFi
+    return;
+  }
+
+  storedSSID.toCharArray(wifiSSID, sizeof(wifiSSID));
+  storedPass.toCharArray(wifiPassword, sizeof(wifiPassword));
+  Serial.println("WiFi credentials loaded from NVS.");
+
   Serial.println("\n=== ESP32-C6 Vape Detection Sensor ===");
   Serial.println("Device ID: " + DEVICE_ID);
   Serial.println("Location: " + LOCATION);
@@ -204,6 +244,18 @@ void setup() {
 }
 
 void loop() {
+  // ------------------------------------------------------------------
+  // Provisioning mode: wait for SETWIFI / CLEARWIFI commands
+  // ------------------------------------------------------------------
+  if (provisioningMode) {
+    handleSerialCommands();
+    delay(200);
+    return;
+  }
+
+  // Handle runtime Serial commands (SETWIFI / CLEARWIFI update on-the-fly)
+  handleSerialCommands();
+
   // Check WiFi connection
   if (WiFi.status() != WL_CONNECTED) {
     wifiConnected = false;
@@ -214,7 +266,7 @@ void loop() {
     wifiConnected = true;
     digitalWrite(LED_PIN, HIGH);
   }
-  
+
   // Read and send sensor data at specified interval
   if (millis() - lastSensorRead >= SENSOR_INTERVAL) {
     if (wifiConnected) {
@@ -224,27 +276,27 @@ void loop() {
     }
     lastSensorRead = millis();
   }
-  
+
   delay(100);  // Small delay to prevent watchdog issues
 }
 
 void connectToWiFi() {
-  Serial.println("Connecting to WiFi: " + String(ssid));
-  
+  Serial.println("Connecting to WiFi: " + String(wifiSSID));
+
   // Simple WiFi reset approach to avoid event queue issues
   WiFi.disconnect(true);     // Disconnect and clear stored credentials
   WiFi.mode(WIFI_OFF);       // Turn off WiFi completely
   delay(3000);               // Extended wait for complete reset
-  
+
   // Restart WiFi in station mode
   WiFi.mode(WIFI_STA);
   delay(1000);
-  
+
   // Set WiFi to use WPA2 only to avoid CCMP replay issues
   WiFi.setAutoReconnect(false);
-  
-  // Begin connection
-  WiFi.begin(ssid, password);
+
+  // Begin connection using NVS-loaded credentials
+  WiFi.begin(wifiSSID, wifiPassword);
   
   unsigned long startTime = millis();
   int attempts = 0;
@@ -612,26 +664,53 @@ String getTimestamp() {
   return String(millis());
 }
 
-// Function to update WiFi credentials via Serial
-void updateWiFiCredentials() {
-  if (Serial.available()) {
-    String command = Serial.readString();
-    command.trim();
-    
-    if (command.startsWith("WIFI:")) {
-      // Format: WIFI:SSID,PASSWORD
-      int commaIndex = command.indexOf(',');
-      if (commaIndex > 0) {
-        String newSSID = command.substring(5, commaIndex);
-        String newPassword = command.substring(commaIndex + 1);
-        
-        Serial.println("Updating WiFi credentials...");
-        Serial.println("New SSID: " + newSSID);
-        
-        WiFi.disconnect();
-        delay(1000);
-        WiFi.begin(newSSID.c_str(), newPassword.c_str());
-      }
+// ---------------------------------------------------------------------------
+// Serial command handler
+//
+//   SETWIFI:<ssid>,<password>  – persist credentials to NVS and reboot
+//   CLEARWIFI                  – erase credentials from NVS and reboot
+// ---------------------------------------------------------------------------
+void handleSerialCommands() {
+  if (!Serial.available()) return;
+
+  String command = Serial.readStringUntil('\n');
+  command.trim();
+
+  if (command.startsWith("SETWIFI:")) {
+    // Format: SETWIFI:<ssid>,<password>
+    String args = command.substring(8);  // strip "SETWIFI:"
+    int commaIndex = args.indexOf(',');
+    if (commaIndex <= 0) {
+      Serial.println("ERROR: Expected format  SETWIFI:<ssid>,<password>");
+      return;
     }
+
+    String newSSID = args.substring(0, commaIndex);
+    String newPass = args.substring(commaIndex + 1);
+    newSSID.trim();
+    newPass.trim();
+
+    if (newSSID.length() == 0) {
+      Serial.println("ERROR: SSID cannot be empty");
+      return;
+    }
+
+    prefs.begin("wifi", /* readOnly= */ false);
+    prefs.putString("ssid", newSSID);
+    prefs.putString("password", newPass);
+    prefs.end();
+
+    Serial.println("Credentials saved.  Rebooting in 2 seconds...");
+    delay(2000);
+    ESP.restart();
+
+  } else if (command == "CLEARWIFI") {
+    prefs.begin("wifi", /* readOnly= */ false);
+    prefs.clear();
+    prefs.end();
+
+    Serial.println("Credentials erased.  Rebooting in 2 seconds...");
+    delay(2000);
+    ESP.restart();
   }
 }
