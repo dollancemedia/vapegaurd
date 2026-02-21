@@ -193,42 +193,61 @@ class Detector:
 
         # Calculate Delta
         d_pm25 = pm25 - prev_ewma
-        
+
         # Verbose Logging for IDLE state (sampled to avoid flooding)
         if prev_ewma is not None and abs(d_pm25) > 1.0:
-             print(f"[Detector] IDLE | Dev: {device_id} | PM2.5: {pm25} | Base: {prev_ewma:.2f} | Delta: {d_pm25:.2f}")
+            print(f"[Detector] IDLE | Dev: {device_id} | PM2.5: {pm25} | Base: {prev_ewma:.2f} | Delta: {d_pm25:.2f}")
+
+        # Slope: µg/m³ per second since last reading (catches slow/low-output vaping)
+        slope = 0.0
+        prev_pm25 = state.get('prev_pm25')
+        prev_ts_str = state.get('prev_ts')
+        if prev_pm25 is not None and prev_ts_str is not None:
+            prev_ts_dt = self._parse_state_dt(prev_ts_str)
+            if prev_ts_dt:
+                dt = max((current_ts - prev_ts_dt).total_seconds(), 0.5)
+                slope = (pm25 - prev_pm25) / dt
 
         # Trigger Check
         is_triggered = False
-        
-        # Trigger 1: Sudden Jump (Delta)
+        trigger_reason = None
+
+        # Trigger 1: Sudden jump (delta)
         if d_pm25 >= settings.D_PM25_SUS:
-            print(f"[Detector] TRIGGERED! | Delta {d_pm25:.2f} >= Threshold {settings.D_PM25_SUS}")
+            print(f"[Detector] TRIGGERED (delta) | Dev: {device_id} | Delta {d_pm25:.2f} >= {settings.D_PM25_SUS}")
             is_triggered = True
-        
+            trigger_reason = "delta"
+
+        # Trigger 2: Sustained rise rate (catches slow/low-output vaping that never
+        # produces a single large jump but rises consistently above SLOPE_SUS µg/m³/s)
+        if not is_triggered and slope >= settings.SLOPE_SUS:
+            print(f"[Detector] TRIGGERED (slope) | Dev: {device_id} | Slope {slope:.2f} µg/m³/s >= {settings.SLOPE_SUS}")
+            is_triggered = True
+            trigger_reason = "slope"
+
         updates = {
-            # Keep ewma_pm25 aligned to display baseline; do not roll in IDLE.
-            "ewma_pm25": prev_ewma
+            "ewma_pm25": prev_ewma,
+            "prev_pm25": pm25,
+            "prev_ts": current_ts.isoformat(),
         }
-        
+
         if is_triggered:
             # Transition to CONFIRMING
-            t0 = current_ts # Use server time for state tracking
+            t0 = current_ts
             event_id = str(uuid.uuid4())
-            
+
             updates.update({
                 "status": "CONFIRMING",
                 "t0": t0,
                 "event_id": event_id,
-                # Snapshot baselines
+                "last_trigger_time": current_ts.isoformat(),
                 "snapshot_pm25_base": prev_ewma,
-                "snapshot_pm1_base": sample.get('pm1'), # Approx
-                "snapshot_pm10_base": sample.get('pm10') # Approx
+                "snapshot_pm1_base": sample.get('pm1'),
+                "snapshot_pm10_base": sample.get('pm10'),
             })
-            
+
             state_manager.update_state(device_id, updates)
-            
-            # Create Suspicious Event
+
             event_doc = {
                 "event_id": event_id,
                 "device_id": device_id,
@@ -236,14 +255,32 @@ class Detector:
                 "timestamp": self._iso_utc(t0),
                 "status": "suspected",
                 "phase1_reason": {
+                    "trigger": trigger_reason,
                     "d_pm25": d_pm25,
+                    "slope": slope,
                     "trigger_val": pm25,
-                    "baseline_val": prev_ewma
+                    "baseline_val": prev_ewma,
                 },
                 "created_at": self._get_now()
             }
             return event_doc, "suspicious"
         else:
+            # Slow baseline drift: nudge baseline toward current ambient only when
+            # the environment has been quiet for BASELINE_QUIET_SEC seconds.
+            # This corrects for multi-hour drift (humidity, outdoor PM, temperature)
+            # without chasing acute spikes.
+            last_trigger_str = state.get('last_trigger_time')
+            quiet_enough = True
+            if last_trigger_str:
+                last_trigger_dt = self._parse_state_dt(last_trigger_str)
+                if last_trigger_dt:
+                    quiet_enough = (current_ts - last_trigger_dt).total_seconds() > settings.BASELINE_QUIET_SEC
+
+            if quiet_enough:
+                drifted = prev_ewma * (1.0 - settings.BASELINE_DRIFT_ALPHA) + pm25 * settings.BASELINE_DRIFT_ALPHA
+                updates['baseline_pm25'] = drifted
+                updates['ewma_pm25'] = drifted
+
             state_manager.update_state(device_id, updates)
             return None, None
 

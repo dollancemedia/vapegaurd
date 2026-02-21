@@ -13,13 +13,18 @@ class Settings(BaseSettings):
     # Time Windows (in seconds)
     BASELINE_WINDOW_SEC: int = 10
     CONFIRM_WINDOW_SEC: int = 20
-    COOLDOWN_SEC: int = 15
+    COOLDOWN_SEC: int = 90
     
     # EWMA Alpha (Smoothing factor for Phase 1 baseline)
     # Higher = follows data faster, Lower = more stable baseline
     EWMA_ALPHA: float = 0.1
     EWMA_ALPHA_CALIBRATION: float = 0.5 # Faster adaptation during startup
-    
+
+    # Slow baseline drift during IDLE to track multi-hour environmental changes
+    # (e.g. humidity/PM shifts across the day in a bathroom)
+    BASELINE_DRIFT_ALPHA: float = 0.005   # very slow nudge per sample
+    BASELINE_QUIET_SEC: int = 180         # only drift after 3 min of no triggers
+
     # Uncertainty Thresholds
     MIN_TOP_PROB: float = 0.40  # Lowered from 0.60
     MIN_MARGIN: float = 0.00    # Lowered from 0.15

@@ -1,51 +1,161 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useUser, useClerk } from '@clerk/clerk-react';
+import { useMediaQuery } from 'react-responsive';
 import SchoolNotificationSystem from '../components/SchoolNotificationSystem';
-import { ChevronRight, Bell, Shield, Users, LogOut, Volume2, Wifi, AlertTriangle, Zap } from 'lucide-react';
+import {
+  Bell, Shield, Users, LogOut, Volume2, Wifi,
+  AlertTriangle, Zap, ChevronRight, Settings as SettingsIcon,
+} from 'lucide-react';
 
+// ── Custom toggle switch ───────────────────────────────────────────────────────
+const Toggle = ({ checked, onChange }) => (
+  <button
+    role="switch"
+    aria-checked={checked}
+    onClick={onChange}
+    style={{
+      width: 44, height: 24, borderRadius: 12,
+      background: checked ? 'var(--teal)' : '#e2e8f0',
+      border: 'none', cursor: 'pointer',
+      position: 'relative', flexShrink: 0,
+      transition: 'background 0.22s ease',
+      outline: 'none',
+      boxShadow: checked ? '0 0 0 3px rgba(0,194,203,0.15)' : 'none',
+    }}
+  >
+    <span style={{
+      position: 'absolute', top: 2,
+      left: checked ? 22 : 2,
+      width: 20, height: 20,
+      borderRadius: '50%', background: 'white',
+      boxShadow: '0 1px 5px rgba(0,0,0,0.18)',
+      transition: 'left 0.22s ease',
+      display: 'block',
+    }} />
+  </button>
+);
 
+// ── Icon box helper ────────────────────────────────────────────────────────────
+const IconBox = ({ icon, color, bg }) => (
+  <div style={{
+    width: 36, height: 36, borderRadius: 10,
+    background: bg, color,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  }}>
+    {icon}
+  </div>
+);
+
+// ── Row item ──────────────────────────────────────────────────────────────────
+const RowItem = ({ icon, color, bg, label, desc, right, borderBottom = true, onClick }) => (
+  <div
+    onClick={onClick}
+    role={onClick ? 'button' : undefined}
+    style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '14px 22px',
+      borderBottom: borderBottom ? '1px solid rgba(0,0,0,0.045)' : 'none',
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'background 0.15s',
+    }}
+    onMouseEnter={onClick ? e => e.currentTarget.style.background = 'rgba(0,0,0,0.018)' : undefined}
+    onMouseLeave={onClick ? e => e.currentTarget.style.background = 'transparent' : undefined}
+  >
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <IconBox icon={icon} color={color} bg={bg} />
+      <div>
+        <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1a1a1a', lineHeight: 1.3 }}>{label}</div>
+        {desc && <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: 1 }}>{desc}</div>}
+      </div>
+    </div>
+    {right}
+  </div>
+);
+
+// ── Section card shell ────────────────────────────────────────────────────────
+const SectionCard = ({ title, subtitle, children }) => (
+  <div style={{
+    background: 'var(--card-bg)',
+    borderRadius: 20,
+    border: '1px solid var(--card-border)',
+    boxShadow: 'var(--shadow-card)',
+    overflow: 'hidden',
+    backdropFilter: 'blur(24px)',
+    WebkitBackdropFilter: 'blur(24px)',
+  }}>
+    <div style={{ padding: '22px 22px 16px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+      <h2 style={{
+        fontFamily: 'var(--font-display)', fontWeight: 700,
+        fontSize: '1.3rem', color: '#1a1a1a', margin: 0,
+      }}>{title}</h2>
+      {subtitle && (
+        <p style={{ fontSize: '0.74rem', color: '#9ca3af', margin: '4px 0 0' }}>{subtitle}</p>
+      )}
+    </div>
+    {children}
+  </div>
+);
+
+// ── Nav items config ──────────────────────────────────────────────────────────
+const NAV_ITEMS = [
+  { key: 'notifications', label: 'Notifications', sub: 'Alerts & thresholds', icon: <Bell size={15} /> },
+  { key: 'account',       label: 'Account',       sub: 'Org & security',     icon: <Shield size={15} /> },
+];
+
+const TOGGLE_ROWS = [
+  {
+    key: 'criticalAlerts', label: 'Critical Alerts',
+    desc: 'Vape detected — immediate action required',
+    icon: <AlertTriangle size={16} />, color: '#ef4444', bg: 'rgba(239,68,68,0.09)',
+  },
+  {
+    key: 'warningAlerts', label: 'Warning Alerts',
+    desc: 'Suspected detection, actively monitoring',
+    icon: <Bell size={16} />, color: '#f97316', bg: 'rgba(249,115,22,0.09)',
+  },
+  {
+    key: 'onlineStatus', label: 'Online / Offline',
+    desc: 'Device connectivity status changes',
+    icon: <Wifi size={16} />, color: '#3b82f6', bg: 'rgba(59,130,246,0.09)',
+  },
+  {
+    key: 'soundEnabled', label: 'Sound Effects',
+    desc: 'Audio cues for incoming alert events',
+    icon: <Volume2 size={16} />, color: '#8b5cf6', bg: 'rgba(139,92,246,0.09)',
+  },
+];
+
+// ── Main component ────────────────────────────────────────────────────────────
 const Settings = () => {
   const { user } = useUser();
   const { signOut, openUserProfile, openOrganizationProfile } = useClerk();
   const notificationSystemRef = useRef(null);
-  
-  // Settings State
+  const isMobile = useMediaQuery({ maxWidth: 768 });
+
+  const [activeSection, setActiveSection] = useState('notifications');
+  const [testFired, setTestFired] = useState(false);
+
   const [settings, setSettings] = useState(() => {
     try {
       const saved = localStorage.getItem('notificationSettings');
       return saved ? JSON.parse(saved) : {
-        criticalAlerts: true,
-        warningAlerts: true,
-        onlineStatus: true,
-        soundEnabled: true,
-        threshold: 75
+        criticalAlerts: true, warningAlerts: true,
+        onlineStatus: true, soundEnabled: true, threshold: 75,
       };
-    } catch (e) {
-      return {
-        criticalAlerts: true,
-        warningAlerts: true,
-        onlineStatus: true,
-        soundEnabled: true,
-        threshold: 75
-      };
+    } catch {
+      return { criticalAlerts: true, warningAlerts: true, onlineStatus: true, soundEnabled: true, threshold: 75 };
     }
   });
 
-  // Save to localStorage whenever settings change
   React.useEffect(() => {
     localStorage.setItem('notificationSettings', JSON.stringify(settings));
     window.dispatchEvent(new Event('notificationSettingsChanged'));
   }, [settings]);
 
-  const handleToggle = (key) => {
-    setSettings(prev => ({ ...prev, [key]: !prev[key] }));
-  };
+  const handleToggle = (key) => setSettings(prev => ({ ...prev, [key]: !prev[key] }));
+  const handleThreshold = (e) => setSettings(prev => ({ ...prev, threshold: parseInt(e.target.value) }));
 
-  const handleThresholdChange = (e) => {
-    setSettings(prev => ({ ...prev, threshold: parseInt(e.target.value) }));
-  };
-
-  // Test Notification Logic
   const handleTestNotification = useCallback(() => {
     if (notificationSystemRef.current) {
       notificationSystemRef.current.triggerAlert({
@@ -53,213 +163,317 @@ const Settings = () => {
         type: 'vape',
         location: 'Settings Test Room',
         confidence: 98,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
+      setTestFired(true);
+      setTimeout(() => setTestFired(false), 2000);
     }
   }, []);
 
+  const sliderPct = ((settings.threshold - 50) * 100) / 45;
+
+  // ── Shared card style ───────────────────────────────────────────────────────
+  const sideCard = {
+    background: 'var(--card-bg)',
+    borderRadius: 20,
+    border: '1px solid var(--card-border)',
+    boxShadow: 'var(--shadow-card)',
+    backdropFilter: 'blur(24px)',
+    WebkitBackdropFilter: 'blur(24px)',
+    overflow: 'hidden',
+  };
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 md:pb-6 flex flex-col">
-      <SchoolNotificationSystem ref={notificationSystemRef} events={[]} isConnected={true} soundEnabled={settings.soundEnabled} />
+    <div style={{
+      minHeight: '100vh',
+      padding: isMobile ? '20px 16px 100px' : '32px 32px 60px',
+      fontFamily: 'var(--font-body)',
+    }}>
+      <SchoolNotificationSystem
+        ref={notificationSystemRef}
+        events={[]}
+        isConnected={true}
+        soundEnabled={settings.soundEnabled}
+      />
 
-      <div className="px-4 py-6 space-y-8 max-w-lg md:max-w-6xl mx-auto w-full flex-1 flex flex-col">
-        
-        {/* Profile Card */}
-        <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="relative">
-              <img 
-                src={user?.imageUrl} 
-                alt="Profile" 
-                className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-sm"
-              />
-              <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-gray-900 leading-tight">{user?.fullName || 'User'}</h2>
-              <p className="text-sm text-gray-500">{user?.primaryEmailAddress?.emailAddress || 'Administrator'}</p>
-            </div>
-          </div>
-          <button 
-            onClick={() => openUserProfile()}
-            className="px-4 py-1.5 bg-gray-50 text-gray-600 text-sm font-medium rounded-xl border border-gray-200 hover:bg-gray-100 transition-colors"
-          >
-            Edit
-          </button>
-        </div>
+      <div style={{
+        maxWidth: 980,
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: 20,
+        alignItems: 'flex-start',
+      }}>
 
-        {/* Notification Preferences */}
-        <div>
-          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3 px-2">Notification Preferences</h3>
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
-            
-            {/* Critical Alerts */}
-            <div className="p-4 flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-red-50 text-red-500 rounded-full">
-                  <AlertTriangle size={20} />
-                </div>
-                <span className="font-medium text-gray-900">Critical Alerts</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={settings.criticalAlerts}
-                  onChange={() => handleToggle('criticalAlerts')}
-                  className="sr-only peer" 
+        {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
+        <div style={{ width: isMobile ? '100%' : 224, flexShrink: 0 }}>
+
+          {/* Profile card */}
+          <div style={{ ...sideCard, padding: '22px 18px', marginBottom: 12, textAlign: 'center' }}>
+            <div style={{ position: 'relative', display: 'inline-block', marginBottom: 12 }}>
+              {user?.imageUrl ? (
+                <img
+                  src={user.imageUrl}
+                  alt="Profile"
+                  style={{ width: 58, height: 58, borderRadius: '50%', objectFit: 'cover', display: 'block' }}
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00C2CB]"></div>
-              </label>
-            </div>
-
-            {/* Warning Alerts */}
-            <div className="p-4 flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-orange-50 text-orange-500 rounded-full">
-                  <Bell size={20} />
+              ) : (
+                <div style={{
+                  width: 58, height: 58, borderRadius: '50%',
+                  background: 'var(--teal-light)', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', color: 'var(--teal)', fontSize: '1.4rem', fontWeight: 700,
+                  fontFamily: 'var(--font-display)',
+                }}>
+                  {(user?.fullName || 'U')[0].toUpperCase()}
                 </div>
-                <span className="font-medium text-gray-900">Warning Alerts</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={settings.warningAlerts}
-                  onChange={() => handleToggle('warningAlerts')}
-                  className="sr-only peer" 
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00C2CB]"></div>
-              </label>
+              )}
+              <div style={{
+                position: 'absolute', bottom: 2, right: 2,
+                width: 12, height: 12, borderRadius: '50%',
+                background: '#22c55e', border: '2.5px solid white',
+              }} />
             </div>
-
-            {/* Online/Offline Alerts */}
-            <div className="p-4 flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-blue-50 text-blue-500 rounded-full">
-                  <Wifi size={20} />
-                </div>
-                <span className="font-medium text-gray-900">Online/Offline Alerts</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={settings.onlineStatus}
-                  onChange={() => handleToggle('onlineStatus')}
-                  className="sr-only peer" 
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00C2CB]"></div>
-              </label>
+            <div style={{
+              fontFamily: 'var(--font-display)', fontWeight: 700,
+              fontSize: '0.95rem', color: '#1a1a1a', marginBottom: 3,
+            }}>
+              {user?.fullName || 'User'}
             </div>
-
-            {/* Sound Alerts */}
-            <div className="p-4 flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-purple-50 text-purple-500 rounded-full">
-                  <Volume2 size={20} />
-                </div>
-                <span className="font-medium text-gray-900">Sound Effects</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={settings.soundEnabled}
-                  onChange={() => handleToggle('soundEnabled')}
-                  className="sr-only peer" 
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00C2CB]"></div>
-              </label>
+            <div style={{
+              fontSize: '0.68rem', color: '#9ca3af', marginBottom: 14,
+              wordBreak: 'break-all', lineHeight: 1.4,
+            }}>
+              {user?.primaryEmailAddress?.emailAddress || 'Administrator'}
             </div>
-
-            {/* Alert Threshold Slider */}
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center space-x-3">
-                   <div className="p-2 bg-yellow-50 text-yellow-600 rounded-full">
-                     <Zap size={20} />
-                   </div>
-                   <span className="font-medium text-gray-900">Alert Sensitivity</span>
-                </div>
-                <span className="text-sm font-bold text-[#00C2CB]">{settings.threshold}%</span>
-              </div>
-              <input 
-                type="range" 
-                min="50" 
-                max="95" 
-                value={settings.threshold} 
-                onChange={handleThresholdChange}
-                className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-[#00C2CB]"
-                style={{
-                  background: `linear-gradient(to right, #00C2CB 0%, #00C2CB ${((settings.threshold - 50) * 100) / 45}%, #e5e7eb ${((settings.threshold - 50) * 100) / 45}%, #e5e7eb 100%)`
-                }}
-              />
-              <div className="flex justify-between mt-1 text-xs text-gray-400 font-medium">
-                <span>Sensitive (50%)</span>
-                <span>Strict (95%)</span>
-              </div>
-            </div>
-
-             {/* Test Notification Button */}
-             <button 
-                onClick={handleTestNotification}
-                className="w-full p-4 flex items-center justify-center text-[#00C2CB] font-medium hover:bg-gray-50 transition-colors text-sm"
-             >
-               Test Notification System
-             </button>
-
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Account Settings */}
-          <div className="flex-grow">
-            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3 px-2">Account</h3>
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
-              
-              <button 
-                onClick={() => openOrganizationProfile()}
-                className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors group"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-teal-50 text-teal-600 rounded-full group-hover:bg-teal-100 transition-colors">
-                    <Users size={20} />
-                  </div>
-                  <span className="font-medium text-gray-900">Manage Organization</span>
-                </div>
-                <ChevronRight size={20} className="text-gray-300 group-hover:text-gray-400" />
-              </button>
-
-              <button 
-                onClick={() => openUserProfile({ label: 'security' })}
-                className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors group"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-indigo-50 text-indigo-600 rounded-full group-hover:bg-indigo-100 transition-colors">
-                    <Shield size={20} />
-                  </div>
-                  <span className="font-medium text-gray-900">Security</span>
-                </div>
-                <ChevronRight size={20} className="text-gray-300 group-hover:text-gray-400" />
-              </button>
-
-            </div>
-          </div>
-
-          {/* Sign Out */}
-          <div className="flex flex-col justify-end">
-            <button 
-              onClick={() => signOut()}
-              className="w-full bg-white rounded-3xl p-4 shadow-sm border border-gray-100 text-red-500 font-bold hover:bg-red-50 transition-colors flex items-center justify-center space-x-2"
+            <button
+              onClick={() => openUserProfile()}
+              style={{
+                width: '100%', padding: '7px 0',
+                background: 'rgba(0,194,203,0.07)',
+                border: '1px solid rgba(0,194,203,0.22)',
+                borderRadius: 10, color: 'var(--teal)',
+                fontFamily: 'var(--font-body)',
+                fontSize: '0.76rem', fontWeight: 600,
+                cursor: 'pointer', transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,194,203,0.13)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,194,203,0.07)'}
             >
-              <LogOut size={20} />
-              <span>Sign Out</span>
+              Edit Profile
             </button>
           </div>
+
+          {/* Section nav — vertical on desktop, horizontal tabs on mobile */}
+          <div style={{
+            ...sideCard,
+            padding: isMobile ? 6 : 7,
+            display: 'flex',
+            flexDirection: isMobile ? 'row' : 'column',
+            gap: isMobile ? 4 : 3,
+          }}>
+            {NAV_ITEMS.map(item => {
+              const active = activeSection === item.key;
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => setActiveSection(item.key)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 9,
+                    flex: isMobile ? 1 : undefined,
+                    justifyContent: isMobile ? 'center' : 'flex-start',
+                    padding: isMobile ? '10px 8px' : '10px 12px',
+                    borderRadius: 12, border: 'none',
+                    background: active ? 'rgba(0,194,203,0.11)' : 'transparent',
+                    color: active ? 'var(--teal)' : '#6b7280',
+                    fontFamily: 'var(--font-body)',
+                    fontWeight: active ? 600 : 500,
+                    fontSize: '0.83rem',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(0,0,0,0.03)'; }}
+                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  {item.icon}
+                  {!isMobile && (
+                    <div>
+                      <div style={{ lineHeight: 1.2 }}>{item.label}</div>
+                      <div style={{
+                        fontSize: '0.62rem',
+                        color: active ? 'rgba(0,194,203,0.65)' : '#c4cad4',
+                        fontWeight: 400, marginTop: 1,
+                      }}>{item.sub}</div>
+                    </div>
+                  )}
+                  {isMobile && <span>{item.label}</span>}
+                </button>
+              );
+            })}
+          </div>
+
+          {!isMobile && (
+            <div style={{ textAlign: 'center', fontSize: '0.63rem', color: '#c4cad4', marginTop: 18, letterSpacing: '0.03em' }}>
+              Mistio · v2.1.0
+            </div>
+          )}
         </div>
 
+        {/* ── RIGHT CONTENT ─────────────────────────────────────────────────── */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+
+          {/* ── NOTIFICATIONS SECTION ── */}
+          {activeSection === 'notifications' && (
+            <SectionCard
+              title="Notifications"
+              subtitle="Configure when and how you receive detection alerts"
+            >
+              {/* Toggle rows */}
+              {TOGGLE_ROWS.map((row, i, arr) => (
+                <RowItem
+                  key={row.key}
+                  icon={row.icon}
+                  color={row.color}
+                  bg={row.bg}
+                  label={row.label}
+                  desc={row.desc}
+                  borderBottom={true}
+                  right={<Toggle checked={settings[row.key]} onChange={() => handleToggle(row.key)} />}
+                />
+              ))}
+
+              {/* Sensitivity slider */}
+              <div style={{ padding: '18px 22px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <IconBox icon={<Zap size={16} />} color="#d97706" bg="rgba(217,119,6,0.09)" />
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1a1a1a' }}>Alert Sensitivity</div>
+                      <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: 1 }}>Detection confidence threshold</div>
+                    </div>
+                  </div>
+                  <span style={{
+                    fontFamily: 'var(--font-display)', fontWeight: 700,
+                    fontSize: '1.4rem', color: 'var(--teal)', lineHeight: 1,
+                  }}>
+                    {settings.threshold}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="50" max="95"
+                  value={settings.threshold}
+                  onChange={handleThreshold}
+                  className="settings-range"
+                  style={{
+                    width: '100%',
+                    background: `linear-gradient(to right, var(--teal) 0%, var(--teal) ${sliderPct}%, #e2e8f0 ${sliderPct}%, #e2e8f0 100%)`,
+                  }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 7 }}>
+                  <span style={{ fontSize: '0.65rem', color: '#b0b8c4' }}>Sensitive · 50%</span>
+                  <span style={{ fontSize: '0.65rem', color: '#b0b8c4' }}>Strict · 95%</span>
+                </div>
+              </div>
+
+              {/* Test notification */}
+              <div style={{ padding: '14px 22px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                <button
+                  onClick={handleTestNotification}
+                  style={{
+                    width: '100%', padding: '11px',
+                    background: testFired ? 'rgba(34,197,94,0.08)' : 'rgba(0,194,203,0.06)',
+                    border: `1px solid ${testFired ? 'rgba(34,197,94,0.25)' : 'rgba(0,194,203,0.2)'}`,
+                    borderRadius: 12,
+                    color: testFired ? '#22c55e' : 'var(--teal)',
+                    fontFamily: 'var(--font-body)',
+                    fontWeight: 600, fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    letterSpacing: '0.01em',
+                  }}
+                >
+                  <Bell size={14} />
+                  {testFired ? 'Notification Sent!' : 'Send Test Notification'}
+                </button>
+              </div>
+            </SectionCard>
+          )}
+
+          {/* ── ACCOUNT SECTION ── */}
+          {activeSection === 'account' && (
+            <SectionCard
+              title="Account"
+              subtitle="Manage your organization, team access, and security"
+            >
+              <RowItem
+                icon={<Users size={16} />}
+                color="var(--teal)"
+                bg="rgba(0,194,203,0.09)"
+                label="Manage Organization"
+                desc="Members, roles, and permissions"
+                borderBottom
+                onClick={() => openOrganizationProfile()}
+                right={<ChevronRight size={17} style={{ color: '#d1d5db', flexShrink: 0 }} />}
+              />
+              <RowItem
+                icon={<Shield size={16} />}
+                color="#6366f1"
+                bg="rgba(99,102,241,0.09)"
+                label="Security"
+                desc="Password, 2FA, and active sessions"
+                borderBottom={false}
+                onClick={() => openUserProfile({ label: 'security' })}
+                right={<ChevronRight size={17} style={{ color: '#d1d5db', flexShrink: 0 }} />}
+              />
+
+              {/* Danger zone */}
+              <div style={{
+                margin: '0 22px 16px',
+                padding: '14px 16px',
+                borderRadius: 14,
+                background: 'rgba(239,68,68,0.04)',
+                border: '1px solid rgba(239,68,68,0.1)',
+                marginTop: 16,
+              }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#ef4444', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
+                  Danger Zone
+                </div>
+                <button
+                  onClick={() => signOut()}
+                  style={{
+                    width: '100%', padding: '10px',
+                    background: 'rgba(239,68,68,0.07)',
+                    border: '1px solid rgba(239,68,68,0.18)',
+                    borderRadius: 10,
+                    color: '#ef4444',
+                    fontFamily: 'var(--font-body)',
+                    fontWeight: 600, fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.13)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(239,68,68,0.07)'}
+                >
+                  <LogOut size={14} />
+                  Sign Out
+                </button>
+              </div>
+            </SectionCard>
+          )}
+        </div>
       </div>
 
-      <div className="text-center text-xs text-gray-400 pb-24 pt-4 md:pb-12">
-        v2.1.0 • Mistio
-      </div>
+      {isMobile && (
+        <div style={{ textAlign: 'center', fontSize: '0.63rem', color: '#c4cad4', marginTop: 32, letterSpacing: '0.03em' }}>
+          Mistio · v2.1.0
+        </div>
+      )}
     </div>
   );
 };

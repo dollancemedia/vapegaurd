@@ -7,671 +7,619 @@ import {
   LinearScale,
   PointElement,
   LineElement,
-  Title,
+  Filler,
   Tooltip,
-  Legend
+  Legend,
 } from 'chart.js';
 
-// Register ChartJS components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend
-);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
 
-// Icons Component
-const Icons = {
-  Close: () => (
-    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  ),
-  Edit: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-    </svg>
-  ),
-  Admin: () => (
-    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-    </svg>
-  ),
-  Detector: () => (
-    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
-    </svg>
-  ),
-  Humidity: () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-    </svg>
-  ),
-  PM25: () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
-    </svg>
-  ),
-  Temp: () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-    </svg>
-  ),
-  Gas: () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-    </svg>
-  ),
-  Building: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-    </svg>
-  ),
-  Floor: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-    </svg>
-  ),
-  Room: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-    </svg>
-  ),
-  Ping: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
-    </svg>
-  ),
-  Log: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-    </svg>
-  ),
-  Check: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-    </svg>
-  ),
-  Warning: () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-    </svg>
-  ),
-  Trash: () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-    </svg>
-  )
+// ── Formatters ────────────────────────────────────────────────────────────────
+const toF   = (c) => (c != null ? ((c * 9) / 5 + 32).toFixed(1) : '--');
+const fmtGas = (v) => { const n = Number(v || 0); return n > 1000 ? (n / 1000).toFixed(1) : n.toFixed(1); };
+const fmtTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+// ── Status resolver ───────────────────────────────────────────────────────────
+const getStatus = (device) => {
+  const cls = device.sensorData?.predictedClass;
+  const st  = device.status;
+  if (st === 'offline')                           return { color: '#9ca3af', bg: '#f9fafb',              label: 'Offline',         sub: 'Device not responding',    icon: 'offline'  };
+  if (cls === 'vape' || st === 'alarm')           return { color: '#ef4444', bg: 'rgba(239,68,68,0.06)', label: 'Vape Detected',   sub: 'Immediate action required', icon: 'alarm'    };
+  if (st === 'CONFIRMING' || cls === 'suspected') return { color: '#f59e0b', bg: 'rgba(245,158,11,0.06)',label: 'Suspected Event', sub: 'Analysing sensor data',    icon: 'warning'  };
+  if (st === 'WARMUP')                            return { color: '#8b5cf6', bg: 'rgba(139,92,246,0.06)',label: 'Warming Up',      sub: 'Device initialising',      icon: 'warmup'   };
+  if (st === 'CALIBRATING')                       return { color: '#8b5cf6', bg: 'rgba(139,92,246,0.06)',label: 'Calibrating',     sub: 'Establishing baseline',    icon: 'warmup'   };
+  if (st === 'COOLDOWN')                          return { color: '#3b82f6', bg: 'rgba(59,130,246,0.06)',label: 'Cooldown',        sub: 'Recovery period active',   icon: 'cooldown' };
+  return                                                 { color: '#00C2CB', bg: 'rgba(0,194,203,0.05)', label: 'Normal',          sub: 'Air quality normal',        icon: 'ok'       };
 };
 
-const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = [] }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: '', building: '', floor: '', room: '' });
+// ── Inline SVG icons ──────────────────────────────────────────────────────────
+const PATHS = {
+  close:   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}   d="M6 18L18 6M6 6l12 12" />,
+  edit:    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}   d="M15.232 5.232l3.536 3.536M9 13h3l8.5-8.5a2.121 2.121 0 00-3-3L9 10v3z" />,
+  trash:   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}   d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M4 7h16M10 3h4a1 1 0 011 1v1H9V4a1 1 0 011-1z" />,
+  refresh: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}   d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />,
+  check:   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />,
+  warn:    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}   d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />,
+  drop:    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}   d="M12 3C12 3 5 10.5 5 15a7 7 0 0014 0c0-4.5-7-12-7-12z" />,
+  smoke:   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}   d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />,
+  thermo:  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}   d="M9 3v10.17A4 4 0 0012 21a4 4 0 003-6.83V3a3 3 0 00-6 0z" />,
+  atom:    <><circle cx="12" cy="12" r="2" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></>,
+  wifi:    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}   d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />,
+};
 
-  // Initialize edit form when device changes
+const Ic = ({ name, size = 20, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}>{PATHS[name]}</svg>
+);
+
+// ── Confidence ring ───────────────────────────────────────────────────────────
+const Ring = ({ value = 0, color = '#00C2CB' }) => {
+  const r = 21, circ = 2 * Math.PI * r, dash = (value / 100) * circ;
+  return (
+    <svg width="58" height="58" viewBox="0 0 58 58">
+      <circle cx="29" cy="29" r={r} fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="4.5" />
+      <circle cx="29" cy="29" r={r} fill="none" stroke={color}
+        strokeWidth="4.5" strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+        style={{ transform: 'rotate(-90deg)', transformOrigin: '29px 29px', transition: 'stroke-dasharray 0.5s ease' }} />
+      <text x="29" y="33" textAnchor="middle" fontSize="10.5" fontWeight="700" fill={color}
+        style={{ fontFamily: 'var(--font-body)' }}>{value}%</text>
+    </svg>
+  );
+};
+
+// ── Status icon chip ──────────────────────────────────────────────────────────
+const StatusChip = ({ icon, color }) => {
+  const map = { ok: 'check', alarm: 'warn', warning: 'warn', warmup: 'thermo', cooldown: 'drop', offline: 'wifi' };
+  return (
+    <div style={{ width: 40, height: 40, borderRadius: '50%', background: color + '22',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <Ic name={map[icon] || 'check'} size={20} color={color} />
+    </div>
+  );
+};
+
+// ── Metric tabs config ────────────────────────────────────────────────────────
+const METRICS = [
+  { key: 'pm25',          label: 'PM2.5', unit: 'μg/m³', color: '#ef4444', max: 200 },
+  { key: 'humidity',      label: 'Hum',   unit: '%',     color: '#3b82f6', max: 100 },
+  { key: 'temperature',   label: 'Temp',  unit: '°F',    color: '#f59e0b', max: 130,
+    fn: (v) => v != null ? parseFloat(toF(v)) : null },
+  { key: 'gasResistance', label: 'Gas',   unit: 'kΩ',   color: '#10b981', max: 70,
+    fn: (v) => { const n = Number(v || 0); return n > 1000 ? n / 1000 : n; } },
+];
+
+// ── Delta baseline bar ────────────────────────────────────────────────────────
+const DeltaBar = ({ current, baseline, max, color, inverse }) => {
+  const pct  = Math.min((current / max) * 100, 100);
+  const bPct = baseline != null ? Math.min((baseline / max) * 100, 100) : null;
+  const bad  = inverse ? current < (baseline ?? max) * 0.7 : current > (baseline ?? 0) * 1.6;
+  return (
+    <div style={{ position: 'relative', height: '3px', background: 'rgba(0,0,0,0.07)',
+      borderRadius: 2, marginTop: 7, overflow: 'visible' }}>
+      <div style={{ width: `${pct}%`, height: '100%', background: bad ? '#ef4444' : color,
+        borderRadius: 2, transition: 'width 0.4s ease' }} />
+      {bPct !== null && (
+        <div style={{ position: 'absolute', left: `${bPct}%`, top: -2, width: 2, height: 7,
+          background: 'rgba(0,0,0,0.22)', borderRadius: 1 }} />
+      )}
+    </div>
+  );
+};
+
+// ── Shared card style ─────────────────────────────────────────────────────────
+const sCard = {
+  background: '#f8fafc',
+  borderRadius: 12,
+  padding: '12px 14px',
+  border: '1px solid rgba(0,0,0,0.06)',
+};
+
+const sLabel = {
+  fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.09em',
+  color: '#9ca3af', fontWeight: 600, fontFamily: 'var(--font-body)',
+};
+
+const sBigNum = {
+  fontSize: '1.55rem', fontWeight: 700, color: '#111827',
+  letterSpacing: '-0.03em', fontFamily: 'var(--font-display)', lineHeight: 1,
+};
+
+const sSub = {
+  fontSize: '0.62rem', color: '#9ca3af', marginTop: 4, fontFamily: 'var(--font-body)',
+};
+
+const sSecBtn = {
+  flex: 1, padding: '9px 10px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.1)',
+  background: 'white', cursor: 'pointer', fontSize: '0.77rem', fontWeight: 600,
+  color: '#374151', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  gap: 5, fontFamily: 'var(--font-body)', transition: 'all 0.15s',
+};
+
+// ── Main component ────────────────────────────────────────────────────────────
+const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = [] }) => {
+  const [isEditing,      setIsEditing]      = useState(false);
+  const [editForm,       setEditForm]       = useState({ name: '', building: '', floor: '', room: '' });
+  const [metric,         setMetric]         = useState('pm25');
+  const [confirmDelete,  setConfirmDelete]  = useState(false);
+
   useEffect(() => {
     if (device) {
       setEditForm({
-        name: device.name || '',
+        name:     device.name           || '',
         building: device.location?.building || '',
-        floor: device.location?.floor || '',
-        room: device.location?.room || ''
+        floor:    device.location?.floor    || '',
+        room:     device.location?.room     || '',
       });
     }
   }, [device]);
 
+  // Reset confirm-delete after 3 s of no further interaction
+  useEffect(() => {
+    if (!confirmDelete) return;
+    const t = setTimeout(() => setConfirmDelete(false), 3000);
+    return () => clearTimeout(t);
+  }, [confirmDelete]);
+
   if (!device) return null;
 
-  // Convert Celsius to Fahrenheit
-  const toFahrenheit = (celsius) => {
-    if (celsius === undefined || celsius === null) return 0;
-    return ((celsius * 9/5) + 32).toFixed(1);
-  };
+  const status  = getStatus(device);
+  const sd      = device.sensorData || {};
+  const isAll   = metric === 'all';
+  const active  = METRICS.find(m => m.key === metric); // undefined when isAll
 
-  // Prepare chart data
+  // ── Chart data ─────────────────────────────────────────────────────────────
+  const sliced = history.slice(0, 20).reverse();
+
+  // Single metric: gradient area fill
+  const singleDatasets = active ? [{
+    label: `${active.label} (${active.unit})`,
+    data:  sliced.map(h => { const v = h[active.key]; return active.fn ? active.fn(v) : v; }),
+    borderColor: active.color,
+    backgroundColor: (ctx) => {
+      const { chart } = ctx;
+      const { ctx: c, chartArea } = chart;
+      if (!chartArea) return 'transparent';
+      const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+      g.addColorStop(0, active.color + '48');
+      g.addColorStop(1, active.color + '00');
+      return g;
+    },
+    fill: true, tension: 0.42, borderWidth: 2,
+    pointRadius: (ctx) => ctx.dataIndex === sliced.length - 1 ? 4 : 2,
+    pointBackgroundColor: active.color, pointBorderColor: '#fff',
+    pointBorderWidth: 1.5, pointHoverRadius: 5,
+  }] : [];
+
+  // All metrics: normalised 0–100 % of each metric's max, thin crisp lines
+  const allDatasets = METRICS.map(m => ({
+    label: m.label,
+    data: sliced.map(h => {
+      const v   = h[m.key];
+      const raw = m.fn ? m.fn(v) : (v != null ? Number(v) : null);
+      return raw != null ? Math.min(+(raw / m.max * 100).toFixed(1), 100) : null;
+    }),
+    borderColor: m.color, backgroundColor: 'transparent',
+    fill: false, tension: 0.42, borderWidth: 1.5,
+    pointRadius: 2, pointBackgroundColor: m.color,
+    pointBorderColor: '#fff', pointBorderWidth: 1, pointHoverRadius: 4,
+  }));
+
   const chartData = {
-    labels: history.slice(0, 20).reverse().map(h => new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })),
-    datasets: [
-      {
-        label: 'Humidity (%)',
-        data: history.slice(0, 20).reverse().map(h => h.humidity),
-        borderColor: 'rgb(53, 162, 235)',
-        backgroundColor: 'rgba(53, 162, 235, 0.5)',
-        yAxisID: 'y',
-        tension: 0.3
-      },
-      {
-        label: 'PM2.5 (µg/m³)',
-        data: history.slice(0, 20).reverse().map(h => h.pm25),
-        borderColor: 'rgb(75, 192, 192)',
-        backgroundColor: 'rgba(75, 192, 192, 0.5)',
-        yAxisID: 'y1',
-        tension: 0.3
-      },
-      {
-        label: 'Temperature (°F)',
-        data: history.slice(0, 20).reverse().map(h => toFahrenheit(h.temperature)),
-        borderColor: 'rgb(255, 99, 132)',
-        backgroundColor: 'rgba(255, 99, 132, 0.5)',
-        yAxisID: 'y',
-        tension: 0.3
-      },
-      {
-        label: 'Gas Res (kΩ)',
-        data: history.slice(0, 20).reverse().map(h => {
-          const val = Number(h.gasResistance || 0);
-          return val > 1000 ? val / 1000 : val;
-        }),
-        borderColor: 'rgb(153, 102, 255)',
-        backgroundColor: 'rgba(153, 102, 255, 0.5)',
-        yAxisID: 'y2',
-        tension: 0.3
-      }
-    ]
+    labels: sliced.map(h => fmtTime(h.timestamp)),
+    datasets: isAll ? allDatasets : singleDatasets,
   };
 
-  const chartOptions = {
+  // ── Chart options ──────────────────────────────────────────────────────────
+  const chartOpts = {
     responsive: true,
     maintainAspectRatio: false,
-    animation: { duration: 0 },
-    interaction: {
-      mode: 'index',
-      intersect: false,
-    },
-    stacked: false,
+    animation: { duration: 200 },
+    interaction: { mode: 'index', intersect: false },
     plugins: {
-      legend: {
+      legend: isAll ? {
+        display: true,
         position: 'bottom',
-        labels: { boxWidth: 10, usePointStyle: true }
-      },
-      title: {
-        display: false,
+        labels: {
+          usePointStyle: true, pointStyle: 'circle',
+          boxWidth: 6, padding: 10, color: '#6b7280',
+          font: { size: 9, family: 'var(--font-body)' },
+        },
+      } : { display: false },
+      tooltip: {
+        backgroundColor: '#1f2937', titleColor: '#9ca3af',
+        bodyColor: '#f9fafb', padding: 10, cornerRadius: 8,
+        callbacks: {
+          label: (ctx) => {
+            if (isAll) {
+              // Show real values in tooltip, not normalised %
+              const m = METRICS[ctx.datasetIndex];
+              const h = sliced[ctx.dataIndex];
+              if (!m || !h) return '';
+              const v   = h[m.key];
+              const raw = m.fn ? m.fn(v) : (v != null ? Number(v) : null);
+              return ` ${m.label}: ${raw?.toFixed(1) ?? '--'} ${m.unit}`;
+            }
+            return ` ${ctx.parsed.y?.toFixed(2)} ${active?.unit}`;
+          },
+        },
       },
     },
     scales: {
-      x: { grid: { display: false } },
+      x: {
+        grid: { display: false },
+        ticks: { font: { size: 9 }, color: '#9ca3af', maxTicksLimit: 6, maxRotation: 0 },
+        border: { display: false },
+      },
       y: {
-        type: 'linear',
-        display: true,
-        position: 'left',
-        grid: { borderDash: [2, 4] }
-      },
-      y1: {
-        type: 'linear',
-        display: false, // Hide duplicate axes for cleaner look, just use tooltips
-        position: 'right',
-        grid: { drawOnChartArea: false },
-      },
-      y2: {
-        type: 'linear',
-        display: false,
-        position: 'right',
-        grid: { drawOnChartArea: false },
+        ...(isAll ? { min: 0, max: 100 } : {}),
+        grid: { color: 'rgba(0,0,0,0.045)' },
+        ticks: {
+          font: { size: 9 }, color: '#9ca3af', maxTicksLimit: 4,
+          ...(isAll ? { callback: (v) => v + '%' } : {}),
+        },
+        border: { display: false },
       },
     },
   };
-  
-  // Handle save edit
-  const handleSaveEdit = async () => {
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+  const handleSave = async () => {
     try {
       await deviceService.updateDeviceInfo(device.id, {
         name: editForm.name,
-        location: {
-          building: editForm.building,
-          floor: editForm.floor,
-          room: editForm.room
-        }
+        location: { building: editForm.building, floor: editForm.floor, room: editForm.room },
       });
       setIsEditing(false);
-      if (onPingDevice) onPingDevice(device.id); 
-    } catch (error) {
-      console.error('Failed to save device info:', error);
-      alert('Failed to save changes');
-    }
+      if (onPingDevice) onPingDevice(device.id);
+    } catch { alert('Failed to save changes'); }
   };
 
-  // Handle recalibrate
   const handleRecalibrate = async () => {
     try {
-      if (window.confirm('Are you sure you want to recalibrate this device? This will reset the baseline.')) {
+      if (window.confirm("Reset this device's baseline? Takes ~30 seconds.")) {
         await deviceService.recalibrateDevice(device.id);
-        alert('Recalibration started');
         if (onPingDevice) onPingDevice(device.id);
       }
-    } catch (error) {
-      console.error('Failed to recalibrate device:', error);
-      alert('Failed to start recalibration');
-    }
+    } catch { alert('Failed to start recalibration'); }
   };
 
-  // Format gas resistance
-  const formatGasResistance = (val) => {
-    const num = Number(val);
-    if (num > 1000) {
-      return (num / 1000).toFixed(2) + " kΩ";
-    }
-    return num.toFixed(2) + " kΩ";
+  const handleDelete = async () => {
+    try {
+      await deviceService.deleteDevice(device.id);
+      onClose();
+    } catch { alert('Failed to delete device'); }
   };
 
-  // Format timestamp
-  const formatTimestamp = (timestamp) => {
-    return new Date(timestamp).toLocaleString();
-  };
+  const logColors = { vape: '#ef4444', suspected: '#f59e0b', normal: '#22c55e', cooldown: '#3b82f6' };
+  const dotColor  = (cls) => logColors[cls] || '#9ca3af';
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
       {/* Backdrop */}
       {isOpen && (
-        <div 
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 transition-opacity duration-300"
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 40,
+            background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(3px)' }}
           onClick={onClose}
         />
       )}
 
-      {/* Panel */}
-      <div className={`
-        fixed top-[60px] right-0 h-[calc(100%-60px)] w-full sm:w-[480px] bg-white shadow-2xl z-[900] transform transition-transform duration-300 ease-in-out overflow-y-auto
-        ${isOpen ? 'translate-x-0' : 'translate-x-full'}
-      `}>
-        {/* Panel Header */}
-        <div className="bg-white/95 backdrop-blur border-b border-gray-100 px-6 py-5 flex items-start justify-between">
-          <div className="flex items-start space-x-4">
-            <div className={`
-              p-3 rounded-xl shadow-sm
-              ${device.type === 'admin' ? 'bg-[#00C2CB]/10 text-[#00C2CB]' : 'bg-indigo-50 text-indigo-600'}
-            `}>
-              {device.type === 'admin' ? <Icons.Admin /> : <Icons.Detector />}
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h2 className="text-xl font-bold text-gray-900">{device.name}</h2>
-                <button 
-                  onClick={() => setIsEditing(true)}
-                  className="p-1 text-gray-400 hover:text-[#00C2CB] hover:bg-[#00C2CB]/10 rounded-full transition-colors"
-                >
-                  <Icons.Edit />
-                </button>
+      {/* Slide-over panel */}
+      <div style={{
+        position: 'fixed', top: 58, right: 0,
+        height: 'calc(100vh - 58px)', width: 460,
+        background: '#ffffff',
+        boxShadow: '-6px 0 32px rgba(0,0,0,0.10), -1px 0 0 rgba(0,0,0,0.06)',
+        zIndex: 900,
+        transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
+        transition: 'transform 0.3s cubic-bezier(0.4,0,0.2,1)',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }}>
+
+        {/* ── Header ── */}
+        <div style={{ padding: '16px 18px 14px', borderBottom: '1px solid rgba(0,0,0,0.07)',
+          background: '#fafafa', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            {/* Device identity */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+              <div style={{ width: 42, height: 42, borderRadius: 11, flexShrink: 0,
+                background: 'radial-gradient(circle at 38% 32%, #3a3a3a, #141414)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.22)' }}>
+                <Ic name="wifi" size={18} color="rgba(0,194,203,0.75)" />
               </div>
-              <p className="text-sm text-gray-500 font-medium mt-0.5">
-                {device.location ? `${device.location.building || ''} ${device.location.room ? '• ' + device.location.room : ''}` : ''}
-              </p>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 700, color: '#111827',
+                  fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>
+                  {device.name}
+                </h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
+                  {device.location?.building && (
+                    <span style={{ fontSize: '0.71rem', color: '#6b7280', fontFamily: 'var(--font-body)' }}>
+                      {device.location.building}{device.location.room ? ` · ${device.location.room}` : ''}
+                    </span>
+                  )}
+                  {device.location?.floor && (
+                    <span style={{ fontSize: '0.65rem', background: 'rgba(0,0,0,0.06)', borderRadius: 4,
+                      padding: '1px 6px', color: '#6b7280', fontFamily: 'var(--font-body)' }}>
+                      Fl {device.location.floor}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            {/* Header actions */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {[{ icon: 'edit', action: () => setIsEditing(true) }, { icon: 'close', action: onClose }].map(({ icon, action }) => (
+                <button key={icon} onClick={action}
+                  style={{ padding: 7, borderRadius: 8, border: 'none', background: 'transparent',
+                    cursor: 'pointer', color: '#9ca3af', transition: 'all 0.15s', display: 'flex' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.07)'; e.currentTarget.style.color = '#374151'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#9ca3af'; }}>
+                  <Ic name={icon} size={16} />
+                </button>
+              ))}
             </div>
           </div>
-          <button 
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
-          >
-            <Icons.Close />
-          </button>
         </div>
 
-        {/* Panel Content */}
-        <div className="p-6 space-y-8">
-          {/* Vape Prediction Section - Modernized */}
-          {device.sensorData && (
-            <div className={`
-              relative overflow-hidden rounded-2xl p-5 border
-              ${device.status === 'offline'
-                ? 'bg-gray-50 border-gray-200 ring-1 ring-gray-300'
-                : device.sensorData.predictedClass === 'vape' 
-                  ? 'bg-red-50 border-red-100 ring-1 ring-red-200'
-                  : device.status === 'COOLDOWN'
-                    ? 'bg-blue-50 border-blue-100 ring-1 ring-blue-200'
-                  : device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup'
-                    ? 'bg-yellow-50 border-yellow-100 ring-1 ring-yellow-200'
-                  : device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating'
-                    ? 'bg-yellow-50 border-yellow-100 ring-1 ring-yellow-200'
-                    : device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected'
-                      ? 'bg-orange-50 border-orange-100 ring-1 ring-orange-200'
-                      : 'bg-[#00C2CB]/5 border-[#00C2CB]/20 ring-1 ring-[#00C2CB]/20'
-              }
-            `}>
-              <div className="flex justify-between items-center relative z-10">
-                <div className="flex items-center space-x-3">
-                  <div className={`
-                    p-2 rounded-full
-                    ${device.status === 'offline' ? 'bg-gray-200 text-gray-500' :
-                      device.sensorData.predictedClass === 'vape' ? 'bg-red-100 text-red-600' :
-                      device.status === 'COOLDOWN' ? 'bg-blue-100 text-blue-600' :
-                      device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? 'bg-yellow-100 text-yellow-600' :
-                      device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? 'bg-yellow-100 text-yellow-600' :
-                      device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? 'bg-orange-100 text-orange-600' :
-                      'bg-[#00C2CB]/10 text-[#00C2CB]'}
-                  `}>
-                    {device.status === 'offline' ? <Icons.Close /> :
-                     device.sensorData.predictedClass === 'vape' ? <Icons.Warning /> :
-                     device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? <span className="text-xl">⏳</span> :
-                     device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? <span className="text-xl">⚙️</span> :
-                     device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? <span className="text-xl">⚠️</span> :
-                     <Icons.Check />}
+        {/* ── Scrollable body ── */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px 20px',
+          scrollbarWidth: 'thin', scrollbarColor: 'rgba(0,0,0,0.1) transparent' }}>
+
+          {/* Status banner */}
+          <div style={{ background: status.bg, borderRadius: 16, padding: '14px 16px',
+            marginBottom: 18, border: `1px solid ${status.color}25` }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <StatusChip icon={status.icon} color={status.color} />
+                <div>
+                  <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.09em',
+                    color: status.color, fontWeight: 700, fontFamily: 'var(--font-body)', marginBottom: 2 }}>
+                    Current Status
                   </div>
-                  <div>
-                    <h3 className={`text-sm font-semibold uppercase tracking-wide
-                      ${device.status === 'offline' ? 'text-gray-600' :
-                        device.sensorData.predictedClass === 'vape' ? 'text-red-800' :
-                        device.status === 'COOLDOWN' ? 'text-blue-800' :
-                        device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? 'text-yellow-800' :
-                        device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? 'text-yellow-800' :
-                        device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? 'text-orange-800' :
-                        'text-[#00C2CB]'}
-                    `}>
-                      Current Status
-                    </h3>
-                    <p className={`text-lg font-bold
-                      ${device.status === 'offline' ? 'text-gray-700' :
-                        device.sensorData.predictedClass === 'vape' ? 'text-red-700' :
-                        device.status === 'COOLDOWN' ? 'text-blue-700' :
-                        device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? 'text-yellow-700' :
-                        device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? 'text-yellow-700' :
-                        device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? 'text-orange-700' :
-                        'text-[#00C2CB]'}
-                    `}>
-                      {device.status === 'offline' ? 'Device Offline' :
-                       device.sensorData.predictedClass === 'vape' ? 'Vape Detected' :
-                       device.status === 'COOLDOWN' ? 'Cooldown' :
-                       device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? 'Warming Up...' :
-                       device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? 'Calibrating...' :
-                       device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? 'Confirming Event...' :
-                       'Normal Atmosphere'}
-                    </p>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#111827',
+                    fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>
+                    {status.label}
                   </div>
-                </div>
-                <div className="text-right">
-                   {/* Recalibrate Button */}
-                   <button 
-                    onClick={handleRecalibrate}
-                    className="mb-2 px-3 py-1 bg-white border border-gray-200 rounded-md text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors shadow-sm"
-                  >
-                    Recalibrate
-                  </button>
-                  <div className="flex flex-col items-end">
-                    <span className="block text-xs font-medium text-gray-500 uppercase">Confidence</span>
-                    <span className={`text-2xl font-bold
-                      ${device.status === 'offline' ? 'text-gray-400' :
-                        device.sensorData.predictedClass === 'vape' ? 'text-red-700' :
-                        device.status === 'COOLDOWN' ? 'text-blue-700' :
-                        device.status === 'WARMUP' || device.sensorData.predictedClass === 'warmup' ? 'text-yellow-700' :
-                        device.status === 'CALIBRATING' || device.sensorData.predictedClass === 'calibrating' ? 'text-yellow-700' :
-                        device.status === 'CONFIRMING' || device.sensorData.predictedClass === 'suspected' ? 'text-orange-700' :
-                        'text-emerald-700'}
-                    `}>
-                      {device.sensorData.confidence}%
-                    </span>
+                  <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 1, fontFamily: 'var(--font-body)' }}>
+                    {status.sub}
                   </div>
                 </div>
               </div>
-              
-              {/* Animated Background for Alarm */}
-              {device.status !== 'offline' && device.sensorData.predictedClass === 'vape' && (
-                <div className="absolute inset-0 bg-red-400/5 animate-pulse" />
+              {sd.confidence !== undefined && <Ring value={sd.confidence} color={status.color} />}
+            </div>
+          </div>
+
+          {/* Live Readings */}
+          {sd.humidity !== undefined && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
+                <span style={sLabel}>Live Readings</span>
+                {sd.timestamp && (
+                  <span style={{ fontSize: '0.67rem', color: '#9ca3af', fontFamily: 'var(--font-body)' }}>
+                    {fmtTime(sd.timestamp)}
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+
+                {/* Humidity */}
+                <div style={sCard}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={sLabel}>Humidity</span>
+                    <Ic name="drop" size={13} color="#3b82f6" />
+                  </div>
+                  <div style={sBigNum}>
+                    {Number(sd.humidity).toFixed(1)}
+                    <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#9ca3af', marginLeft: 2 }}>%</span>
+                  </div>
+                  <DeltaBar current={sd.humidity} baseline={sd.baseline_humidity} max={100} color="#3b82f6" />
+                  {sd.baseline_humidity != null && (
+                    <div style={sSub}>baseline {Number(sd.baseline_humidity).toFixed(1)}%</div>
+                  )}
+                </div>
+
+                {/* PM2.5 */}
+                <div style={sCard}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={sLabel}>PM2.5</span>
+                    <Ic name="smoke" size={13} color="#ef4444" />
+                  </div>
+                  <div style={sBigNum}>
+                    {sd.pm25}
+                    <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#9ca3af', marginLeft: 2 }}>μg/m³</span>
+                  </div>
+                  <DeltaBar current={sd.pm25} baseline={sd.baseline_pm25 ?? sd.ewma_pm25} max={150} color="#ef4444" />
+                  {(sd.baseline_pm25 ?? sd.ewma_pm25) != null && (
+                    <div style={sSub}>baseline {Number(sd.baseline_pm25 ?? sd.ewma_pm25).toFixed(1)}</div>
+                  )}
+                </div>
+
+                {/* Temp */}
+                <div style={sCard}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={sLabel}>Temp</span>
+                    <Ic name="thermo" size={13} color="#f59e0b" />
+                  </div>
+                  <div style={sBigNum}>
+                    {toF(sd.temperature)}
+                    <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#9ca3af', marginLeft: 2 }}>°F</span>
+                  </div>
+                  <DeltaBar current={Number(sd.temperature || 0)} baseline={sd.baseline_temperature} max={35} color="#f59e0b" />
+                  {sd.baseline_temperature != null && (
+                    <div style={sSub}>baseline {Number(sd.baseline_temperature).toFixed(1)}°C</div>
+                  )}
+                </div>
+
+                {/* Gas Resistance */}
+                <div style={sCard}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={sLabel}>Gas Res</span>
+                    <Ic name="atom" size={13} color="#10b981" />
+                  </div>
+                  <div style={sBigNum}>
+                    {fmtGas(sd.gasResistance)}
+                    <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#9ca3af', marginLeft: 2 }}>kΩ</span>
+                  </div>
+                  <DeltaBar
+                    current={Number(sd.gasResistance || 0) > 1000 ? Number(sd.gasResistance) / 1000 : Number(sd.gasResistance || 0)}
+                    baseline={sd.baseline_gas_resistance ? (Number(sd.baseline_gas_resistance) > 1000 ? Number(sd.baseline_gas_resistance) / 1000 : Number(sd.baseline_gas_resistance)) : null}
+                    max={70} color="#10b981" inverse
+                  />
+                  {sd.baseline_gas_resistance != null && (
+                    <div style={sSub}>baseline {fmtGas(sd.baseline_gas_resistance)} kΩ</div>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* Sensor Trends */}
+          {history.length > 1 && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
+                <span style={sLabel}>Sensor Trends</span>
+                <div style={{ display: 'flex', gap: 3 }}>
+                  {[{ key: 'all', label: 'All', color: '#374151' }, ...METRICS].map(m => (
+                    <button key={m.key} onClick={() => setMetric(m.key)} style={{
+                      padding: '3px 8px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                      fontSize: '0.65rem', fontWeight: 600, fontFamily: 'var(--font-body)',
+                      background: metric === m.key ? m.color : 'rgba(0,0,0,0.05)',
+                      color:      metric === m.key ? '#fff'  : '#6b7280',
+                      transition: 'all 0.15s',
+                    }}>
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ height: isAll ? 212 : 170, background: '#f8fafc', borderRadius: 14,
+                padding: isAll ? '10px 10px 4px' : '12px 12px 8px',
+                border: '1px solid rgba(0,0,0,0.06)', transition: 'height 0.2s ease' }}>
+                <Line data={chartData} options={chartOpts} />
+              </div>
+              {isAll && (
+                <p style={{ margin: '5px 0 0', textAlign: 'center', fontSize: '0.6rem',
+                  color: '#b0b8c4', fontFamily: 'var(--font-body)', letterSpacing: '0.04em' }}>
+                  chart normalised to % of range · hover for real values
+                </p>
               )}
             </div>
           )}
 
-          {/* Sensor Readings Section - Grid Cards */}
-          {device.sensorData && (
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Live Readings</h3>
-                <span className="text-xs text-gray-500">
-                  Updated: {new Date(device.sensorData.timestamp).toLocaleTimeString()}
-                </span>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-sm transition-all">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-gray-500 uppercase">Humidity</span>
-                    <span className="text-blue-500"><Icons.Humidity /></span>
-                  </div>
-                  <div className="text-2xl font-bold text-gray-900">{Number(device.sensorData.humidity).toFixed(2)}<span className="text-sm font-normal text-gray-500 ml-1">%</span></div>
-                  {device.sensorData.baseline_humidity !== undefined && device.sensorData.baseline_humidity !== null && (
-                    <span className="text-xs text-gray-500 font-medium">
-                      Baseline: {Number(device.sensorData.baseline_humidity).toFixed(1)}
-                    </span>
-                  )}
-                </div>
-                
-                <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-purple-200 hover:shadow-sm transition-all">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-gray-500 uppercase">PM2.5</span>
-                    <span className="text-purple-500"><Icons.PM25 /></span>
-                  </div>
-                  <div className="flex flex-col">
-                    <div className="text-2xl font-bold text-gray-900">{device.sensorData.pm25}<span className="text-sm font-normal text-gray-500 ml-1">μg/m³</span></div>
-                    {(device.sensorData.baseline_pm25 !== undefined || device.sensorData.ewma_pm25 !== undefined) && (
-                      <span className="text-xs text-gray-500 font-medium">
-                        Baseline: {Number(device.sensorData.baseline_pm25 ?? device.sensorData.ewma_pm25).toFixed(1)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-orange-200 hover:shadow-sm transition-all">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-gray-500 uppercase">Temp</span>
-                    <span className="text-orange-500"><Icons.Temp /></span>
-                  </div>
-                  <div className="flex items-baseline">
-                    <span className="text-2xl font-bold text-gray-900">{toFahrenheit(device.sensorData.temperature) || '--'}</span>
-                    <span className="text-sm font-normal text-gray-500 ml-1">°F</span>
-                    {device.sensorData.temperature !== undefined && (
-                      <span className="text-xs text-gray-400 ml-2 font-medium">
-                        ({Number(device.sensorData.temperature).toFixed(1)}°C)
-                      </span>
-                    )}
-                  </div>
-                  {device.sensorData.baseline_temperature !== undefined && device.sensorData.baseline_temperature !== null && (
-                    <span className="text-xs text-gray-500 font-medium">
-                      Baseline: {Number(device.sensorData.baseline_temperature).toFixed(1)}°C
-                    </span>
-                  )}
-                </div>
-
-                <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-green-200 hover:shadow-sm transition-all">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-gray-500 uppercase">Gas Res</span>
-                    <span className="text-green-500"><Icons.Gas /></span>
-                  </div>
-                  <div className="text-2xl font-bold text-gray-900">
-                    {formatGasResistance(device.sensorData.gasResistance).split(' ')[0]}
-                    <span className="text-sm font-normal text-gray-500 ml-1">kΩ</span>
-                  </div>
-                  {device.sensorData.baseline_gas_resistance !== undefined && device.sensorData.baseline_gas_resistance !== null && (
-                    <span className="text-xs text-gray-500 font-medium">
-                      Baseline: {Number(device.sensorData.baseline_gas_resistance).toFixed(0)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Graph Section */}
+          {/* Recent Events log */}
           {history.length > 0 && (
-            <div>
-              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">Sensor Trends</h3>
-              <div className="h-64 bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                <Line options={chartOptions} data={chartData} />
+            <div style={{ marginBottom: 6 }}>
+              <span style={{ ...sLabel, display: 'block', marginBottom: 9 }}>Recent Events</span>
+              <div style={{ maxHeight: 190, overflowY: 'auto', scrollbarWidth: 'thin',
+                scrollbarColor: 'rgba(0,0,0,0.08) transparent' }}>
+                {history.slice(0, 14).map((h, i) => {
+                  const cls   = h.predictedClass || 'normal';
+                  const dot   = dotColor(cls);
+                  const label = cls === 'vape' ? 'Vape detected' : cls === 'suspected' ? 'Suspected' : cls === 'cooldown' ? 'Cooldown' : 'Normal';
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9,
+                      padding: '5px 0', borderBottom: i < Math.min(history.length, 14) - 1 ? '1px solid rgba(0,0,0,0.04)' : 'none' }}>
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: dot, flexShrink: 0 }} />
+                      <span style={{ fontSize: '0.68rem', color: '#9ca3af', width: 34, flexShrink: 0, fontFamily: 'var(--font-body)' }}>
+                        {fmtTime(h.timestamp)}
+                      </span>
+                      <span style={{ fontSize: '0.74rem', color: '#374151', flex: 1, fontFamily: 'var(--font-body)', fontWeight: 500 }}>
+                        {label}
+                      </span>
+                      <span style={{ fontSize: '0.68rem', color: '#9ca3af', fontFamily: 'var(--font-body)', marginRight: 4 }}>
+                        {h.pm25} μg/m³
+                      </span>
+                      <span style={{ fontSize: '0.65rem', fontWeight: 700, color: dot,
+                        background: dot + '1a', borderRadius: 4, padding: '1px 5px', fontFamily: 'var(--font-body)', flexShrink: 0 }}>
+                        {h.confidence}%
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
+        </div>
 
-          {/* Location & Metadata Section */}
-          <div>
-             <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Location & Meta</h3>
-                <button onClick={() => setIsEditing(true)} className="text-xs text-blue-600 font-medium hover:underline">Edit</button>
-              </div>
-              
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
-                <div className="flex items-center p-4">
-                  <div className="w-8 text-gray-400"><Icons.Building /></div>
-                  <div className="flex-1">
-                    <span className="block text-xs text-gray-500">Building</span>
-                    <span className="block text-sm font-semibold text-gray-900">{device.location.building}</span>
-                  </div>
-                </div>
-                <div className="flex items-center p-4">
-                  <div className="w-8 text-gray-400"><Icons.Floor /></div>
-                  <div className="flex-1">
-                    <span className="block text-xs text-gray-500">Floor</span>
-                    <span className="block text-sm font-semibold text-gray-900">{device.location.floor}</span>
-                  </div>
-                </div>
-                <div className="flex items-center p-4">
-                  <div className="w-8 text-gray-400"><Icons.Room /></div>
-                  <div className="flex-1">
-                    <span className="block text-xs text-gray-500">Room</span>
-                    <span className="block text-sm font-semibold text-gray-900">{device.location.room}</span>
-                  </div>
-                </div>
-                <div className="flex items-center p-4 bg-gray-50/50">
-                  <div className="w-8"></div>
-                  <div className="flex-1 grid grid-cols-2 gap-4">
-                     <div>
-                        <span className="block text-xs text-gray-500">Last Seen</span>
-                        <span className="block text-sm font-medium text-gray-900">{formatTimestamp(device.lastSeen)}</span>
-                     </div>
-                     <div>
-                        <span className="block text-xs text-gray-500">Uptime</span>
-                        <span className="block text-sm font-medium text-gray-900">{device.uptime || '99.9%'}</span>
-                     </div>
-                  </div>
-                </div>
-              </div>
-          </div>
-
-          {/* Actions Section */}
-          <div className="pb-8">
-            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">Historical Logs</h3>
-            <div className="grid grid-cols-1 gap-3 mb-6">
-              <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                {history.map((reading, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors">
-                    <div className="flex items-center space-x-3">
-                      <div className={`
-                        w-2 h-2 rounded-full
-                        ${reading.predictedClass === 'vape' ? 'bg-red-500' :
-                          reading.predictedClass === 'calibrating' ? 'bg-blue-500' :
-                          reading.predictedClass === 'suspected' ? 'bg-orange-500' :
-                          'bg-green-500'}
-                      `}></div>
-                      <div>
-                        <span className="block text-xs text-gray-500 font-medium">
-                          {new Date(reading.timestamp).toLocaleTimeString()}
-                        </span>
-                        <span className="block text-sm text-gray-700">
-                          Hum: {Number(reading.humidity).toFixed(1)}% • PM2.5: {reading.pm25}
-                        </span>
-                      </div>
-                    </div>
-                    <div>
-                      <span className={`
-                        inline-flex items-center px-2 py-1 rounded text-xs font-medium
-                        ${reading.predictedClass === 'vape' ? 'bg-red-100 text-red-700' :
-                          reading.predictedClass === 'calibrating' ? 'bg-blue-100 text-blue-700' :
-                          reading.predictedClass === 'suspected' ? 'bg-orange-100 text-orange-700' :
-                          'bg-green-100 text-green-700'}
-                      `}>
-                        {reading.predictedClass === 'vape' ? 'Vape Detected' :
-                         reading.predictedClass === 'calibrating' ? 'Calibrating' :
-                         reading.predictedClass === 'suspected' ? 'Suspected' :
-                         'Normal'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-             {/* Delete Button */}
-             <div className="pt-4 border-t border-gray-100">
-              <button 
-                onClick={() => {
-                  if (window.confirm('Are you sure you want to delete this device? This action cannot be undone.')) {
-                    deviceService.deleteDevice(device.id)
-                      .then(() => {
-                        onClose();
-                        if (onPingDevice) onPingDevice(); // Trigger refresh if needed
-                      })
-                      .catch(err => alert('Failed to delete device'));
-                  }
-                }}
-                className="w-full py-3 px-4 flex items-center justify-center space-x-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors"
-              >
-                <Icons.Trash />
-                <span className="font-medium">Delete Device</span>
-              </button>
-            </div>
-          </div>
+        {/* ── Footer actions ── */}
+        <div style={{ padding: '10px 18px 12px', borderTop: '1px solid rgba(0,0,0,0.07)',
+          background: '#fafafa', display: 'flex', gap: 7, flexShrink: 0 }}>
+          <button onClick={() => setIsEditing(true)} style={sSecBtn}
+            onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+            onMouseLeave={e => e.currentTarget.style.background = 'white'}>
+            <Ic name="edit" size={14} color="#374151" /> Edit
+          </button>
+          <button onClick={handleRecalibrate} style={sSecBtn}
+            onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+            onMouseLeave={e => e.currentTarget.style.background = 'white'}>
+            <Ic name="refresh" size={14} color="#374151" /> Recalibrate
+          </button>
+          <button
+            onClick={() => confirmDelete ? handleDelete() : setConfirmDelete(true)}
+            style={{ ...sSecBtn,
+              border:     confirmDelete ? '1px solid #ef4444' : '1px solid rgba(0,0,0,0.1)',
+              background: confirmDelete ? '#fef2f2' : 'white',
+              color:      confirmDelete ? '#ef4444' : '#374151',
+            }}>
+            <Ic name="trash" size={14} color={confirmDelete ? '#ef4444' : '#374151'} />
+            {confirmDelete ? 'Confirm?' : 'Delete'}
+          </button>
         </div>
       </div>
-      
-      {/* Edit Modal - Modernized */}
+
+      {/* ── Edit modal ── */}
       {isEditing && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-              <h3 className="text-lg font-bold text-gray-900">Edit Device</h3>
-              <button onClick={() => setIsEditing(false)} className="text-gray-400 hover:text-gray-600">
-                <Icons.Close />
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex',
+          alignItems: 'center', justifyContent: 'center', padding: 16,
+          background: 'rgba(0,0,0,0.36)', backdropFilter: 'blur(4px)' }}>
+          <div style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 400,
+            overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+
+            <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid rgba(0,0,0,0.07)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.92rem', fontWeight: 700, color: '#111827', fontFamily: 'var(--font-display)' }}>
+                Edit Device
+              </span>
+              <button onClick={() => setIsEditing(false)}
+                style={{ padding: 5, borderRadius: 7, border: 'none', background: 'transparent',
+                  cursor: 'pointer', color: '#9ca3af', display: 'flex' }}>
+                <Ic name="close" size={17} />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Device Name</label>
-                <input 
-                  type="text" 
-                  value={editForm.name} 
-                  onChange={(e) => setEditForm({...editForm, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C2CB] focus:border-[#00C2CB] outline-none transition-all"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Building</label>
-                    <input 
-                    type="text" 
-                    value={editForm.building} 
-                    onChange={(e) => setEditForm({...editForm, building: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C2CB] focus:border-[#00C2CB] outline-none transition-all"
-                    />
+
+            <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 11 }}>
+              {[{ label: 'Device Name', key: 'name' }, { label: 'Building', key: 'building' },
+                { label: 'Floor', key: 'floor' }, { label: 'Room', key: 'room' }].map(({ label, key }) => (
+                <div key={key}>
+                  <label style={{ display: 'block', ...sLabel, marginBottom: 5 }}>{label}</label>
+                  <input type="text" value={editForm[key]}
+                    onChange={e => setEditForm(p => ({ ...p, [key]: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', border: '1px solid rgba(0,0,0,0.12)',
+                      borderRadius: 9, fontSize: '0.86rem', color: '#111827',
+                      fontFamily: 'var(--font-body)', outline: 'none', transition: 'border-color 0.15s',
+                      boxSizing: 'border-box' }}
+                    onFocus={e => { e.target.style.borderColor = '#00C2CB'; e.target.style.boxShadow = '0 0 0 3px rgba(0,194,203,0.12)'; }}
+                    onBlur={e  => { e.target.style.borderColor = 'rgba(0,0,0,0.12)'; e.target.style.boxShadow = 'none'; }}
+                  />
                 </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Floor</label>
-                    <input 
-                    type="text" 
-                    value={editForm.floor} 
-                    onChange={(e) => setEditForm({...editForm, floor: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
-                    <input 
-                    type="text" 
-                    value={editForm.room} 
-                    onChange={(e) => setEditForm({...editForm, room: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                    />
-                </div>
-              </div>
+              ))}
             </div>
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end space-x-3">
-              <button 
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                onClick={() => setIsEditing(false)}
-              >
+
+            <div style={{ padding: '10px 18px 14px', borderTop: '1px solid rgba(0,0,0,0.07)',
+              display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setIsEditing(false)}
+                style={{ padding: '8px 16px', borderRadius: 9, border: '1px solid rgba(0,0,0,0.1)',
+                  background: 'white', cursor: 'pointer', fontSize: '0.81rem', fontWeight: 600,
+                  color: '#374151', fontFamily: 'var(--font-body)' }}>
                 Cancel
               </button>
-              <button 
-                className="px-4 py-2 text-sm font-medium text-white bg-[#00C2CB] rounded-lg hover:bg-[#009FA6] shadow-sm"
-                onClick={handleSaveEdit}
-              >
+              <button onClick={handleSave}
+                style={{ padding: '8px 18px', borderRadius: 9, border: 'none', background: '#00C2CB',
+                  cursor: 'pointer', fontSize: '0.81rem', fontWeight: 600, color: 'white',
+                  fontFamily: 'var(--font-body)', boxShadow: '0 2px 8px rgba(0,194,203,0.32)' }}>
                 Save Changes
               </button>
             </div>
@@ -683,4 +631,3 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
 };
 
 export default DeviceDetailPanel;
-

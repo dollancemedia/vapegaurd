@@ -260,11 +260,13 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditi
           style={bgFallback ? { backgroundImage: `url(${mapImage})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'top left' } : undefined}
         >
           {/* Background Map Image - Embedded for perfect coordinate alignment */}
-          <image 
+          <image
             href={mapImage}
             xlinkHref={mapImage}
-            width="800" 
-            height="600" 
+            x="-40"
+            y="-30"
+            width="880"
+            height="660"
             className="opacity-90"
             crossOrigin="anonymous"
             onError={() => setBgFallback(true)}
@@ -355,66 +357,126 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditi
           })}
         </svg>
 
-        {/* Hover Tooltip (Only in View Mode) */}
-        {hoveredDevice && !isEditing && !draggingId && (
-          <div 
-            className="absolute z-50 pointer-events-none"
-            style={{ 
-              left: mousePos.x, 
-              top: mousePos.y, 
-              transform: 'translate(-50%, -100%)',
-              marginTop: '-40px'
-            }}
-          >
-            <div className="bg-white rounded-lg shadow-xl border border-gray-100 p-3 w-64 animate-in fade-in zoom-in duration-200">
-              <div className="flex items-start justify-between mb-2 pb-2 border-b border-gray-100">
-                <div>
-                  <h4 className="font-bold text-gray-900 text-sm">{hoveredDevice.name}</h4>
-                  <p className="text-xs text-gray-500">{hoveredDevice.type === 'admin' ? 'Admin Console' : 'Vape Detector'}</p>
-                </div>
-                <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
-                  hoveredDevice.status === 'online' || hoveredDevice.status === 'IDLE' ? 'bg-green-100 text-green-700' :
-                  hoveredDevice.status === 'alarm' ? 'bg-red-100 text-red-700' :
-                  hoveredDevice.status === 'COOLDOWN' ? 'bg-blue-100 text-blue-700' :
-                  'bg-gray-100 text-gray-600'
-                }`}>
-                  {hoveredDevice.status}
-                </span>
-              </div>
-              <div className="space-y-1 text-xs text-gray-600">
-                <div className="flex justify-between">
-                  <span>Location:</span>
-                  <span className="font-medium text-gray-900">{hoveredDevice.location.room}</span>
-                </div>
-                {hoveredDevice.sensorData && (
-                  <>
-                    <div className="flex justify-between">
-                      <span>Status:</span>
-                      <span className={`font-medium ${
-                        hoveredDevice.status === 'offline' ? 'text-gray-500' :
-                        hoveredDevice.sensorData.predictedClass === 'vape' ? 'text-red-600' : 'text-[#00C2CB]'
-                      }`}>
-                        {hoveredDevice.sensorData.predictedClass === 'vape' ? '⚠️ Vape Detected' : '✅ Normal'}
-                      </span>
+        {/* Hover Tooltip (Only in View Mode) — smart Y positioning */}
+        {hoveredDevice && !isEditing && !draggingId && (() => {
+          const showBelow = mousePos.y < 200;
+          const sd = hoveredDevice.sensorData;
+
+          // Status badge config
+          const statusCfg = (() => {
+            const s = hoveredDevice.status;
+            const pc = sd?.predictedClass;
+            if (pc === 'vape' || s === 'alarm')    return { label: 'Alert',     bg: 'rgba(239,68,68,0.18)',   color: '#ef4444' };
+            if (s === 'CONFIRMING' || pc === 'suspected') return { label: 'Suspected', bg: 'rgba(249,115,22,0.18)', color: '#f97316' };
+            if (s === 'COOLDOWN')                  return { label: 'Cooldown',  bg: 'rgba(59,130,246,0.18)',  color: '#3b82f6' };
+            if (s === 'WARMUP' || s === 'CALIBRATING') return { label: 'Warmup', bg: 'rgba(234,179,8,0.18)', color: '#eab308' };
+            if (s === 'offline' || hoveredDevice.isOnline === false) return { label: 'Offline', bg: 'rgba(107,114,128,0.18)', color: '#6b7280' };
+            return { label: 'Online', bg: 'rgba(34,197,94,0.18)', color: '#22c55e' };
+          })();
+
+          const pm25Val  = sd?.pm25 != null ? sd.pm25 : null;
+          const pm25High = pm25Val != null && pm25Val > 35;
+          const gasKOhm  = sd?.gasResistance ? (sd.gasResistance / 1000).toFixed(1) : null;
+
+          const cardStyle = {
+            background: 'rgba(13, 18, 28, 0.91)',
+            backdropFilter: 'blur(18px)',
+            WebkitBackdropFilter: 'blur(18px)',
+            borderRadius: 14,
+            border: '1px solid rgba(255,255,255,0.09)',
+            padding: '11px 13px 12px',
+            width: 230,
+            boxShadow: '0 20px 48px rgba(0,0,0,0.45)',
+            fontFamily: 'var(--font-body, sans-serif)',
+          };
+
+          const metricStyle = {
+            background: 'rgba(255,255,255,0.055)',
+            borderRadius: 8,
+            padding: '5px 8px',
+          };
+
+          const arrowBorder = showBelow
+            ? { borderLeft: '7px solid transparent', borderRight: '7px solid transparent', borderBottom: '7px solid rgba(13,18,28,0.91)', top: -7 }
+            : { borderLeft: '7px solid transparent', borderRight: '7px solid transparent', borderTop:  '7px solid rgba(13,18,28,0.91)', bottom: -7 };
+
+          return (
+            <div
+              className="absolute z-50 pointer-events-none"
+              style={{
+                left: mousePos.x,
+                top: mousePos.y,
+                transform: showBelow ? 'translate(-50%, 14px)' : 'translate(-50%, calc(-100% - 14px))',
+              }}
+            >
+              <div style={cardStyle}>
+                {/* Header row */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 9 }}>
+                  <div>
+                    <div style={{ color: 'rgba(255,255,255,0.95)', fontWeight: 700, fontSize: '0.85rem', marginBottom: 2, lineHeight: 1.2 }}>
+                      {hoveredDevice.name}
                     </div>
-                    <div className="mt-2 pt-2 border-t border-gray-50 grid grid-cols-2 gap-2">
-                      <div className="bg-gray-50 p-1.5 rounded text-center">
-                        <span className="block text-[10px] text-gray-400 uppercase">Humidity</span>
-                        <span className="font-semibold">{hoveredDevice.sensorData.humidity}%</span>
-                      </div>
-                      <div className="bg-gray-50 p-1.5 rounded text-center">
-                        <span className="block text-[10px] text-gray-400 uppercase">PM2.5</span>
-                        <span className="font-semibold">{hoveredDevice.sensorData.pm25}</span>
-                      </div>
+                    <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: '0.66rem', letterSpacing: '0.02em' }}>
+                      {hoveredDevice.location?.room
+                        ? `${hoveredDevice.location.building || ''} · ${hoveredDevice.location.room}`
+                        : hoveredDevice.location?.building || 'No location'}
                     </div>
-                  </>
-                )}
+                  </div>
+                  <span style={{
+                    background: statusCfg.bg, color: statusCfg.color,
+                    fontSize: '0.61rem', fontWeight: 700, letterSpacing: '0.05em',
+                    padding: '3px 7px', borderRadius: 20, textTransform: 'uppercase',
+                    flexShrink: 0, marginLeft: 8,
+                  }}>
+                    {statusCfg.label}
+                  </span>
+                </div>
+
+                {/* Divider */}
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 9 }} />
+
+                {/* Metrics grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+                  <div style={metricStyle}>
+                    <div style={{ color: 'rgba(255,255,255,0.36)', fontSize: '0.59rem', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>PM2.5</div>
+                    <div style={{ color: pm25High ? '#ef4444' : 'rgba(255,255,255,0.85)', fontWeight: 600, fontSize: '0.82rem' }}>
+                      {pm25Val != null ? pm25Val : '—'}
+                      <span style={{ fontSize: '0.57rem', fontWeight: 400, color: 'rgba(255,255,255,0.3)', marginLeft: 2 }}>μg/m³</span>
+                    </div>
+                  </div>
+                  <div style={metricStyle}>
+                    <div style={{ color: 'rgba(255,255,255,0.36)', fontSize: '0.59rem', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Humidity</div>
+                    <div style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600, fontSize: '0.82rem' }}>
+                      {sd?.humidity != null ? sd.humidity : '—'}
+                      <span style={{ fontSize: '0.57rem', fontWeight: 400, color: 'rgba(255,255,255,0.3)', marginLeft: 2 }}>%</span>
+                    </div>
+                  </div>
+                  <div style={metricStyle}>
+                    <div style={{ color: 'rgba(255,255,255,0.36)', fontSize: '0.59rem', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Gas Res.</div>
+                    <div style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600, fontSize: '0.82rem' }}>
+                      {gasKOhm ?? '—'}
+                      <span style={{ fontSize: '0.57rem', fontWeight: 400, color: 'rgba(255,255,255,0.3)', marginLeft: 2 }}>kΩ</span>
+                    </div>
+                  </div>
+                  <div style={metricStyle}>
+                    <div style={{ color: 'rgba(255,255,255,0.36)', fontSize: '0.59rem', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Detection</div>
+                    <div style={{ color: sd?.predictedClass === 'vape' ? '#ef4444' : '#00C2CB', fontWeight: 600, fontSize: '0.78rem', textTransform: 'capitalize' }}>
+                      {sd?.predictedClass ?? '—'}
+                    </div>
+                  </div>
+                </div>
               </div>
+
+              {/* Arrow */}
+              <div style={{
+                width: 0, height: 0,
+                position: 'absolute',
+                left: '50%', transform: 'translateX(-50%)',
+                ...arrowBorder,
+              }} />
             </div>
-            {/* Arrow */}
-            <div className="w-3 h-3 bg-white border-r border-b border-gray-100 transform rotate-45 absolute left-1/2 -ml-1.5 -bottom-1.5"></div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       <style jsx>{`
