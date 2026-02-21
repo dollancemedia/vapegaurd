@@ -170,8 +170,6 @@ const Devices = () => {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isCalibratingAll, setIsCalibratingAll] = useState(false);
   const [deviceHistory, setDeviceHistory] = useState({}); // Map of deviceId -> array of readings
-  const [lastUpdated, setLastUpdated] = useState(null);
-  
   const { organization } = useOrganization();
   // Use organization ID for specific sites to match registration data
   // If org name is Admin, pass 'admin' to see all devices
@@ -199,12 +197,8 @@ const Devices = () => {
 
   // Setup silent polling
   useEffect(() => {
-    // Initial update time
-    setLastUpdated(new Date());
-
     const pollInterval = setInterval(() => {
       refreshDevices();
-      setLastUpdated(new Date());
     }, 5000);
 
     return () => clearInterval(pollInterval);
@@ -347,10 +341,6 @@ const Devices = () => {
     enabled: !!token
   });
 
-  // Determine overall system status
-  // Show "Live" if ANY device is online, otherwise "Offline"
-  const isSystemOnline = devices.some(device => device.isOnline !== false);
-
   if (isMobile) {
     return <MobileDashboard />;
   }
@@ -375,12 +365,6 @@ const Devices = () => {
     }));
   };
 
-  // Manual refresh handler
-  const handleManualRefresh = () => {
-    refreshDevices();
-    setLastUpdated(new Date());
-  };
-
   // Recalibrate every device at once
   const handleCalibrateAll = async () => {
     if (isCalibratingAll || devices.length === 0) return;
@@ -388,7 +372,6 @@ const Devices = () => {
     try {
       await Promise.allSettled(devices.map(d => deviceService.recalibrateDevice(d.id)));
       refreshDevices();
-      setLastUpdated(new Date());
     } catch (err) {
       console.error('Calibrate all failed:', err);
     } finally {
@@ -453,9 +436,6 @@ const Devices = () => {
   const systemLabel  = alertCount > 0
     ? `${alertCount} Alert${alertCount > 1 ? 's' : ''}`
     : systemScore > 70 ? 'All OK!' : 'Degraded';
-  const lastUpdatedStr = lastUpdated
-    ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : '--:--';
 
   // ── Loading / error screens ──────────────────────────────────────────────────
   if (loading && devices.length === 0) {
@@ -628,7 +608,7 @@ const Devices = () => {
       <AddDeviceModal
         isOpen={isAddDeviceOpen}
         onClose={() => setIsAddDeviceOpen(false)}
-        onDeviceAdded={() => { refreshDevices(); setLastUpdated(new Date()); }}
+        onDeviceAdded={() => { refreshDevices(); }}
       />
     </div>
   );

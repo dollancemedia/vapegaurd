@@ -32,13 +32,6 @@ const isIncident  = (e) => isVape(e) || isSuspected(e);
 
 const fmtDate = (ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 const fmtTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-const fmtRel  = (ts) => {
-  const m = Math.floor((Date.now() - new Date(ts)) / 60000);
-  if (m <  1)  return 'Just now';
-  if (m < 60)  return `${m}m ago`;
-  if (m < 1440) return `${Math.floor(m / 60)}h ago`;
-  return fmtDate(ts);
-};
 
 // ── Generate time-bucketed chart data ─────────────────────────────────────────
 const generateBuckets = (rangeKey, events) => {
@@ -307,7 +300,6 @@ const Analytics = () => {
 
   // ── Filter to selected range ─────────────────────────────────────────────────
   const rangeStart   = getRangeMs(range);
-  const prevStart    = range === 'all' ? 0 : getRangeMs(range) - (getRangeMs(range) === 0 ? 0 : (Date.now() - getRangeMs(range)));
   const rangeEvents  = useMemo(() => events.filter(e => new Date(e.timestamp) >= rangeStart), [events, rangeStart]);
   const incidents    = useMemo(() => rangeEvents.filter(isIncident), [rangeEvents]);
 
@@ -331,11 +323,15 @@ const Analytics = () => {
   const confVals  = incidents.map(e => e.confidence).filter(c => c != null);
   const avgConf   = confVals.length > 0 ? Math.round(confVals.reduce((s, v) => s + v, 0) / confVals.length) : null;
 
-  const hotspotMap = {};
-  incidents.forEach(e => {
-    const loc = devLoc(e.deviceId) || devName(e.deviceId);
-    hotspotMap[loc] = (hotspotMap[loc] || 0) + 1;
-  });
+  const hotspotMap = useMemo(() => {
+    const map = {};
+    incidents.forEach(e => {
+      const loc = devLoc(e.deviceId) || devName(e.deviceId);
+      map[loc] = (map[loc] || 0) + 1;
+    });
+    return map;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incidents]);
   const hotspot = Object.entries(hotspotMap).sort(([, a], [, b]) => b - a)[0];
 
   const byHour = useMemo(() => {
@@ -419,6 +415,7 @@ const Analytics = () => {
       );
     }
     return sortEvents(arr, sortCol, sortDir);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incidents, typeFilter, search, sortCol, sortDir]);
 
   const paginated = logFiltered.slice(0, (page + 1) * PAGE_SIZE);
@@ -613,7 +610,7 @@ const Analytics = () => {
             <div style={{ display: 'flex', gap: 4 }}>
               {[['all','All'],['vape','Vape'],['suspected','Suspected']].map(([k, lb]) => (
                 <button key={k} onClick={() => { setTypeFilter(k); setPage(0); }} style={{
-                  padding: '5px 10px', borderRadius: 8, border: 'none',
+                  padding: '5px 10px', borderRadius: 8,
                   background: typeFilter === k ? 'rgba(0,194,203,0.12)' : 'rgba(0,0,0,0.05)',
                   color: typeFilter === k ? 'var(--teal)' : '#6b7280',
                   fontFamily: 'var(--font-body)', fontSize: '0.72rem',

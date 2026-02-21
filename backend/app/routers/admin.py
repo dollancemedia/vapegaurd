@@ -3,10 +3,6 @@ import logging
 import sys
 import os
 
-# Add the backend directory to sys.path so we can import train_model
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
-
-import train_model
 from .. import inference
 
 router = APIRouter(
@@ -29,11 +25,20 @@ async def retrain_model():
     """
     try:
         logger.info("Starting manual model retraining...")
-        
+
+        # Lazy import — train_model.py is a local script not available in production
+        backend_dir = os.path.join(os.path.dirname(__file__), "..", "..")
+        if backend_dir not in sys.path:
+            sys.path.insert(0, backend_dir)
+        try:
+            import train_model
+        except ImportError:
+            raise HTTPException(
+                status_code=501,
+                detail="train_model module is not available in this deployment. Retrain locally and redeploy the model files."
+            )
+
         # 1. Train and save
-        # We run this synchronously for now as it's a critical admin operation
-        # and we want to confirm success before returning.
-        # For very large datasets, this should be moved to a background task.
         result = train_model.train_and_save_model(save=True, skip_predict=True)
         
         if result.get("status") == "error":

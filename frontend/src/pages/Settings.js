@@ -4,7 +4,7 @@ import { useMediaQuery } from 'react-responsive';
 import SchoolNotificationSystem from '../components/SchoolNotificationSystem';
 import {
   Bell, Shield, Users, LogOut, Volume2, Wifi,
-  AlertTriangle, Zap, ChevronRight, Settings as SettingsIcon,
+  AlertTriangle, Zap, ChevronRight,
 } from 'lucide-react';
 
 // ── Custom toggle switch ───────────────────────────────────────────────────────
@@ -135,23 +135,35 @@ const Settings = () => {
 
   const [activeSection, setActiveSection] = useState('notifications');
   const [testFired, setTestFired] = useState(false);
+  const [saveFired, setSaveFired] = useState(false);
 
-  const [settings, setSettings] = useState(() => {
+  const loadSaved = () => {
     try {
-      const saved = localStorage.getItem('notificationSettings');
-      return saved ? JSON.parse(saved) : {
+      const raw = localStorage.getItem('notificationSettings');
+      return raw ? JSON.parse(raw) : {
         criticalAlerts: true, warningAlerts: true,
         onlineStatus: true, soundEnabled: true, threshold: 75,
       };
     } catch {
       return { criticalAlerts: true, warningAlerts: true, onlineStatus: true, soundEnabled: true, threshold: 75 };
     }
-  });
+  };
 
-  React.useEffect(() => {
+  const [savedSettings, setSavedSettings] = useState(loadSaved);
+  const [settings, setSettings] = useState(loadSaved);
+
+  // Dirty check — any key differs from saved
+  const isDirty = Object.keys(settings).some(k => settings[k] !== savedSettings[k]);
+
+  const handleSave = () => {
     localStorage.setItem('notificationSettings', JSON.stringify(settings));
     window.dispatchEvent(new Event('notificationSettingsChanged'));
-  }, [settings]);
+    setSavedSettings({ ...settings });
+    setSaveFired(true);
+    setTimeout(() => setSaveFired(false), 2000);
+  };
+
+  const handleDiscard = () => setSettings({ ...savedSettings });
 
   const handleToggle = (key) => setSettings(prev => ({ ...prev, [key]: !prev[key] }));
   const handleThreshold = (e) => setSettings(prev => ({ ...prev, threshold: parseInt(e.target.value) }));
@@ -400,6 +412,85 @@ const Settings = () => {
                   <Bell size={14} />
                   {testFired ? 'Notification Sent!' : 'Send Test Notification'}
                 </button>
+              </div>
+
+              {/* ── Save / Discard bar ── */}
+              <div style={{
+                overflow: 'hidden',
+                maxHeight: isDirty ? 80 : 0,
+                transition: 'max-height 0.3s cubic-bezier(0.4,0,0.2,1)',
+              }}>
+                <div style={{
+                  padding: '12px 22px',
+                  borderTop: '1px solid rgba(0,194,203,0.15)',
+                  background: 'rgba(0,194,203,0.04)',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                }}>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <div style={{
+                      width: 6, height: 6, borderRadius: '50%',
+                      background: '#f59e0b',
+                      boxShadow: '0 0 6px rgba(245,158,11,0.7)',
+                      animation: 'settingsPulse 1.8s ease-in-out infinite',
+                    }} />
+                    <span style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 500 }}>
+                      Unsaved changes
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleDiscard}
+                    style={{
+                      padding: '7px 14px',
+                      background: 'transparent',
+                      border: '1px solid rgba(0,0,0,0.1)',
+                      borderRadius: 9, color: '#6b7280',
+                      fontFamily: 'var(--font-body)',
+                      fontSize: '0.78rem', fontWeight: 600,
+                      cursor: 'pointer', transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.04)'; e.currentTarget.style.color = '#374151'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#6b7280'; }}
+                  >
+                    Discard
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    style={{
+                      padding: '7px 20px',
+                      background: saveFired
+                        ? 'linear-gradient(135deg,#22c55e,#16a34a)'
+                        : 'linear-gradient(135deg,var(--teal),#009fa6)',
+                      border: 'none',
+                      borderRadius: 9, color: 'white',
+                      fontFamily: 'var(--font-body)',
+                      fontSize: '0.78rem', fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: saveFired
+                        ? '0 3px 12px rgba(34,197,94,0.35)'
+                        : '0 3px 12px rgba(0,194,203,0.35)',
+                      transition: 'all 0.2s',
+                      display: 'flex', alignItems: 'center', gap: 6,
+                    }}
+                    onMouseEnter={e => { if (!saveFired) e.currentTarget.style.filter = 'brightness(1.06)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.filter = 'none'; }}
+                  >
+                    {saveFired ? (
+                      <>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        Saved!
+                      </>
+                    ) : (
+                      <>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                        </svg>
+                        Save Changes
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </SectionCard>
           )}

@@ -43,7 +43,7 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditi
   const [localLocations, setLocalLocations] = useState({}); // Stores temporary positions while dragging/editing
   const svgRef = useRef(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 }); // For tooltip
-  const [bgFallback, setBgFallback] = useState(false);
+  const [mapLoaded, setMapLoaded] = useState(false);
 
   // Fallback coordinates
   const defaultCoordinates = {
@@ -191,17 +191,25 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditi
 
   const name = organization?.name;
 
-  // Map image path state with preload + fallback handling
-  const [mapImage, setMapImage] = useState('/default.svg');
+  // null = not yet resolved, string = resolved path, 'NOT_FOUND' sentinel handled via mapNotFound
+  const [mapImage, setMapImage] = useState(null);
+  const [mapNotFound, setMapNotFound] = useState(false);
 
   useEffect(() => {
-    let candidate = '/default.svg';
-    if (name) candidate = `/schools/${name.toLowerCase()}.svg`;
+    // Reset when org changes
+    setMapImage(null);
+    setMapLoaded(false);
+    setMapNotFound(false);
 
-    // Try to preload the image; if it fails, keep default
+    if (!name) {
+      // Org not loaded yet — stay in skeleton state
+      return;
+    }
+
+    const candidate = `/schools/${name.toLowerCase()}.svg`;
     const img = new Image();
     img.onload = () => setMapImage(candidate);
-    img.onerror = () => setMapImage('/default.svg');
+    img.onerror = () => setMapNotFound(true);
     img.src = candidate;
 
     return () => {
@@ -251,40 +259,138 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditi
           handleMouseUp();
         }}
       >
-        <svg 
+        <svg
           ref={svgRef}
-          viewBox="0 0 800 600" 
+          viewBox="0 0 800 600"
           className="w-full h-full"
           preserveAspectRatio="xMidYMin meet"
           xmlnsXlink="http://www.w3.org/1999/xlink"
-          style={bgFallback ? { backgroundImage: `url(${mapImage})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'top left' } : undefined}
         >
-          {/* Background Map Image - Embedded for perfect coordinate alignment */}
-          <image
-            href={mapImage}
-            xlinkHref={mapImage}
-            x="-40"
-            y="-30"
-            width="880"
-            height="660"
-            className="opacity-90"
-            crossOrigin="anonymous"
-            onError={() => setBgFallback(true)}
-          />
+          {/* ── Grey skeleton: shown while preloading or while SVG image is rendering ── */}
+          {!mapLoaded && !mapNotFound && (
+            <g>
+              <defs>
+                <clipPath id="skelClip"><rect x="0" y="0" width="800" height="600" /></clipPath>
+                <linearGradient id="skelShimmer" x1="0" y1="0" x2="1" y2="0" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%"   stopColor="rgba(255,255,255,0)" />
+                  <stop offset="45%"  stopColor="rgba(255,255,255,0.5)" />
+                  <stop offset="55%"  stopColor="rgba(255,255,255,0.5)" />
+                  <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+                </linearGradient>
+              </defs>
+              {/* Base */}
+              <rect x="0" y="0" width="800" height="600" fill="#f1f4f8" />
+              {/* Main corridor */}
+              <rect x="25" y="262" width="750" height="66" rx="4" fill="#dde3ec" />
+              {/* North rooms */}
+              <rect x="25"  y="38"  width="132" height="207" rx="5" fill="#dde3ec" />
+              <rect x="168" y="38"  width="132" height="207" rx="5" fill="#dde3ec" />
+              <rect x="311" y="38"  width="132" height="207" rx="5" fill="#dde3ec" />
+              <rect x="454" y="38"  width="132" height="207" rx="5" fill="#dde3ec" />
+              <rect x="597" y="38"  width="178" height="207" rx="5" fill="#dde3ec" />
+              {/* South rooms */}
+              <rect x="25"  y="344" width="158" height="210" rx="5" fill="#dde3ec" />
+              <rect x="194" y="344" width="158" height="210" rx="5" fill="#dde3ec" />
+              <rect x="363" y="344" width="158" height="210" rx="5" fill="#dde3ec" />
+              <rect x="532" y="344" width="243" height="210" rx="5" fill="#dde3ec" />
+              {/* Door gaps */}
+              <rect x="76"  y="259" width="30" height="11" fill="#f1f4f8" />
+              <rect x="219" y="259" width="30" height="11" fill="#f1f4f8" />
+              <rect x="362" y="259" width="30" height="11" fill="#f1f4f8" />
+              <rect x="505" y="259" width="30" height="11" fill="#f1f4f8" />
+              <rect x="76"  y="328" width="30" height="11" fill="#f1f4f8" />
+              <rect x="246" y="328" width="30" height="11" fill="#f1f4f8" />
+              <rect x="415" y="328" width="30" height="11" fill="#f1f4f8" />
+              <rect x="586" y="328" width="30" height="11" fill="#f1f4f8" />
+              {/* Fake room label bars */}
+              <rect x="56"  y="150" width="70" height="6" rx="3" fill="#c8d0dc" />
+              <rect x="199" y="150" width="70" height="6" rx="3" fill="#c8d0dc" />
+              <rect x="341" y="150" width="70" height="6" rx="3" fill="#c8d0dc" />
+              <rect x="484" y="150" width="70" height="6" rx="3" fill="#c8d0dc" />
+              <rect x="635" y="150" width="70" height="6" rx="3" fill="#c8d0dc" />
+              <rect x="63"  y="458" width="55" height="6" rx="3" fill="#c8d0dc" />
+              <rect x="232" y="458" width="55" height="6" rx="3" fill="#c8d0dc" />
+              <rect x="400" y="458" width="55" height="6" rx="3" fill="#c8d0dc" />
+              <rect x="578" y="458" width="55" height="6" rx="3" fill="#c8d0dc" />
+              {/* Shimmer sweep */}
+              <g clipPath="url(#skelClip)">
+                <rect x="-400" y="0" width="400" height="600" fill="url(#skelShimmer)" className="map-skel-shimmer" />
+              </g>
+              {/* Label */}
+              <text x="400" y="587" textAnchor="middle" fontSize="10.5" fill="#a0aec0"
+                fontFamily="DM Sans, system-ui, sans-serif" letterSpacing="0.06em">
+                Loading map…
+              </text>
+            </g>
+          )}
+
+          {/* Map image — only rendered once preload confirmed it exists */}
+          {mapImage && (
+            <image
+              href={mapImage}
+              xlinkHref={mapImage}
+              x="-40"
+              y="-30"
+              width="880"
+              height="660"
+              crossOrigin="anonymous"
+              onLoad={() => setMapLoaded(true)}
+              onError={() => setMapNotFound(true)}
+              style={{ opacity: mapLoaded ? 0.9 : 0, transition: 'opacity 0.4s ease' }}
+            />
+          )}
+
+          {/* ── No floor plan state ── */}
+          {mapNotFound && (
+            <g>
+              <defs>
+                <pattern id="noMapDots" width="28" height="28" patternUnits="userSpaceOnUse">
+                  <circle cx="1.5" cy="1.5" r="1.5" fill="#dde3ec" />
+                </pattern>
+              </defs>
+              <rect x="0" y="0" width="800" height="600" fill="#f4f6f9" />
+              <rect x="0" y="0" width="800" height="600" fill="url(#noMapDots)" />
+              {/* Dashed border inset */}
+              <rect x="24" y="24" width="752" height="552" rx="12"
+                fill="none" stroke="#cdd5e0" strokeWidth="1.5" strokeDasharray="10 6" />
+              {/* Map icon */}
+              <g transform="translate(356, 222)">
+                {/* Left panel */}
+                <path d="M0 8 L0 64 L28 56 L28 0 Z" fill="none" stroke="#b0bcc8" strokeWidth="2" strokeLinejoin="round" />
+                {/* Middle panel */}
+                <path d="M28 0 L28 56 L60 64 L60 8 Z" fill="none" stroke="#b0bcc8" strokeWidth="2" strokeLinejoin="round" />
+                {/* Right panel */}
+                <path d="M60 8 L60 64 L88 56 L88 0 Z" fill="none" stroke="#b0bcc8" strokeWidth="2" strokeLinejoin="round" />
+                {/* Pin */}
+                <circle cx="44" cy="20" r="10" fill="#dde3ec" stroke="#b0bcc8" strokeWidth="1.5" />
+                <circle cx="44" cy="20" r="4" fill="#b0bcc8" />
+                {/* Diagonal strike */}
+                <line x1="2" y1="2" x2="86" y2="62" stroke="#c8d0da" strokeWidth="2" strokeLinecap="round" />
+              </g>
+              <text x="400" y="330" textAnchor="middle" fontSize="15" fontWeight="700"
+                fill="#94a3b8" fontFamily="DM Sans, system-ui, sans-serif" letterSpacing="-0.01em">
+                No floor plan uploaded
+              </text>
+              <text x="400" y="352" textAnchor="middle" fontSize="11.5" fill="#b0bcc8"
+                fontFamily="DM Sans, system-ui, sans-serif">
+                Add a floor plan by placing a .svg in /public/schools/
+              </text>
+            </g>
+          )}
 
           {/* Device Markers */}
           {devices.map((device) => {
-            const coords = isEditing 
-              ? (localLocations[device.id] || { x: 0, y: 0 }) 
+            const coords = isEditing
+              ? (localLocations[device.id] || { x: 0, y: 0 })
               : (device.mapLocation || defaultCoordinates[device.id] || { x: 50, y: 50 });
-            
+
             const visuals = getDeviceVisuals(device);
             const isSelected = selectedDevice?.id === device.id;
             const isHovered = hoveredDevice?.id === device.id;
             const isDragging = draggingId === device.id;
 
             return (
-              <g 
+              <g
                 key={device.id}
                 transform={`translate(${coords.x}, ${coords.y})`}
                 onMouseDown={(e) => handleMouseDown(e, device.id)}

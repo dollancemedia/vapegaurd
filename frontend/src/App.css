@@ -1999,7 +1999,7 @@ main {
   grid-template-columns: minmax(0, 1fr) 360px;
   gap: 14px;
   /* No flex:1 — that overrides the explicit height and causes scroll */
-  height: 780px;
+  height: 660px;
 }
 
 /* ── Map panel ── */
@@ -2633,6 +2633,21 @@ main {
   background: var(--teal);
   box-shadow: 0 0 0 3px rgba(0, 194, 203, 0.18);
   cursor: pointer;
+}
+
+/* ── Map skeleton shimmer ── */
+.map-skel-shimmer {
+  animation: mapSkelSwipe 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+@keyframes mapSkelSwipe {
+  0%   { transform: translateX(0px); }
+  100% { transform: translateX(1600px); }
+}
+
+/* ── Settings unsaved-changes dot pulse ── */
+@keyframes settingsPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.55; transform: scale(0.75); }
 }
 
 /* ── Analytics page pulse skeleton ── */
