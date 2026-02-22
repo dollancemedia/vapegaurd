@@ -21,8 +21,10 @@ const normalizeEvent = (e) => ({
   id:         e._id || e.id || e.event_id || String(Math.random()),
   deviceId:   e.device_id,
   timestamp:  e.timestamp,
-  type:       (e.type || e.predicted_class || e.detection_type || e.event_type || 'unknown').toLowerCase(),
-  confidence: normalizeConf(e.confidence ?? e.prediction?.confidence),
+  // Backend stores top_class (e.g. "vape") and status (e.g. "suspected") — check those first
+  type:       (e.top_class || e.type || e.predicted_class || e.detection_type || e.event_type || e.status || 'unknown').toLowerCase(),
+  // Backend stores top_prob as 0–1; normalizeConf converts ≤1 → ×100
+  confidence: normalizeConf(e.confidence ?? e.top_prob ?? e.prediction?.confidence),
   pm25:       e.sensor_data?.pm25 ?? e.pm25 ?? null,
 });
 
