@@ -654,11 +654,13 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
     return () => clearTimeout(t);
   }, [confirmDelete]);
 
+  // Hooks must be called before any early return
+  const { chartData, chartOpts, isAll } = useChartConfig(history, metric);
+
   if (!device) return null;
 
   const status = getStatus(device);
   const sd     = device.sensorData || {};
-  const { chartData, chartOpts, isAll } = useChartConfig(history, metric);
 
   const handleSave = async () => {
     try {

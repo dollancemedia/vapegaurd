@@ -3,7 +3,8 @@
     "allow": [
       "Bash(python:*)",
       "Bash(npm start)",
-      "Bash(tail:*)"
+      "Bash(tail:*)",
+      "Bash(tail:)"
     ]
   }
 }
