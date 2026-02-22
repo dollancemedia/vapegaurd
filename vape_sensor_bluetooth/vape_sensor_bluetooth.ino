@@ -15,6 +15,8 @@
 #include <Preferences.h>
 #include <NimBLEDevice.h>
 #include <esp_mac.h>
+#include "esp_task_wdt.h"
+#include "esp_crt_bundle.h"
 
 Preferences prefs;
 
@@ -105,7 +107,7 @@ const String LOCATION = "School Bathroom - 2nd Floor"; // Device location
 // Timing Configuration
 const unsigned long SENSOR_INTERVAL = 5000;          // Read sensors every 5 seconds
 const unsigned long WIFI_TIMEOUT = 10000;            // WiFi connection timeout
-const unsigned long HTTP_TIMEOUT = 5000;             // HTTP request timeout
+const unsigned long HTTP_TIMEOUT = 20000;            // HTTP request timeout (20s for Railway cold start)
 const unsigned long CONFIG_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const char *ntp1 = "pool.ntp.org";
 const char *ntp2 = "time.nist.gov";
@@ -279,6 +281,10 @@ void startConfigMode() {
 }
 
 void setup() {
+  // Reconfigure watchdog to 30s — Arduino pre-initializes it at 5s; Railway cold-start SSL can take 10-25s
+  esp_task_wdt_config_t wdt_config = { .timeout_ms = 30000, .idle_core_mask = 0, .trigger_panic = true };
+  esp_task_wdt_reconfigure(&wdt_config);
+
   Serial.begin(115200);
   // Removed while (!Serial) to avoid blocking on ESP32-C6 native USB; can cause watchdog resets if the host isn't attached
   Serial.println("[Init] Serial started at 115200");
@@ -391,6 +397,7 @@ void setup() {
       configTime(0, 0, ntp1, ntp2);
       struct tm tm;
       while (!getLocalTime(&tm)) {
+        esp_task_wdt_reset();
         delay(200);
       }
     } else {
@@ -488,6 +495,7 @@ void connectToWiFi() {
   while (WiFi.status() != WL_CONNECTED && attempts < maxAttempts) {
     unsigned long attemptStart = millis();
     while (WiFi.status() != WL_CONNECTED && (millis() - attemptStart) < 10000) {
+      esp_task_wdt_reset();
       delay(500);
       Serial.print(".");
     }
@@ -692,7 +700,7 @@ void sendDataToAPI(String jsonData) {
   esp_http_client_config_t config = {};
   config.url = apiEndpoint;
   config.event_handler = http_event_handler;
-  config.cert_pem = ISRG_Root_X1;
+  config.crt_bundle_attach = esp_crt_bundle_attach; // Use built-in cert bundle (covers ISRG Root X1 + X2)
   config.timeout_ms = HTTP_TIMEOUT;
   config.method = HTTP_METHOD_POST;
 
@@ -712,7 +720,7 @@ void sendDataToAPI(String jsonData) {
   Serial.println("Sending data to: " + String(apiEndpoint));
   Serial.println("Payload: " + jsonData);
 
-  // Perform HTTP request
+  esp_task_wdt_reset(); // Reset WDT before potentially long SSL handshake
   esp_err_t err = esp_http_client_perform(client);
 
   if (err == ESP_OK) {

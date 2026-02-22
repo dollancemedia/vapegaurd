@@ -272,7 +272,7 @@ const Analytics = () => {
   // ── Fetch events ────────────────────────────────────────────────────────────
   const fetchEvents = useCallback(async () => {
     try {
-      const res = await api.get('/events');
+      const res = await api.get('/events?limit=500');
       const raw = res.data;
       const arr = Array.isArray(raw) ? raw : (raw?.events || raw?.data || []);
       setEvents(arr.map(normalizeEvent).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));

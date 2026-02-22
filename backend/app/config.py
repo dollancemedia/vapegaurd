@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # Time Windows (in seconds)
     BASELINE_WINDOW_SEC: int = 10
     CONFIRM_WINDOW_SEC: int = 20
-    COOLDOWN_SEC: int = 90
+    COOLDOWN_SEC: int = 20
     
     # EWMA Alpha (Smoothing factor for Phase 1 baseline)
     # Higher = follows data faster, Lower = more stable baseline

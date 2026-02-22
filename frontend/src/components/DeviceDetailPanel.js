@@ -45,6 +45,7 @@ const PATHS = {
   thermo:  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}   d="M9 3v10.17A4 4 0 0012 21a4 4 0 003-6.83V3a3 3 0 00-6 0z" />,
   atom:    <><circle cx="12" cy="12" r="2" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></>,
   wifi:    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}   d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />,
+  back:    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M19 12H5m7-7l-7 7 7 7" />,
 };
 
 const Ic = ({ name, size = 20, color = 'currentColor' }) => (
@@ -52,27 +53,28 @@ const Ic = ({ name, size = 20, color = 'currentColor' }) => (
 );
 
 // ── Confidence ring ───────────────────────────────────────────────────────────
-const Ring = ({ value = 0, color = '#00C2CB' }) => {
-  const r = 21, circ = 2 * Math.PI * r, dash = (value / 100) * circ;
+const Ring = ({ value = 0, color = '#00C2CB', size = 58 }) => {
+  const r = size * 0.362, circ = 2 * Math.PI * r, dash = (value / 100) * circ;
+  const cx = size / 2, cy = size / 2;
   return (
-    <svg width="58" height="58" viewBox="0 0 58 58">
-      <circle cx="29" cy="29" r={r} fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="4.5" />
-      <circle cx="29" cy="29" r={r} fill="none" stroke={color}
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="4.5" />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={color}
         strokeWidth="4.5" strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
-        style={{ transform: 'rotate(-90deg)', transformOrigin: '29px 29px', transition: 'stroke-dasharray 0.5s ease' }} />
-      <text x="29" y="33" textAnchor="middle" fontSize="10.5" fontWeight="700" fill={color}
+        style={{ transform: 'rotate(-90deg)', transformOrigin: `${cx}px ${cy}px`, transition: 'stroke-dasharray 0.5s ease' }} />
+      <text x={cx} y={cy + 4} textAnchor="middle" fontSize={size * 0.18} fontWeight="700" fill={color}
         style={{ fontFamily: 'var(--font-body)' }}>{value}%</text>
     </svg>
   );
 };
 
 // ── Status icon chip ──────────────────────────────────────────────────────────
-const StatusChip = ({ icon, color }) => {
+const StatusChip = ({ icon, color, size = 40 }) => {
   const map = { ok: 'check', alarm: 'warn', warning: 'warn', warmup: 'thermo', cooldown: 'drop', offline: 'wifi' };
   return (
-    <div style={{ width: 40, height: 40, borderRadius: '50%', background: color + '22',
+    <div style={{ width: size, height: size, borderRadius: '50%', background: color + '22',
       display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      <Ic name={map[icon] || 'check'} size={20} color={color} />
+      <Ic name={map[icon] || 'check'} size={size * 0.5} color={color} />
     </div>
   );
 };
@@ -84,7 +86,7 @@ const METRICS = [
   { key: 'temperature',   label: 'Temp',  unit: '°F',    color: '#f59e0b', max: 130,
     fn: (v) => v != null ? parseFloat(toF(v)) : null },
   { key: 'gasResistance', label: 'Gas',   unit: 'kΩ',   color: '#10b981', max: 70,
-    fn: (v) => { const n = Number(v || 0); return n > 1000 ? n / 1000 : n; } },
+    fn: (v) => { if (v == null || v === '' || v === -999) return null; const n = Number(v); return n > 1000 ? n / 1000 : n; } },
 ];
 
 // ── Delta baseline bar ────────────────────────────────────────────────────────
@@ -105,7 +107,7 @@ const DeltaBar = ({ current, baseline, max, color, inverse }) => {
   );
 };
 
-// ── Shared card style ─────────────────────────────────────────────────────────
+// ── Shared styles ─────────────────────────────────────────────────────────────
 const sCard = {
   background: '#f8fafc',
   borderRadius: 12,
@@ -134,42 +136,12 @@ const sSecBtn = {
   gap: 5, fontFamily: 'var(--font-body)', transition: 'all 0.15s',
 };
 
-// ── Main component ────────────────────────────────────────────────────────────
-const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = [] }) => {
-  const [isEditing,      setIsEditing]      = useState(false);
-  const [editForm,       setEditForm]       = useState({ name: '', building: '', floor: '', room: '' });
-  const [metric,         setMetric]         = useState('pm25');
-  const [confirmDelete,  setConfirmDelete]  = useState(false);
-
-  useEffect(() => {
-    if (device) {
-      setEditForm({
-        name:     device.name           || '',
-        building: device.location?.building || '',
-        floor:    device.location?.floor    || '',
-        room:     device.location?.room     || '',
-      });
-    }
-  }, [device]);
-
-  // Reset confirm-delete after 3 s of no further interaction
-  useEffect(() => {
-    if (!confirmDelete) return;
-    const t = setTimeout(() => setConfirmDelete(false), 3000);
-    return () => clearTimeout(t);
-  }, [confirmDelete]);
-
-  if (!device) return null;
-
-  const status  = getStatus(device);
-  const sd      = device.sensorData || {};
-  const isAll   = metric === 'all';
-  const active  = METRICS.find(m => m.key === metric); // undefined when isAll
-
-  // ── Chart data ─────────────────────────────────────────────────────────────
+// ── Chart builder (shared between desktop & mobile) ──────────────────────────
+const useChartConfig = (history, metric) => {
+  const isAll  = metric === 'all';
+  const active = METRICS.find(m => m.key === metric);
   const sliced = history.slice(0, 20).reverse();
 
-  // Single metric: gradient area fill
   const singleDatasets = active ? [{
     label: `${active.label} (${active.unit})`,
     data:  sliced.map(h => { const v = h[active.key]; return active.fn ? active.fn(v) : v; }),
@@ -189,7 +161,6 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
     pointBorderWidth: 1.5, pointHoverRadius: 5,
   }] : [];
 
-  // All metrics: normalised 0–100 % of each metric's max, thin crisp lines
   const allDatasets = METRICS.map(m => ({
     label: m.label,
     data: sliced.map(h => {
@@ -208,7 +179,6 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
     datasets: isAll ? allDatasets : singleDatasets,
   };
 
-  // ── Chart options ──────────────────────────────────────────────────────────
   const chartOpts = {
     responsive: true,
     maintainAspectRatio: false,
@@ -216,13 +186,9 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
     interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: isAll ? {
-        display: true,
-        position: 'bottom',
-        labels: {
-          usePointStyle: true, pointStyle: 'circle',
-          boxWidth: 6, padding: 10, color: '#6b7280',
-          font: { size: 9, family: 'var(--font-body)' },
-        },
+        display: true, position: 'bottom',
+        labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 6, padding: 10, color: '#6b7280',
+          font: { size: 9, family: 'var(--font-body)' } },
       } : { display: false },
       tooltip: {
         backgroundColor: '#1f2937', titleColor: '#9ca3af',
@@ -230,7 +196,6 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
         callbacks: {
           label: (ctx) => {
             if (isAll) {
-              // Show real values in tooltip, not normalised %
               const m = METRICS[ctx.datasetIndex];
               const h = sliced[ctx.dataIndex];
               if (!m || !h) return '';
@@ -244,24 +209,294 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
       },
     },
     scales: {
-      x: {
-        grid: { display: false },
-        ticks: { font: { size: 9 }, color: '#9ca3af', maxTicksLimit: 6, maxRotation: 0 },
-        border: { display: false },
-      },
-      y: {
-        ...(isAll ? { min: 0, max: 100 } : {}),
-        grid: { color: 'rgba(0,0,0,0.045)' },
-        ticks: {
-          font: { size: 9 }, color: '#9ca3af', maxTicksLimit: 4,
-          ...(isAll ? { callback: (v) => v + '%' } : {}),
-        },
-        border: { display: false },
-      },
+      x: { grid: { display: false }, ticks: { font: { size: 9 }, color: '#9ca3af', maxTicksLimit: 6, maxRotation: 0 }, border: { display: false } },
+      y: { ...(isAll ? { min: 0, max: 100 } : {}), grid: { color: 'rgba(0,0,0,0.045)' },
+        ticks: { font: { size: 9 }, color: '#9ca3af', maxTicksLimit: 4, ...(isAll ? { callback: (v) => v + '%' } : {}) },
+        border: { display: false } },
     },
   };
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
+  return { chartData, chartOpts, isAll, active, sliced };
+};
+
+// ── Shared content blocks ─────────────────────────────────────────────────────
+const StatusBanner = ({ status, sd }) => (
+  <div style={{ background: status.bg, borderRadius: 16, padding: '14px 16px',
+    marginBottom: 18, border: `1px solid ${status.color}25` }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <StatusChip icon={status.icon} color={status.color} />
+        <div>
+          <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.09em',
+            color: status.color, fontWeight: 700, fontFamily: 'var(--font-body)', marginBottom: 2 }}>
+            Current Status
+          </div>
+          <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#111827',
+            fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>
+            {status.label}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 1, fontFamily: 'var(--font-body)' }}>
+            {status.sub}
+          </div>
+        </div>
+      </div>
+      {sd.confidence !== undefined && <Ring value={sd.confidence} color={status.color} />}
+    </div>
+  </div>
+);
+
+const LiveReadings = ({ sd }) => {
+  if (sd.humidity === undefined) return null;
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
+        <span style={sLabel}>Live Readings</span>
+        {sd.timestamp && (
+          <span style={{ fontSize: '0.67rem', color: '#9ca3af', fontFamily: 'var(--font-body)' }}>
+            {fmtTime(sd.timestamp)}
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        {/* Humidity */}
+        <div style={sCard}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+            <span style={sLabel}>Humidity</span>
+            <Ic name="drop" size={13} color="#3b82f6" />
+          </div>
+          <div style={sBigNum}>
+            {Number(sd.humidity).toFixed(1)}
+            <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#9ca3af', marginLeft: 2 }}>%</span>
+          </div>
+          <DeltaBar current={sd.humidity} baseline={sd.baseline_humidity} max={100} color="#3b82f6" />
+          {sd.baseline_humidity != null && (
+            <div style={sSub}>baseline {Number(sd.baseline_humidity).toFixed(1)}%</div>
+          )}
+        </div>
+        {/* PM2.5 */}
+        <div style={sCard}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+            <span style={sLabel}>PM2.5</span>
+            <Ic name="smoke" size={13} color="#ef4444" />
+          </div>
+          <div style={sBigNum}>
+            {sd.pm25}
+            <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#9ca3af', marginLeft: 2 }}>μg/m³</span>
+          </div>
+          <DeltaBar current={sd.pm25} baseline={sd.baseline_pm25 ?? sd.ewma_pm25} max={150} color="#ef4444" />
+          {(sd.baseline_pm25 ?? sd.ewma_pm25) != null && (
+            <div style={sSub}>baseline {Number(sd.baseline_pm25 ?? sd.ewma_pm25).toFixed(1)}</div>
+          )}
+        </div>
+        {/* Temp */}
+        <div style={sCard}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+            <span style={sLabel}>Temp</span>
+            <Ic name="thermo" size={13} color="#f59e0b" />
+          </div>
+          <div style={sBigNum}>
+            {toF(sd.temperature)}
+            <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#9ca3af', marginLeft: 2 }}>°F</span>
+          </div>
+          <DeltaBar current={Number(sd.temperature || 0)} baseline={sd.baseline_temperature} max={35} color="#f59e0b" />
+          {sd.baseline_temperature != null && (
+            <div style={sSub}>baseline {Number(sd.baseline_temperature).toFixed(1)}°C</div>
+          )}
+        </div>
+        {/* Gas Resistance */}
+        <div style={sCard}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+            <span style={sLabel}>Gas Res</span>
+            <Ic name="atom" size={13} color="#10b981" />
+          </div>
+          <div style={sBigNum}>
+            {fmtGas(sd.gasResistance)}
+            <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#9ca3af', marginLeft: 2 }}>kΩ</span>
+          </div>
+          <DeltaBar
+            current={Number(sd.gasResistance || 0) > 1000 ? Number(sd.gasResistance) / 1000 : Number(sd.gasResistance || 0)}
+            baseline={sd.baseline_gas_resistance ? (Number(sd.baseline_gas_resistance) > 1000 ? Number(sd.baseline_gas_resistance) / 1000 : Number(sd.baseline_gas_resistance)) : null}
+            max={70} color="#10b981" inverse
+          />
+          {sd.baseline_gas_resistance != null && (
+            <div style={sSub}>baseline {fmtGas(sd.baseline_gas_resistance)} kΩ</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SensorTrends = ({ history, metric, setMetric, chartData, chartOpts, isAll }) => {
+  if (history.length <= 1) return null;
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
+        <span style={sLabel}>Sensor Trends</span>
+        <div style={{ display: 'flex', gap: 3 }}>
+          {[{ key: 'all', label: 'All', color: '#374151' }, ...METRICS].map(m => (
+            <button key={m.key} onClick={() => setMetric(m.key)} style={{
+              padding: '5px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+              fontSize: '0.72rem', fontWeight: 600, fontFamily: 'var(--font-body)',
+              background: metric === m.key ? m.color : 'rgba(0,0,0,0.05)',
+              color:      metric === m.key ? '#fff'  : '#6b7280',
+              transition: 'all 0.15s',
+            }}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ height: isAll ? 212 : 170, background: '#f8fafc', borderRadius: 14,
+        padding: isAll ? '10px 10px 4px' : '12px 12px 8px',
+        border: '1px solid rgba(0,0,0,0.06)', transition: 'height 0.2s ease' }}>
+        <Line data={chartData} options={chartOpts} />
+      </div>
+      {isAll && (
+        <p style={{ margin: '5px 0 0', textAlign: 'center', fontSize: '0.6rem',
+          color: '#b0b8c4', fontFamily: 'var(--font-body)', letterSpacing: '0.04em' }}>
+          chart normalised to % of range · hover for real values
+        </p>
+      )}
+    </div>
+  );
+};
+
+const logColors = { vape: '#ef4444', suspected: '#f59e0b', normal: '#22c55e', cooldown: '#3b82f6' };
+const dotColor  = (cls) => logColors[cls] || '#9ca3af';
+
+const RecentEvents = ({ history }) => {
+  if (history.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <span style={{ ...sLabel, display: 'block', marginBottom: 9 }}>Recent Events</span>
+      <div style={{ maxHeight: 240, overflowY: 'auto', scrollbarWidth: 'thin',
+        scrollbarColor: 'rgba(0,0,0,0.08) transparent' }}>
+        {history.slice(0, 14).map((h, i) => {
+          const cls   = h.predictedClass || 'normal';
+          const dot   = dotColor(cls);
+          const label = cls === 'vape' ? 'Vape detected' : cls === 'suspected' ? 'Suspected' : cls === 'cooldown' ? 'Cooldown' : 'Normal';
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9,
+              padding: '5px 0', borderBottom: i < Math.min(history.length, 14) - 1 ? '1px solid rgba(0,0,0,0.04)' : 'none' }}>
+              <div style={{ width: 7, height: 7, borderRadius: '50%', background: dot, flexShrink: 0 }} />
+              <span style={{ fontSize: '0.68rem', color: '#9ca3af', width: 34, flexShrink: 0, fontFamily: 'var(--font-body)' }}>
+                {fmtTime(h.timestamp)}
+              </span>
+              <span style={{ fontSize: '0.74rem', color: '#374151', flex: 1, fontFamily: 'var(--font-body)', fontWeight: 500 }}>
+                {label}
+              </span>
+              <span style={{ fontSize: '0.68rem', color: '#9ca3af', fontFamily: 'var(--font-body)', marginRight: 4 }}>
+                {h.pm25} μg/m³
+              </span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: dot,
+                background: dot + '1a', borderRadius: 4, padding: '1px 5px', fontFamily: 'var(--font-body)', flexShrink: 0 }}>
+                {h.confidence}%
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const EditModal = ({ isEditing, setIsEditing, editForm, setEditForm, handleSave, isMobile }) => {
+  if (!isEditing) return null;
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex',
+      alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center',
+      padding: isMobile ? 0 : 16,
+      background: 'rgba(0,0,0,0.36)', backdropFilter: 'blur(4px)' }}>
+      <div style={{ background: 'white', width: '100%', maxWidth: isMobile ? '100%' : 400,
+        overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+        borderRadius: isMobile ? '20px 20px 0 0' : 20 }}>
+        <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid rgba(0,0,0,0.07)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '0.92rem', fontWeight: 700, color: '#111827', fontFamily: 'var(--font-display)' }}>
+            Edit Device
+          </span>
+          <button onClick={() => setIsEditing(false)}
+            style={{ padding: 5, borderRadius: 7, border: 'none', background: 'transparent',
+              cursor: 'pointer', color: '#9ca3af', display: 'flex' }}>
+            <Ic name="close" size={17} />
+          </button>
+        </div>
+        <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 11 }}>
+          {[{ label: 'Device Name', key: 'name' }, { label: 'Building', key: 'building' },
+            { label: 'Floor', key: 'floor' }, { label: 'Room', key: 'room' }].map(({ label, key }) => (
+            <div key={key}>
+              <label style={{ display: 'block', ...sLabel, marginBottom: 5 }}>{label}</label>
+              <input type="text" value={editForm[key]}
+                onChange={e => setEditForm(p => ({ ...p, [key]: e.target.value }))}
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid rgba(0,0,0,0.12)',
+                  borderRadius: 9, fontSize: '0.86rem', color: '#111827',
+                  fontFamily: 'var(--font-body)', outline: 'none', transition: 'border-color 0.15s',
+                  boxSizing: 'border-box' }}
+                onFocus={e => { e.target.style.borderColor = '#00C2CB'; e.target.style.boxShadow = '0 0 0 3px rgba(0,194,203,0.12)'; }}
+                onBlur={e  => { e.target.style.borderColor = 'rgba(0,0,0,0.12)'; e.target.style.boxShadow = 'none'; }}
+              />
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: isMobile ? '10px 18px calc(14px + env(safe-area-inset-bottom, 0px))' : '10px 18px 14px',
+          borderTop: '1px solid rgba(0,0,0,0.07)',
+          display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={() => setIsEditing(false)}
+            style={{ padding: '8px 16px', borderRadius: 9, border: '1px solid rgba(0,0,0,0.1)',
+              background: 'white', cursor: 'pointer', fontSize: '0.81rem', fontWeight: 600,
+              color: '#374151', fontFamily: 'var(--font-body)' }}>
+            Cancel
+          </button>
+          <button onClick={handleSave}
+            style={{ padding: '8px 18px', borderRadius: 9, border: 'none', background: '#00C2CB',
+              cursor: 'pointer', fontSize: '0.81rem', fontWeight: 600, color: 'white',
+              fontFamily: 'var(--font-body)', boxShadow: '0 2px 8px rgba(0,194,203,0.32)' }}>
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  MOBILE — Inline full-page detail view (replaces dashboard content)
+// ══════════════════════════════════════════════════════════════════════════════
+export const MobileDeviceDetail = ({ device, onClose, onPingDevice, history = [] }) => {
+  const [isEditing,     setIsEditing]     = useState(false);
+  const [editForm,      setEditForm]      = useState({ name: '', building: '', floor: '', room: '' });
+  const [metric,        setMetric]        = useState('pm25');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [mounted,       setMounted]       = useState(false);
+
+  useEffect(() => { requestAnimationFrame(() => setMounted(true)); }, []);
+
+  useEffect(() => {
+    if (device) {
+      setEditForm({
+        name:     device.name           || '',
+        building: device.location?.building || '',
+        floor:    device.location?.floor    || '',
+        room:     device.location?.room     || '',
+      });
+    }
+  }, [device]);
+
+  useEffect(() => {
+    if (!confirmDelete) return;
+    const t = setTimeout(() => setConfirmDelete(false), 3000);
+    return () => clearTimeout(t);
+  }, [confirmDelete]);
+
+  const { chartData, chartOpts, isAll } = useChartConfig(history, metric);
+
+  if (!device) return null;
+
+  const status = getStatus(device);
+  const sd     = device.sensorData || {};
+
   const handleSave = async () => {
     try {
       await deviceService.updateDeviceInfo(device.id, {
@@ -289,10 +524,169 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
     } catch { alert('Failed to delete device'); }
   };
 
-  const logColors = { vape: '#ef4444', suspected: '#f59e0b', normal: '#22c55e', cooldown: '#3b82f6' };
-  const dotColor  = (cls) => logColors[cls] || '#9ca3af';
+  return (
+    <div style={{
+      minHeight: '100vh', background: '#f7f8fa',
+      paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
+      opacity: mounted ? 1 : 0,
+      transform: mounted ? 'translateY(0)' : 'translateY(12px)',
+      transition: 'opacity 0.3s ease, transform 0.3s ease',
+    }}>
 
-  // ── Render ────────────────────────────────────────────────────────────────
+      {/* ── Sticky header bar ── */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 30,
+        background: 'rgba(247,248,250,0.92)', backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        padding: '12px 16px 10px',
+        borderBottom: '1px solid rgba(0,0,0,0.06)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={onClose} style={{
+            width: 36, height: 36, borderRadius: 10,
+            border: 'none', background: 'rgba(0,0,0,0.05)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', flexShrink: 0, transition: 'background 0.15s',
+          }}>
+            <Ic name="back" size={18} color="#374151" />
+          </button>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#111827',
+              fontFamily: 'var(--font-display)', letterSpacing: '-0.02em',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {device.name}
+            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+              {device.location?.building && (
+                <span style={{ fontSize: '0.7rem', color: '#6b7280', fontFamily: 'var(--font-body)' }}>
+                  {device.location.building}{device.location.room ? ` · ${device.location.room}` : ''}
+                </span>
+              )}
+              {device.location?.floor && (
+                <span style={{ fontSize: '0.62rem', background: 'rgba(0,0,0,0.06)', borderRadius: 4,
+                  padding: '1px 6px', color: '#6b7280', fontFamily: 'var(--font-body)' }}>
+                  Fl {device.location.floor}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <button onClick={() => setIsEditing(true)} style={{
+            width: 36, height: 36, borderRadius: 10,
+            border: 'none', background: 'rgba(0,0,0,0.05)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', flexShrink: 0,
+          }}>
+            <Ic name="edit" size={16} color="#6b7280" />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Scrollable content ── */}
+      <div style={{ padding: '16px 16px 0' }}>
+        <StatusBanner status={status} sd={sd} />
+        <LiveReadings sd={sd} />
+        <SensorTrends history={history} metric={metric} setMetric={setMetric}
+          chartData={chartData} chartOpts={chartOpts} isAll={isAll} />
+        <RecentEvents history={history} />
+      </div>
+
+      {/* ── Bottom action bar ── */}
+      <div style={{
+        position: 'sticky', bottom: 0, left: 0, right: 0,
+        padding: '10px 16px calc(12px + env(safe-area-inset-bottom, 0px))',
+        background: 'rgba(247,248,250,0.92)', backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        borderTop: '1px solid rgba(0,0,0,0.06)',
+        display: 'flex', gap: 8, zIndex: 20,
+      }}>
+        <button onClick={() => setIsEditing(true)}
+          style={{ ...sSecBtn, padding: '11px 10px', borderRadius: 12 }}>
+          <Ic name="edit" size={14} color="#374151" /> Edit
+        </button>
+        <button onClick={handleRecalibrate}
+          style={{ ...sSecBtn, padding: '11px 10px', borderRadius: 12 }}>
+          <Ic name="refresh" size={14} color="#374151" /> Recalibrate
+        </button>
+        <button
+          onClick={() => confirmDelete ? handleDelete() : setConfirmDelete(true)}
+          style={{ ...sSecBtn, padding: '11px 10px', borderRadius: 12,
+            border:     confirmDelete ? '1px solid #ef4444' : '1px solid rgba(0,0,0,0.1)',
+            background: confirmDelete ? '#fef2f2' : 'white',
+            color:      confirmDelete ? '#ef4444' : '#374151',
+          }}>
+          <Ic name="trash" size={14} color={confirmDelete ? '#ef4444' : '#374151'} />
+          {confirmDelete ? 'Confirm?' : 'Delete'}
+        </button>
+      </div>
+
+      <EditModal isEditing={isEditing} setIsEditing={setIsEditing}
+        editForm={editForm} setEditForm={setEditForm} handleSave={handleSave} isMobile={true} />
+    </div>
+  );
+};
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  DESKTOP — Original slide-over panel (unchanged)
+// ══════════════════════════════════════════════════════════════════════════════
+const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = [] }) => {
+  const [isEditing,     setIsEditing]     = useState(false);
+  const [editForm,      setEditForm]      = useState({ name: '', building: '', floor: '', room: '' });
+  const [metric,        setMetric]        = useState('pm25');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    if (device) {
+      setEditForm({
+        name:     device.name           || '',
+        building: device.location?.building || '',
+        floor:    device.location?.floor    || '',
+        room:     device.location?.room     || '',
+      });
+    }
+  }, [device]);
+
+  useEffect(() => {
+    if (!confirmDelete) return;
+    const t = setTimeout(() => setConfirmDelete(false), 3000);
+    return () => clearTimeout(t);
+  }, [confirmDelete]);
+
+  if (!device) return null;
+
+  const status = getStatus(device);
+  const sd     = device.sensorData || {};
+  const { chartData, chartOpts, isAll } = useChartConfig(history, metric);
+
+  const handleSave = async () => {
+    try {
+      await deviceService.updateDeviceInfo(device.id, {
+        name: editForm.name,
+        location: { building: editForm.building, floor: editForm.floor, room: editForm.room },
+      });
+      setIsEditing(false);
+      if (onPingDevice) onPingDevice(device.id);
+    } catch { alert('Failed to save changes'); }
+  };
+
+  const handleRecalibrate = async () => {
+    try {
+      if (window.confirm("Reset this device's baseline? Takes ~30 seconds.")) {
+        await deviceService.recalibrateDevice(device.id);
+        if (onPingDevice) onPingDevice(device.id);
+      }
+    } catch { alert('Failed to start recalibration'); }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await deviceService.deleteDevice(device.id);
+      onClose();
+    } catch { alert('Failed to delete device'); }
+  };
+
   return (
     <>
       {/* Backdrop */}
@@ -304,7 +698,7 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
         />
       )}
 
-      {/* Slide-over panel */}
+      {/* Desktop slide-over panel */}
       <div style={{
         position: 'fixed', top: 58, right: 0,
         height: 'calc(100vh - 58px)', width: 460,
@@ -316,11 +710,10 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div style={{ padding: '16px 18px 14px', borderBottom: '1px solid rgba(0,0,0,0.07)',
           background: '#fafafa', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            {/* Device identity */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
               <div style={{ width: 42, height: 42, borderRadius: 11, flexShrink: 0,
                 background: 'radial-gradient(circle at 38% 32%, #3a3a3a, #141414)',
@@ -348,7 +741,6 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
                 </div>
               </div>
             </div>
-            {/* Header actions */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               {[{ icon: 'edit', action: () => setIsEditing(true) }, { icon: 'close', action: onClose }].map(({ icon, action }) => (
                 <button key={icon} onClick={action}
@@ -363,188 +755,17 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
           </div>
         </div>
 
-        {/* ── Scrollable body ── */}
+        {/* Scrollable body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px 20px',
           scrollbarWidth: 'thin', scrollbarColor: 'rgba(0,0,0,0.1) transparent' }}>
-
-          {/* Status banner */}
-          <div style={{ background: status.bg, borderRadius: 16, padding: '14px 16px',
-            marginBottom: 18, border: `1px solid ${status.color}25` }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <StatusChip icon={status.icon} color={status.color} />
-                <div>
-                  <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.09em',
-                    color: status.color, fontWeight: 700, fontFamily: 'var(--font-body)', marginBottom: 2 }}>
-                    Current Status
-                  </div>
-                  <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#111827',
-                    fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>
-                    {status.label}
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 1, fontFamily: 'var(--font-body)' }}>
-                    {status.sub}
-                  </div>
-                </div>
-              </div>
-              {sd.confidence !== undefined && <Ring value={sd.confidence} color={status.color} />}
-            </div>
-          </div>
-
-          {/* Live Readings */}
-          {sd.humidity !== undefined && (
-            <div style={{ marginBottom: 18 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
-                <span style={sLabel}>Live Readings</span>
-                {sd.timestamp && (
-                  <span style={{ fontSize: '0.67rem', color: '#9ca3af', fontFamily: 'var(--font-body)' }}>
-                    {fmtTime(sd.timestamp)}
-                  </span>
-                )}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-
-                {/* Humidity */}
-                <div style={sCard}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
-                    <span style={sLabel}>Humidity</span>
-                    <Ic name="drop" size={13} color="#3b82f6" />
-                  </div>
-                  <div style={sBigNum}>
-                    {Number(sd.humidity).toFixed(1)}
-                    <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#9ca3af', marginLeft: 2 }}>%</span>
-                  </div>
-                  <DeltaBar current={sd.humidity} baseline={sd.baseline_humidity} max={100} color="#3b82f6" />
-                  {sd.baseline_humidity != null && (
-                    <div style={sSub}>baseline {Number(sd.baseline_humidity).toFixed(1)}%</div>
-                  )}
-                </div>
-
-                {/* PM2.5 */}
-                <div style={sCard}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
-                    <span style={sLabel}>PM2.5</span>
-                    <Ic name="smoke" size={13} color="#ef4444" />
-                  </div>
-                  <div style={sBigNum}>
-                    {sd.pm25}
-                    <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#9ca3af', marginLeft: 2 }}>μg/m³</span>
-                  </div>
-                  <DeltaBar current={sd.pm25} baseline={sd.baseline_pm25 ?? sd.ewma_pm25} max={150} color="#ef4444" />
-                  {(sd.baseline_pm25 ?? sd.ewma_pm25) != null && (
-                    <div style={sSub}>baseline {Number(sd.baseline_pm25 ?? sd.ewma_pm25).toFixed(1)}</div>
-                  )}
-                </div>
-
-                {/* Temp */}
-                <div style={sCard}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
-                    <span style={sLabel}>Temp</span>
-                    <Ic name="thermo" size={13} color="#f59e0b" />
-                  </div>
-                  <div style={sBigNum}>
-                    {toF(sd.temperature)}
-                    <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#9ca3af', marginLeft: 2 }}>°F</span>
-                  </div>
-                  <DeltaBar current={Number(sd.temperature || 0)} baseline={sd.baseline_temperature} max={35} color="#f59e0b" />
-                  {sd.baseline_temperature != null && (
-                    <div style={sSub}>baseline {Number(sd.baseline_temperature).toFixed(1)}°C</div>
-                  )}
-                </div>
-
-                {/* Gas Resistance */}
-                <div style={sCard}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
-                    <span style={sLabel}>Gas Res</span>
-                    <Ic name="atom" size={13} color="#10b981" />
-                  </div>
-                  <div style={sBigNum}>
-                    {fmtGas(sd.gasResistance)}
-                    <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#9ca3af', marginLeft: 2 }}>kΩ</span>
-                  </div>
-                  <DeltaBar
-                    current={Number(sd.gasResistance || 0) > 1000 ? Number(sd.gasResistance) / 1000 : Number(sd.gasResistance || 0)}
-                    baseline={sd.baseline_gas_resistance ? (Number(sd.baseline_gas_resistance) > 1000 ? Number(sd.baseline_gas_resistance) / 1000 : Number(sd.baseline_gas_resistance)) : null}
-                    max={70} color="#10b981" inverse
-                  />
-                  {sd.baseline_gas_resistance != null && (
-                    <div style={sSub}>baseline {fmtGas(sd.baseline_gas_resistance)} kΩ</div>
-                  )}
-                </div>
-
-              </div>
-            </div>
-          )}
-
-          {/* Sensor Trends */}
-          {history.length > 1 && (
-            <div style={{ marginBottom: 18 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
-                <span style={sLabel}>Sensor Trends</span>
-                <div style={{ display: 'flex', gap: 3 }}>
-                  {[{ key: 'all', label: 'All', color: '#374151' }, ...METRICS].map(m => (
-                    <button key={m.key} onClick={() => setMetric(m.key)} style={{
-                      padding: '3px 8px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                      fontSize: '0.65rem', fontWeight: 600, fontFamily: 'var(--font-body)',
-                      background: metric === m.key ? m.color : 'rgba(0,0,0,0.05)',
-                      color:      metric === m.key ? '#fff'  : '#6b7280',
-                      transition: 'all 0.15s',
-                    }}>
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div style={{ height: isAll ? 212 : 170, background: '#f8fafc', borderRadius: 14,
-                padding: isAll ? '10px 10px 4px' : '12px 12px 8px',
-                border: '1px solid rgba(0,0,0,0.06)', transition: 'height 0.2s ease' }}>
-                <Line data={chartData} options={chartOpts} />
-              </div>
-              {isAll && (
-                <p style={{ margin: '5px 0 0', textAlign: 'center', fontSize: '0.6rem',
-                  color: '#b0b8c4', fontFamily: 'var(--font-body)', letterSpacing: '0.04em' }}>
-                  chart normalised to % of range · hover for real values
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Recent Events log */}
-          {history.length > 0 && (
-            <div style={{ marginBottom: 6 }}>
-              <span style={{ ...sLabel, display: 'block', marginBottom: 9 }}>Recent Events</span>
-              <div style={{ maxHeight: 190, overflowY: 'auto', scrollbarWidth: 'thin',
-                scrollbarColor: 'rgba(0,0,0,0.08) transparent' }}>
-                {history.slice(0, 14).map((h, i) => {
-                  const cls   = h.predictedClass || 'normal';
-                  const dot   = dotColor(cls);
-                  const label = cls === 'vape' ? 'Vape detected' : cls === 'suspected' ? 'Suspected' : cls === 'cooldown' ? 'Cooldown' : 'Normal';
-                  return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9,
-                      padding: '5px 0', borderBottom: i < Math.min(history.length, 14) - 1 ? '1px solid rgba(0,0,0,0.04)' : 'none' }}>
-                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: dot, flexShrink: 0 }} />
-                      <span style={{ fontSize: '0.68rem', color: '#9ca3af', width: 34, flexShrink: 0, fontFamily: 'var(--font-body)' }}>
-                        {fmtTime(h.timestamp)}
-                      </span>
-                      <span style={{ fontSize: '0.74rem', color: '#374151', flex: 1, fontFamily: 'var(--font-body)', fontWeight: 500 }}>
-                        {label}
-                      </span>
-                      <span style={{ fontSize: '0.68rem', color: '#9ca3af', fontFamily: 'var(--font-body)', marginRight: 4 }}>
-                        {h.pm25} μg/m³
-                      </span>
-                      <span style={{ fontSize: '0.65rem', fontWeight: 700, color: dot,
-                        background: dot + '1a', borderRadius: 4, padding: '1px 5px', fontFamily: 'var(--font-body)', flexShrink: 0 }}>
-                        {h.confidence}%
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          <StatusBanner status={status} sd={sd} />
+          <LiveReadings sd={sd} />
+          <SensorTrends history={history} metric={metric} setMetric={setMetric}
+            chartData={chartData} chartOpts={chartOpts} isAll={isAll} />
+          <RecentEvents history={history} />
         </div>
 
-        {/* ── Footer actions ── */}
+        {/* Footer actions */}
         <div style={{ padding: '10px 18px 12px', borderTop: '1px solid rgba(0,0,0,0.07)',
           background: '#fafafa', display: 'flex', gap: 7, flexShrink: 0 }}>
           <button onClick={() => setIsEditing(true)} style={sSecBtn}
@@ -570,62 +791,8 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
         </div>
       </div>
 
-      {/* ── Edit modal ── */}
-      {isEditing && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex',
-          alignItems: 'center', justifyContent: 'center', padding: 16,
-          background: 'rgba(0,0,0,0.36)', backdropFilter: 'blur(4px)' }}>
-          <div style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 400,
-            overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
-
-            <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid rgba(0,0,0,0.07)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.92rem', fontWeight: 700, color: '#111827', fontFamily: 'var(--font-display)' }}>
-                Edit Device
-              </span>
-              <button onClick={() => setIsEditing(false)}
-                style={{ padding: 5, borderRadius: 7, border: 'none', background: 'transparent',
-                  cursor: 'pointer', color: '#9ca3af', display: 'flex' }}>
-                <Ic name="close" size={17} />
-              </button>
-            </div>
-
-            <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 11 }}>
-              {[{ label: 'Device Name', key: 'name' }, { label: 'Building', key: 'building' },
-                { label: 'Floor', key: 'floor' }, { label: 'Room', key: 'room' }].map(({ label, key }) => (
-                <div key={key}>
-                  <label style={{ display: 'block', ...sLabel, marginBottom: 5 }}>{label}</label>
-                  <input type="text" value={editForm[key]}
-                    onChange={e => setEditForm(p => ({ ...p, [key]: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid rgba(0,0,0,0.12)',
-                      borderRadius: 9, fontSize: '0.86rem', color: '#111827',
-                      fontFamily: 'var(--font-body)', outline: 'none', transition: 'border-color 0.15s',
-                      boxSizing: 'border-box' }}
-                    onFocus={e => { e.target.style.borderColor = '#00C2CB'; e.target.style.boxShadow = '0 0 0 3px rgba(0,194,203,0.12)'; }}
-                    onBlur={e  => { e.target.style.borderColor = 'rgba(0,0,0,0.12)'; e.target.style.boxShadow = 'none'; }}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div style={{ padding: '10px 18px 14px', borderTop: '1px solid rgba(0,0,0,0.07)',
-              display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setIsEditing(false)}
-                style={{ padding: '8px 16px', borderRadius: 9, border: '1px solid rgba(0,0,0,0.1)',
-                  background: 'white', cursor: 'pointer', fontSize: '0.81rem', fontWeight: 600,
-                  color: '#374151', fontFamily: 'var(--font-body)' }}>
-                Cancel
-              </button>
-              <button onClick={handleSave}
-                style={{ padding: '8px 18px', borderRadius: 9, border: 'none', background: '#00C2CB',
-                  cursor: 'pointer', fontSize: '0.81rem', fontWeight: 600, color: 'white',
-                  fontFamily: 'var(--font-body)', boxShadow: '0 2px 8px rgba(0,194,203,0.32)' }}>
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <EditModal isEditing={isEditing} setIsEditing={setIsEditing}
+        editForm={editForm} setEditForm={setEditForm} handleSave={handleSave} isMobile={false} />
     </>
   );
 };

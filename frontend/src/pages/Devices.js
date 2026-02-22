@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import DeviceMap from '../components/DeviceMap';
 import DeviceList from '../components/DeviceList';
 import DeviceDetailPanel from '../components/DeviceDetailPanel';
@@ -170,6 +170,7 @@ const Devices = () => {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isCalibratingAll, setIsCalibratingAll] = useState(false);
   const [deviceHistory, setDeviceHistory] = useState({}); // Map of deviceId -> array of readings
+  const lastHistoryUpdateRef = useRef({});
   const { organization } = useOrganization();
   // Use organization ID for specific sites to match registration data
   // If org name is Admin, pass 'admin' to see all devices
@@ -223,6 +224,7 @@ const Devices = () => {
             humidity: reading.humidity,
             temperature: reading.temperature || 0,
             pm25: reading.pm25,
+            gasResistance: reading.gas_resistance ?? reading.gasResistance,
             particleSize: reading.particle_size || reading.particleSize || 0,
             volumeSpike: reading.volume_spike || reading.volumeSpike || false,
             predictedClass: reading.predicted_class || (reading.prediction ? reading.prediction.type : 'normal'),
@@ -315,12 +317,16 @@ const Devices = () => {
 
         updateDeviceStatus(deviceId, updates);
 
-        setDeviceHistory(prev => {
-          const currentHistory = prev[deviceId] || [];
-          const newHistoryEntry = { ...newCompleteSensorData, timestamp: sensorDataUpdate.timestamp };
-          const newHistory = [newHistoryEntry, ...currentHistory].slice(0, 50);
-          return { ...prev, [deviceId]: newHistory };
-        });
+        const now = Date.now();
+        if (now - (lastHistoryUpdateRef.current[deviceId] || 0) >= 1000) {
+          lastHistoryUpdateRef.current[deviceId] = now;
+          setDeviceHistory(prev => {
+            const currentHistory = prev[deviceId] || [];
+            const newHistoryEntry = { ...newCompleteSensorData, timestamp: sensorDataUpdate.timestamp };
+            const newHistory = [newHistoryEntry, ...currentHistory].slice(0, 50);
+            return { ...prev, [deviceId]: newHistory };
+          });
+        }
 
         setSelectedDevice(prev => {
           if (prev && prev.id === deviceId) {

@@ -42,9 +42,12 @@ async def create_event(payload: dict):
     return doc
 
 @router.get("/", response_model=List[dict])
-async def get_events(limit: int = 10):
-    """Get recent events with optional limit"""
-    cursor = db.events.find().sort("timestamp", -1).limit(limit)
+async def get_events(limit: int = 500, since: Optional[str] = None):
+    """Get recent events with optional limit and since filter"""
+    query = {}
+    if since:
+        query["timestamp"] = {"$gte": since}
+    cursor = db.events.find(query).sort("timestamp", -1).limit(limit)
     events = []
     async for doc in cursor:
         doc["_id"] = str(doc["_id"])

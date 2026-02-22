@@ -145,7 +145,7 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected, soundEnabled
       } catch (e) { console.error('Native notification failed:', e); }
     }
 
-    alertTimeoutRef.current[alertId] = setTimeout(() => dismissAlert(alertId), 30000);
+    alertTimeoutRef.current[alertId] = setTimeout(() => dismissAlert(alertId), 300000); // 5 minutes
   };
 
   const playAlertSound = (eventType) => {

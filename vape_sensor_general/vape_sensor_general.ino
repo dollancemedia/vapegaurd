@@ -14,6 +14,7 @@
 #include <Adafruit_BME680.h>
 #include <WebServer.h>
 #include <Preferences.h>
+#include "esp_task_wdt.h"
 
 Preferences prefs;
 WebServer server(80);
@@ -108,7 +109,7 @@ const String LOCATION = "School Bathroom - 2nd Floor";  // Device location
 // Timing Configuration
 const unsigned long SENSOR_INTERVAL = 5000;  // Read sensors every 5 seconds
 const unsigned long WIFI_TIMEOUT = 10000;    // WiFi connection timeout
-const unsigned long HTTP_TIMEOUT = 5000;     // HTTP request timeout
+const unsigned long HTTP_TIMEOUT = 20000;    // HTTP request timeout (20s for Railway cold start)
 const unsigned long CONFIG_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const char* ntp1 = "pool.ntp.org";
 const char* ntp2 = "time.nist.gov";
@@ -166,6 +167,10 @@ void saveCredentials(const String &newSsid, const String &newPass) {
 }
 
 void setup() {
+  // Reconfigure watchdog to 30s — Arduino pre-initializes it at 5s; Railway cold-start SSL can take 10-25s
+  esp_task_wdt_config_t wdt_config = { .timeout_ms = 30000, .idle_core_mask = 0, .trigger_panic = true };
+  esp_task_wdt_reconfigure(&wdt_config);
+
   Serial.begin(115200);
   // Removed while (!Serial) to avoid blocking on ESP32-C6 native USB; can cause watchdog resets if the host isn't attached
   Serial.println("[Init] Serial started at 115200");
@@ -343,6 +348,7 @@ void connectToWiFi() {
   while (WiFi.status() != WL_CONNECTED && attempts < maxAttempts) {
     unsigned long attemptStart = millis();
     while (WiFi.status() != WL_CONNECTED && (millis() - attemptStart) < 10000) {
+      esp_task_wdt_reset();
       delay(500);
       Serial.print(".");
     }
@@ -570,14 +576,15 @@ void sendDataToAPI(String jsonData) {
   
   HTTPClient http;
   WiFiClientSecure client;
-  client.setCACert(ISRG_Root_X1);
+  client.setInsecure(); // Use insecure connection to avoid cert chain issues with Let's Encrypt ECDSA certs
   http.begin(client, apiEndpoint);
   http.addHeader("Content-Type", "application/json");
   http.setTimeout(HTTP_TIMEOUT);
   
   Serial.println("Sending data to: " + String(apiEndpoint));
   Serial.println("Payload: " + jsonData);
-  
+
+  esp_task_wdt_reset(); // Reset WDT before potentially long SSL handshake
   int httpResponseCode = http.POST(jsonData);
   
   if (httpResponseCode > 0) {

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import DeviceMap from '../components/DeviceMap';
 import DeviceList from '../components/DeviceList';
-import DeviceDetailPanel from '../components/DeviceDetailPanel';
+import { MobileDeviceDetail } from '../components/DeviceDetailPanel';
 import AddDeviceModal from '../components/AddDeviceModal';
 import { useDevices } from '../hooks/useDevices';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -28,18 +28,15 @@ const MobileDashboard = () => {
     search: ''
   });
   const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const [isMapEditing, setIsMapEditing] = useState(false); // State for map editing mode
+  const [isMapEditing, setIsMapEditing] = useState(false);
   const [deviceHistory, setDeviceHistory] = useState({});
-  
+
   const { organization } = useOrganization();
-  
-  // Use organization ID for specific sites to match registration data
-  // If org name is Admin, pass 'admin' to see all devices
-  const school = (organization?.name === 'Admin' || organization?.slug === 'admin') 
-    ? 'admin' 
+
+  const school = (organization?.name === 'Admin' || organization?.slug === 'admin')
+    ? 'admin'
     : organization?.id;
-    
-  // Get Clerk token
+
   const { getToken } = useAuth();
   const [token, setToken] = useState(null);
 
@@ -57,7 +54,6 @@ const MobileDashboard = () => {
     fetchToken();
   }, [getToken]);
 
-  // Setup silent polling
   useEffect(() => {
     const pollInterval = setInterval(() => {
       refreshDevices();
@@ -65,7 +61,6 @@ const MobileDashboard = () => {
     return () => clearInterval(pollInterval);
   }, [refreshDevices]);
 
-  // Fetch recent history
   useEffect(() => {
     const fetchHistory = async () => {
       try {
@@ -89,7 +84,7 @@ const MobileDashboard = () => {
           };
           historyMap[deviceId].push(formattedReading);
         });
-        
+
         Object.keys(historyMap).forEach(deviceId => {
             historyMap[deviceId].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
             if (historyMap[deviceId].length > 0) {
@@ -111,7 +106,6 @@ const MobileDashboard = () => {
     fetchHistory();
   }, [updateDeviceStatus]);
 
-  // WebSocket handler
   const handleWebSocketMessage = useCallback((message) => {
     if (!message) return;
 
@@ -219,7 +213,6 @@ const MobileDashboard = () => {
     setSelectedDevice(null);
   };
 
-  // Handle map edit toggle from parent (MobileDashboard)
   const toggleMapEdit = () => {
     setIsMapEditing(!isMapEditing);
   };
@@ -248,15 +241,27 @@ const MobileDashboard = () => {
 
   const isSystemOnline = devices.some(device => device.isOnline !== false);
 
+  // ── When a device is selected, show the full-page detail view ──
+  if (isPanelOpen && selectedDevice) {
+    return (
+      <MobileDeviceDetail
+        device={selectedDevice}
+        onClose={handlePanelClose}
+        onPingDevice={handlePingDevice}
+        onDeleteDevice={deleteDevice}
+        history={deviceHistory[selectedDevice.id] || []}
+      />
+    );
+  }
+
+  // ── Default: dashboard list view ──
   return (
-    <div className="min-h-screen bg-gray-50 pb-20 flex flex-col"> {/* pb-20 for bottom nav space */}
-      
-      {/* Mobile Header & Title Section */}
+    <div className="min-h-screen bg-gray-50 pb-20 flex flex-col">
+
       <div className="bg-white pb-4 pt-2 px-4 rounded-b-3xl shadow-sm mb-4 flex-shrink-0">
         <div className="flex justify-between items-start mb-4">
-           {/* Logo and Bell handled in App.js header on desktop, but for mobile view we might want to emphasize title */}
         </div>
-        
+
         <div className="flex items-center justify-between mb-1">
           <h1 className="text-2xl font-bold text-gray-900">Device Management</h1>
           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${isSystemOnline ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-600'}`}>
@@ -268,7 +273,6 @@ const MobileDashboard = () => {
       </div>
 
       <div className="px-4 space-y-4 flex-1 flex flex-col">
-        {/* Campus Map Card - Made taller/fuller */}
         <div className="bg-white rounded-3xl shadow-sm overflow-hidden flex-1 flex flex-col min-h-[50vh]">
           <div className="px-4 py-3 flex justify-between items-center bg-gray-50/50 flex-shrink-0">
             <h3 className="text-lg font-bold text-gray-900">Campus Map</h3>
@@ -276,18 +280,17 @@ const MobileDashboard = () => {
               {filteredDevices.length} devices shown
             </span>
           </div>
-          
+
           <div className="relative flex-1 bg-white overflow-hidden">
-            <DeviceMap 
+            <DeviceMap
               devices={filteredDevices}
               selectedDevice={selectedDevice}
               onDeviceSelect={handleDeviceSelect}
               onRefresh={refreshDevices}
-              isEditingExternal={isMapEditing} // Pass editing state
+              isEditingExternal={isMapEditing}
             />
 
-            {/* Edit Map FAB (Pencil) - Replaces Zoom/Plus */}
-            <button 
+            <button
               onClick={toggleMapEdit}
               className={`absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all ${isMapEditing ? 'bg-[#00C2CB] text-white' : 'bg-white text-gray-700 border border-gray-200'}`}
             >
@@ -296,9 +299,8 @@ const MobileDashboard = () => {
           </div>
         </div>
 
-        {/* Device List / Empty State */}
         <div className="bg-white rounded-3xl shadow-sm min-h-[200px] flex-shrink-0">
-           <DeviceList 
+           <DeviceList
             devices={filteredDevices}
             selectedDevice={selectedDevice}
             onDeviceSelect={handleDeviceSelect}
@@ -310,17 +312,8 @@ const MobileDashboard = () => {
       </div>
 
       <div className="text-center text-xs text-gray-400 py-6">
-        v2.1.0 • Mistio
+        v2.1.0 · Mistio
       </div>
-
-      <DeviceDetailPanel
-        device={selectedDevice}
-        isOpen={isPanelOpen}
-        onClose={handlePanelClose}
-        onPingDevice={handlePingDevice}
-        onDeleteDevice={deleteDevice}
-        history={selectedDevice ? (deviceHistory[selectedDevice.id] || []) : []}
-      />
 
       <AddDeviceModal
         isOpen={isAddDeviceOpen}
