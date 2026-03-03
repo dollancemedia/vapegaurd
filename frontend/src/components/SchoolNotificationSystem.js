@@ -44,6 +44,15 @@ const IconBell = () => (
   </svg>
 );
 
+const IconTamper = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+);
+
 const IconLock = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -154,7 +163,8 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected, soundEnabled
     const gainNode = audioContext.createGain();
     oscillator.connect(gainNode);
     gainNode.connect(audioContext.destination);
-    oscillator.frequency.setValueAtTime(eventType === 'fire' ? 800 : 600, audioContext.currentTime);
+    const freq = eventType === 'fire' ? 800 : eventType === 'tamper' ? 700 : 600;
+    oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
     oscillator.type = 'square';
     gainNode.gain.setValueAtTime(0, audioContext.currentTime);
     for (let i = 0; i < 3; i++) {
@@ -188,9 +198,10 @@ const SchoolNotificationSystem = forwardRef(({ events, isConnected, soundEnabled
   // ── Derive visual config ───────────────────────────────────────────────────
   const getAlertConfig = (type) => {
     switch (type) {
-      case 'vape': return { icon: <IconVape />, label: 'Vape Detected', accent: '#00C2CB', glow: 'rgba(0,194,203,0.35)', bg: 'rgba(0,194,203,0.08)', pill: '#00C2CB' };
-      case 'fire': return { icon: <IconFire />, label: 'Fire Detected', accent: '#ef4444', glow: 'rgba(239,68,68,0.35)', bg: 'rgba(239,68,68,0.08)', pill: '#ef4444' };
-      default:     return { icon: <IconBell />, label: type.toUpperCase(), accent: '#f59e0b', glow: 'rgba(245,158,11,0.35)', bg: 'rgba(245,158,11,0.08)', pill: '#f59e0b' };
+      case 'vape':   return { icon: <IconVape />,   label: 'Vape Detected',   accent: '#00C2CB', glow: 'rgba(0,194,203,0.35)',   bg: 'rgba(0,194,203,0.08)',   pill: '#00C2CB' };
+      case 'fire':   return { icon: <IconFire />,   label: 'Fire Detected',   accent: '#ef4444', glow: 'rgba(239,68,68,0.35)',   bg: 'rgba(239,68,68,0.08)',   pill: '#ef4444' };
+      case 'tamper': return { icon: <IconTamper />, label: 'Tamper Detected', accent: '#f97316', glow: 'rgba(249,115,22,0.35)', bg: 'rgba(249,115,22,0.08)', pill: '#f97316' };
+      default:       return { icon: <IconBell />,   label: type.toUpperCase(), accent: '#f59e0b', glow: 'rgba(245,158,11,0.35)', bg: 'rgba(245,158,11,0.08)', pill: '#f59e0b' };
     }
   };
 

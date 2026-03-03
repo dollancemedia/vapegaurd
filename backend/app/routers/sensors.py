@@ -198,6 +198,61 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
         logger.exception(f"Error processing sensor data: {e}")
         return {"status": "error", "message": str(e)}
 
+@router.post("/tamper", status_code=200)
+async def receive_tamper_alert(payload: Dict[str, Any], request: Request):
+    """
+    Receive tamper/motion alert from MSA311 accelerometer on device.
+    Stores a tamper event and broadcasts a notification to the dashboard.
+    """
+    try:
+        device_id = payload.get("device_id", "unknown")
+        org_id = payload.get("org_id", "unknown")
+        timestamp = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
+
+        tamper_doc = {
+            "device_id": device_id,
+            "org_id": org_id,
+            "event_type": "tamper",
+            "timestamp": timestamp,
+            "accel_x": float(payload.get("accel_x", 0)),
+            "accel_y": float(payload.get("accel_y", 0)),
+            "accel_z": float(payload.get("accel_z", 0)),
+        }
+
+        # Store tamper event
+        await db.events.insert_one(tamper_doc.copy())
+
+        # Update device last_seen
+        await db.devices.update_one(
+            {"device_id": device_id},
+            {"$set": {
+                "last_seen": timestamp,
+                "updated_at": timestamp,
+            }},
+            upsert=False,
+        )
+
+        # Broadcast tamper alert to dashboard
+        await broadcast_event("tamper_alert", {
+            "device_id": device_id,
+            "org_id": org_id,
+            "timestamp": timestamp,
+            "accel_x": tamper_doc["accel_x"],
+            "accel_y": tamper_doc["accel_y"],
+            "accel_z": tamper_doc["accel_z"],
+            "message": f"Tamper detected on device {device_id}",
+            "level": "warning",
+        })
+
+        logger.info(f"Tamper alert from {device_id}: x={tamper_doc['accel_x']:.2f} y={tamper_doc['accel_y']:.2f} z={tamper_doc['accel_z']:.2f}")
+
+        return {"status": "success", "message": "Tamper alert recorded"}
+
+    except Exception as e:
+        logger.exception(f"Error processing tamper alert: {e}")
+        return {"status": "error", "message": str(e)}
+
+
 @router.get("/status")
 async def get_sensor_status():
     """Basic status for recent sensor ingestion."""

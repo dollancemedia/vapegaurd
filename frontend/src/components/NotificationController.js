@@ -202,7 +202,7 @@ const NotificationController = () => {
         const finalDeviceId = deviceId || 'unknown-device-' + (payload.location ? `${payload.location.building}-${payload.location.room}` : 'no-loc');
 
         const confidence = reading.confidence || (reading.prediction && reading.prediction.confidence) || 0;
-        
+
         // Format location string
         let locationStr = 'Unknown Location';
         if (reading.location) {
@@ -213,6 +213,22 @@ const NotificationController = () => {
 
         processAlert(finalDeviceId, predictedClass, confidence, locationStr, reading.timestamp);
       }
+    }
+
+    // Handle tamper alerts from MSA311 accelerometer
+    if (message.type === 'tamper_alert') {
+      const data = message.data || message;
+      const tamperDeviceId = data.device_id;
+
+      if (allowedDevices && !allowedDevices.has(tamperDeviceId)) return;
+
+      processAlert(
+        tamperDeviceId,
+        'tamper',
+        100,
+        data.message || `Tamper detected on device ${tamperDeviceId}`,
+        data.timestamp || new Date().toISOString()
+      );
     }
   }, [processAlert, allowedDevices]);
 
