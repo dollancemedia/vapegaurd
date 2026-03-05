@@ -631,7 +631,7 @@ export const MobileDeviceDetail = ({ device, onClose, onPingDevice, history = []
 // ══════════════════════════════════════════════════════════════════════════════
 //  DESKTOP — Original slide-over panel (unchanged)
 // ══════════════════════════════════════════════════════════════════════════════
-const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = [] }) => {
+const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = [], isDemo, demoAlertActive, onDemoAlert }) => {
   const [isEditing,     setIsEditing]     = useState(false);
   const [editForm,      setEditForm]      = useState({ name: '', building: '', floor: '', room: '' });
   const [metric,        setMetric]        = useState('pm25');
@@ -770,26 +770,44 @@ const DeviceDetailPanel = ({ device, isOpen, onClose, onPingDevice, history = []
         {/* Footer actions */}
         <div style={{ padding: '10px 18px 12px', borderTop: '1px solid rgba(0,0,0,0.07)',
           background: '#fafafa', display: 'flex', gap: 7, flexShrink: 0 }}>
-          <button onClick={() => setIsEditing(true)} style={sSecBtn}
-            onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-            onMouseLeave={e => e.currentTarget.style.background = 'white'}>
-            <Ic name="edit" size={14} color="#374151" /> Edit
-          </button>
-          <button onClick={handleRecalibrate} style={sSecBtn}
-            onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-            onMouseLeave={e => e.currentTarget.style.background = 'white'}>
-            <Ic name="refresh" size={14} color="#374151" /> Recalibrate
-          </button>
-          <button
-            onClick={() => confirmDelete ? handleDelete() : setConfirmDelete(true)}
-            style={{ ...sSecBtn,
-              border:     confirmDelete ? '1px solid #ef4444' : '1px solid rgba(0,0,0,0.1)',
-              background: confirmDelete ? '#fef2f2' : 'white',
-              color:      confirmDelete ? '#ef4444' : '#374151',
-            }}>
-            <Ic name="trash" size={14} color={confirmDelete ? '#ef4444' : '#374151'} />
-            {confirmDelete ? 'Confirm?' : 'Delete'}
-          </button>
+          {isDemo ? (
+            <button onClick={onDemoAlert} style={{
+              ...sSecBtn, flex: 1,
+              border: demoAlertActive ? '1px solid #ef4444' : '1px solid rgba(0,194,203,0.35)',
+              background: demoAlertActive ? '#fef2f2' : 'rgba(0,194,203,0.06)',
+              color: demoAlertActive ? '#ef4444' : '#00C2CB',
+              fontWeight: 700,
+              animation: demoAlertActive ? 'none' : undefined,
+            }}
+              onMouseEnter={e => { e.currentTarget.style.background = demoAlertActive ? '#fee2e2' : 'rgba(0,194,203,0.12)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = demoAlertActive ? '#fef2f2' : 'rgba(0,194,203,0.06)'; }}>
+              <Ic name="warn" size={14} color={demoAlertActive ? '#ef4444' : '#00C2CB'} />
+              {demoAlertActive ? 'Clear Demo Alert' : 'Simulate Vape Alert'}
+            </button>
+          ) : (
+            <>
+              <button onClick={() => setIsEditing(true)} style={sSecBtn}
+                onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+                onMouseLeave={e => e.currentTarget.style.background = 'white'}>
+                <Ic name="edit" size={14} color="#374151" /> Edit
+              </button>
+              <button onClick={handleRecalibrate} style={sSecBtn}
+                onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+                onMouseLeave={e => e.currentTarget.style.background = 'white'}>
+                <Ic name="refresh" size={14} color="#374151" /> Recalibrate
+              </button>
+              <button
+                onClick={() => confirmDelete ? handleDelete() : setConfirmDelete(true)}
+                style={{ ...sSecBtn,
+                  border:     confirmDelete ? '1px solid #ef4444' : '1px solid rgba(0,0,0,0.1)',
+                  background: confirmDelete ? '#fef2f2' : 'white',
+                  color:      confirmDelete ? '#ef4444' : '#374151',
+                }}>
+                <Ic name="trash" size={14} color={confirmDelete ? '#ef4444' : '#374151'} />
+                {confirmDelete ? 'Confirm?' : 'Delete'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 

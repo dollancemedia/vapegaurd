@@ -26,7 +26,7 @@ const Icons = {
   )
 };
 
-const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditingExternal }) => {
+const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditingExternal, forceSkeletonMap }) => {
   const { organization } = useOrganization();
   const [hoveredDevice, setHoveredDevice] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -266,8 +266,8 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditi
           preserveAspectRatio="xMidYMin meet"
           xmlnsXlink="http://www.w3.org/1999/xlink"
         >
-          {/* ── Grey skeleton: shown while preloading or while SVG image is rendering ── */}
-          {!mapLoaded && !mapNotFound && (
+          {/* ── Grey skeleton: shown while preloading, rendering, or during demo mode ── */}
+          {(forceSkeletonMap || (!mapLoaded && !mapNotFound)) && (
             <g>
               <defs>
                 <clipPath id="skelClip"><rect x="0" y="0" width="800" height="600" /></clipPath>
@@ -319,13 +319,13 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditi
               {/* Label */}
               <text x="400" y="587" textAnchor="middle" fontSize="10.5" fill="#a0aec0"
                 fontFamily="DM Sans, system-ui, sans-serif" letterSpacing="0.06em">
-                Loading map…
+                {forceSkeletonMap ? 'Example School — Floor Plan' : 'Loading map…'}
               </text>
             </g>
           )}
 
-          {/* Map image — only rendered once preload confirmed it exists */}
-          {mapImage && (
+          {/* Map image — only rendered once preload confirmed it exists, hidden in demo mode */}
+          {mapImage && !forceSkeletonMap && (
             <image
               href={mapImage}
               xlinkHref={mapImage}
@@ -341,7 +341,7 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditi
           )}
 
           {/* ── No floor plan state ── */}
-          {mapNotFound && (
+          {mapNotFound && !forceSkeletonMap && (
             <g>
               <defs>
                 <pattern id="noMapDots" width="28" height="28" patternUnits="userSpaceOnUse">
