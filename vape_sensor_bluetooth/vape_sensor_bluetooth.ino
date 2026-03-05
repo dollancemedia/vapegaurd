@@ -22,8 +22,8 @@ Preferences prefs;
 
 // WiFi Configuration
 const String setup_pass = "use_mistio";
-String ssid = "";     // Replace with your WiFi network name
-String password = ""; // Replace with your WiFi password
+String ssid = "sweethome";     // Replace with your WiFi network name
+String password = "rahul2008"; // Replace with your WiFi password
 
 // NimBLE Configuration
 NimBLEServer *bleServer = nullptr;

@@ -4,7 +4,23 @@
       "Bash(python:*)",
       "Bash(npm start)",
       "Bash(tail:*)",
-      "Bash(tail:)"
+      "Bash(tail:)",
+      "WebSearch",
+      "Bash(where arduino-cli:*)",
+      "Bash(./arduino-cli.exe board:*)",
+      "Bash(./arduino-cli.exe lib:*)",
+      "Bash(./arduino-cli.exe config:*)",
+      "Bash(./arduino-cli.exe compile:*)",
+      "Bash(grep:*)",
+      "Bash(./arduino-cli.exe upload:*)",
+      "Bash(./arduino-cli.exe monitor:*)",
+      "Bash(arduino-cli compile:*)",
+      "Bash(openssl:*)",
+      "Bash(openssl s_client:*)",
+      "Bash(curl:*)",
+      "Bash(pip install:*)",
+      "Bash(start:*)",
+      "Bash(mv:*)"
     ]
   }
 }

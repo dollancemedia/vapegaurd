@@ -62,7 +62,7 @@ const SystemGauge = ({ score = 85 }) => {
 const now = Date.now();
 const makeTs = (minsAgo) => new Date(now - minsAgo * 60000).toISOString();
 
-const DEMO_DEVICE = {
+const DEMO_DEVICE_NORMAL = {
   id: '__demo__',
   name: 'Demo Sensor',
   type: 'detector',
@@ -81,6 +81,33 @@ const DEMO_DEVICE = {
     predictedClass: 'normal',
     confidence: 92,
     timestamp: makeTs(0),
+    baseline_humidity: 58.5,
+    baseline_pm25: 12.3,
+    baseline_temperature: 21.8,
+    baseline_gas_resistance: 48000,
+    ewma_pm25: 12.3,
+  },
+};
+
+const DEMO_DEVICE_ALERT = {
+  id: '__demo__',
+  name: 'Demo Sensor',
+  type: 'detector',
+  status: 'alarm',
+  isOnline: true,
+  location: { building: 'Main Hall', floor: '2', room: 'B-204' },
+  lastSeen: new Date().toISOString(),
+  uptime: '99.9%',
+  sensorData: {
+    humidity: 78.5,
+    temperature: 23.8,
+    pm25: 285,
+    gasResistance: 12400,
+    particleSize: 4.8,
+    volumeSpike: true,
+    predictedClass: 'vape',
+    confidence: 97,
+    timestamp: new Date().toISOString(),
     baseline_humidity: 58.5,
     baseline_pm25: 12.3,
     baseline_temperature: 21.8,
@@ -114,6 +141,20 @@ const DEMO_HISTORY = [
   { humidity: 61.0, temperature: 21.8, pm25: 11, gasResistance: 49100, particleSize: 0.2, volumeSpike: false, predictedClass: 'normal',  confidence: 97, timestamp: makeTs(22) },
   { humidity: 60.8, temperature: 21.8, pm25: 11, gasResistance: 49300, particleSize: 0.2, volumeSpike: false, predictedClass: 'normal',  confidence: 97, timestamp: makeTs(26) },
   { humidity: 60.9, temperature: 21.9, pm25: 12, gasResistance: 49000, particleSize: 0.2, volumeSpike: false, predictedClass: 'normal',  confidence: 96, timestamp: makeTs(30) },
+];
+
+// Alert-active history: hazardous readings at the top, escalating from normal
+const DEMO_HISTORY_ALERT = [
+  { humidity: 78.5, temperature: 23.8, pm25: 285, gasResistance: 12400, particleSize: 4.8, volumeSpike: true,  predictedClass: 'vape',      confidence: 97, timestamp: makeTs(0)  },
+  { humidity: 76.8, temperature: 23.5, pm25: 260, gasResistance: 13200, particleSize: 4.5, volumeSpike: true,  predictedClass: 'vape',      confidence: 96, timestamp: makeTs(1)  },
+  { humidity: 75.1, temperature: 23.3, pm25: 230, gasResistance: 14800, particleSize: 4.2, volumeSpike: true,  predictedClass: 'vape',      confidence: 95, timestamp: makeTs(2)  },
+  { humidity: 73.4, temperature: 23.1, pm25: 195, gasResistance: 16500, particleSize: 3.8, volumeSpike: true,  predictedClass: 'vape',      confidence: 93, timestamp: makeTs(3)  },
+  { humidity: 71.2, temperature: 22.9, pm25: 155, gasResistance: 19200, particleSize: 3.2, volumeSpike: true,  predictedClass: 'suspected', confidence: 85, timestamp: makeTs(4)  },
+  { humidity: 68.5, temperature: 22.7, pm25: 110, gasResistance: 24600, particleSize: 2.5, volumeSpike: true,  predictedClass: 'suspected', confidence: 78, timestamp: makeTs(5)  },
+  { humidity: 65.8, temperature: 22.5, pm25: 72,  gasResistance: 31400, particleSize: 1.6, volumeSpike: false, predictedClass: 'normal',    confidence: 70, timestamp: makeTs(6)  },
+  { humidity: 63.4, temperature: 22.3, pm25: 38,  gasResistance: 39800, particleSize: 0.8, volumeSpike: false, predictedClass: 'normal',    confidence: 88, timestamp: makeTs(8)  },
+  { humidity: 62.1, temperature: 22.1, pm25: 18,  gasResistance: 45200, particleSize: 0.4, volumeSpike: false, predictedClass: 'normal',    confidence: 92, timestamp: makeTs(10) },
+  { humidity: 61.5, temperature: 22.0, pm25: 14,  gasResistance: 47800, particleSize: 0.3, volumeSpike: false, predictedClass: 'normal',    confidence: 95, timestamp: makeTs(15) },
 ];
 
 // ── AQI helpers (EPA breakpoints for PM2.5) ──────────────────────────────────
@@ -158,9 +199,11 @@ const mergeDefined = (base = {}, patch = {}) => {
 
 const Devices = () => {
   const isMobile = useMediaQuery({ maxWidth: 768 });
-  
+
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false);
+  const [demoAlertActive, setDemoAlertActive] = useState(false);
+  const demoDevice = demoAlertActive ? DEMO_DEVICE_ALERT : DEMO_DEVICE_NORMAL;
   const [filters, setFilters] = useState({
     status: 'all',
     type: 'all',
@@ -385,6 +428,29 @@ const Devices = () => {
     }
   };
 
+  // Toggle demo vape alert — dispatches a custom event for NotificationController
+  const handleDemoAlert = () => {
+    const next = !demoAlertActive;
+    setDemoAlertActive(next);
+    if (next) {
+      // Update selected device if demo is currently selected
+      setSelectedDevice(prev => prev?.id === '__demo__' ? DEMO_DEVICE_ALERT : prev);
+      // Fire a global custom event so NotificationController shows the toast
+      window.dispatchEvent(new CustomEvent('demoVapeAlert', {
+        detail: {
+          id: `demo-vape-${Date.now()}`,
+          device_id: '__demo__',
+          type: 'vape',
+          confidence: 97,
+          location: 'Main Hall · B-204',
+          timestamp: new Date().toISOString(),
+        }
+      }));
+    } else {
+      setSelectedDevice(prev => prev?.id === '__demo__' ? DEMO_DEVICE_NORMAL : prev);
+    }
+  };
+
   // Handle device ping
   const handlePingDevice = async (deviceId) => {
     try {
@@ -481,7 +547,7 @@ const Devices = () => {
       {/* School name + stats inline */}
       <div className="mistio-page-header">
         <h1 className="mistio-school-name">
-          Irvington High School
+          {demoAlertActive ? 'Example High School' : 'Irvington High School'}
         </h1>
         <div className="mistio-stats-row">
           <div className="mistio-stat">
@@ -507,7 +573,7 @@ const Devices = () => {
         {/* ── Left: campus map ── */}
         <div className="mistio-map-panel">
           <DeviceMap
-            devices={[...filteredDevices, DEMO_DEVICE]}
+            devices={[...filteredDevices, demoDevice]}
             selectedDevice={selectedDevice}
             onDeviceSelect={handleDeviceSelect}
             onRefresh={refreshDevices}
@@ -541,6 +607,19 @@ const Devices = () => {
                 <line x1="17" y1="16" x2="23" y2="16" />
               </svg>
               {isCalibratingAll ? 'Calibrating…' : 'Calibrate All'}
+            </button>
+            <button
+              className={`mistio-btn-secondary${demoAlertActive ? ' mistio-btn-demo-active' : ''}`}
+              onClick={handleDemoAlert}
+              title={demoAlertActive ? 'Clear demo alert' : 'Simulate a vape alert on the demo sensor'}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              {demoAlertActive ? 'Clear Alert' : 'Demo Alert'}
             </button>
           </div>
 
@@ -586,7 +665,7 @@ const Devices = () => {
           <div className="mistio-device-list-container">
             <DeviceList
               devices={filteredDevices}
-              demoDevice={DEMO_DEVICE}
+              demoDevice={demoDevice}
               selectedDevice={selectedDevice}
               onDeviceSelect={handleDeviceSelect}
               filters={filters}
@@ -606,7 +685,7 @@ const Devices = () => {
         onDeleteDevice={selectedDevice?.id === '__demo__' ? () => {} : deleteDevice}
         history={
           selectedDevice?.id === '__demo__'
-            ? DEMO_HISTORY
+            ? (demoAlertActive ? DEMO_HISTORY_ALERT : DEMO_HISTORY)
             : (selectedDevice ? (deviceHistory[selectedDevice.id] || []) : [])
         }
       />

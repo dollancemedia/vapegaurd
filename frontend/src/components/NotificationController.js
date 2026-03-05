@@ -232,6 +232,16 @@ const NotificationController = () => {
     }
   }, [processAlert, allowedDevices]);
 
+  // Listen for demo alert events from Devices page
+  useEffect(() => {
+    const handleDemoAlert = (e) => {
+      const event = e.detail;
+      setEvents([event]);
+    };
+    window.addEventListener('demoVapeAlert', handleDemoAlert);
+    return () => window.removeEventListener('demoVapeAlert', handleDemoAlert);
+  }, []);
+
   const { isConnected } = useWebSocket('/ws/events', {
     onMessage: handleWebSocketMessage,
     queryParams: { token }
