@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useOrganization } from "@clerk/clerk-react";
+import { useOrganization } from "../lib/auth";
 import deviceService from '../services/deviceService';
 
 // Icons

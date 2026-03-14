@@ -4,7 +4,7 @@ import {
   Chart as ChartJS, CategoryScale, LinearScale,
   BarElement, Tooltip,
 } from 'chart.js';
-import { useOrganization } from '@clerk/clerk-react';
+import { useOrganization } from '../lib/auth';
 import { useMediaQuery } from 'react-responsive';
 import { useDevices } from '../hooks/useDevices';
 import api from '../services/api';

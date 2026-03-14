@@ -7,7 +7,7 @@ import { useDevices } from '../hooks/useDevices';
 import { useWebSocket } from '../hooks/useWebSocket';
 import api from '../services/api';
 import deviceService from '../services/deviceService';
-import { useAuth, useOrganization } from '@clerk/clerk-react';
+import { useAuth, useOrganization } from '../lib/auth';
 import MobileDashboard from './MobileDashboard';
 import { useMediaQuery } from 'react-responsive';
 
@@ -547,7 +547,7 @@ const Devices = () => {
       {/* School name + stats inline */}
       <div className="mistio-page-header">
         <h1 className="mistio-school-name">
-          {demoAlertActive ? 'Example High School' : 'Irvington High School'}
+          {(process.env.REACT_APP_LOCAL_DEMO === 'true' || demoAlertActive) ? 'Example High School' : 'Irvington High School'}
         </h1>
         <div className="mistio-stats-row">
           <div className="mistio-stat">
@@ -577,7 +577,7 @@ const Devices = () => {
             selectedDevice={selectedDevice}
             onDeviceSelect={handleDeviceSelect}
             onRefresh={refreshDevices}
-            forceSkeletonMap={demoAlertActive}
+            forceSkeletonMap={process.env.REACT_APP_LOCAL_DEMO === 'true' || demoAlertActive}
           />
         </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useAuth, useOrganization } from '@clerk/clerk-react';
+import { useAuth, useOrganization } from '../lib/auth';
 import { useWebSocket } from '../hooks/useWebSocket';
 import SchoolNotificationSystem from './SchoolNotificationSystem';
 import deviceService from '../services/deviceService';

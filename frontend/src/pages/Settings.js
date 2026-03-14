@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { useUser, useClerk } from '@clerk/clerk-react';
+import { useUser, useClerk } from '../lib/auth';
 import { useMediaQuery } from 'react-responsive';
 import SchoolNotificationSystem from '../components/SchoolNotificationSystem';
 import {

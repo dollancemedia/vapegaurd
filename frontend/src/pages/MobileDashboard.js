@@ -6,7 +6,7 @@ import AddDeviceModal from '../components/AddDeviceModal';
 import { useDevices } from '../hooks/useDevices';
 import { useWebSocket } from '../hooks/useWebSocket';
 import api from '../services/api';
-import { useAuth, useOrganization } from '@clerk/clerk-react';
+import { useAuth, useOrganization } from '../lib/auth';
 import { Edit2 } from 'lucide-react';
 
 const pickDefined = (obj = {}) =>
