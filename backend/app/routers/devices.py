@@ -137,6 +137,53 @@ async def delete_device(device_id: str, user = Depends(validate_token)):
         }
     }
 
+class DeviceSchedule(BaseModel):
+    enabled: bool = False
+    start_hour: int = 8
+    start_minute: int = 30
+    end_hour: int = 15
+    end_minute: int = 11
+    timezone: Optional[str] = "America/Los_Angeles"
+
+@router.get("/{device_id}/schedule")
+async def get_device_schedule(device_id: str):
+    """Get the active-hours schedule for a device (used by ESP32 firmware)."""
+    doc = await db.device_schedules.find_one({"device_id": device_id})
+    if not doc:
+        # Default: no schedule restriction (always active)
+        return {
+            "device_id": device_id,
+            "enabled": False,
+            "start_hour": 0,
+            "start_minute": 0,
+            "end_hour": 23,
+            "end_minute": 59,
+            "timezone": "America/Los_Angeles"
+        }
+    return {
+        "device_id": doc["device_id"],
+        "enabled": doc.get("enabled", False),
+        "start_hour": doc.get("start_hour", 0),
+        "start_minute": doc.get("start_minute", 0),
+        "end_hour": doc.get("end_hour", 23),
+        "end_minute": doc.get("end_minute", 59),
+        "timezone": doc.get("timezone", "America/Los_Angeles")
+    }
+
+@router.put("/{device_id}/schedule")
+async def update_device_schedule(device_id: str, schedule: DeviceSchedule):
+    """Set the active-hours schedule for a device (called from dashboard)."""
+    data = schedule.dict()
+    data["device_id"] = device_id
+    data["updated_at"] = datetime.utcnow().isoformat() + "Z"
+
+    await db.device_schedules.update_one(
+        {"device_id": device_id},
+        {"$set": data},
+        upsert=True
+    )
+    return {"status": "success", "device_id": device_id, "schedule": data}
+
 @router.get("/", response_model=List[dict])
 async def get_device_summary(school: Optional[str] = None):
     """Get a summary of all devices and their recent activity"""
