@@ -1,0 +1,620 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Train AI Page Styles
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.train-ai-page {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Section cards ────────────────────────────────────────────────────────── */
+.train-section {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.train-section-title {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.train-session-count {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: #9ca3af;
+  margin-left: auto;
+}
+
+/* ── Progress Grid ────────────────────────────────────────────────────────── */
+.train-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.train-progress-item {
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 10px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  transition: border-color 0.2s;
+}
+
+.train-progress-item.priority {
+  border-color: var(--teal);
+  background: rgba(0, 194, 203, 0.06);
+}
+
+.train-progress-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 0.85rem;
+}
+
+.train-progress-icon {
+  font-size: 1rem;
+}
+
+.train-progress-label {
+  font-weight: 500;
+  color: #374151;
+}
+
+.train-priority-badge {
+  background: var(--teal);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.train-progress-count {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: #6b7280;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.train-progress-bar-track {
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.train-progress-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+  min-width: 2px;
+}
+
+/* ── Recorder Layout ──────────────────────────────────────────────────────── */
+.train-recorder-layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 768px) {
+  .train-recorder-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Controls Panel (left) ────────────────────────────────────────────────── */
+.train-controls-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.train-field label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.train-field select,
+.train-field input[type="text"] {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-family: var(--font-body);
+  background: white;
+  color: #1f2937;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.train-field select:focus,
+.train-field input[type="text"]:focus {
+  border-color: var(--teal);
+}
+
+/* Class pill grid */
+.train-class-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.train-class-pill {
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1.5px solid #d1d5db;
+  background: white;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: #374151;
+  font-family: var(--font-body);
+}
+
+.train-class-pill:hover {
+  border-color: #9ca3af;
+}
+
+.train-class-pill.active {
+  color: white;
+  border-color: transparent;
+}
+
+.train-class-pill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Distance buttons */
+.train-distance-row {
+  display: flex;
+  gap: 6px;
+}
+
+.train-distance-btn {
+  flex: 1;
+  padding: 6px 0;
+  border-radius: 8px;
+  border: 1.5px solid #d1d5db;
+  background: white;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: #374151;
+  font-family: var(--font-body);
+}
+
+.train-distance-btn.active {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: white;
+}
+
+.train-distance-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Recording Panel (right) ──────────────────────────────────────────────── */
+.train-recording-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+}
+
+/* Live sensor feed */
+.train-sensor-feed {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 10px;
+}
+
+.train-sensor-feed.empty {
+  color: #9ca3af;
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 20px;
+}
+
+.train-sensor-reading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 60px;
+}
+
+.train-sensor-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.train-sensor-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1f2937;
+  font-variant-numeric: tabular-nums;
+}
+
+.train-sensor-unit {
+  font-size: 0.65rem;
+  color: #9ca3af;
+}
+
+/* Baseline status */
+.train-baseline-status {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  text-align: center;
+  width: 100%;
+}
+
+.train-baseline-status.stable {
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+}
+
+.train-baseline-status.unstable {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+.train-baseline-status small {
+  display: block;
+  font-size: 0.75rem;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+/* Timer */
+.train-timer {
+  font-family: 'Courier New', monospace;
+  font-size: 3rem;
+  font-weight: 700;
+  color: #1f2937;
+  letter-spacing: 2px;
+  line-height: 1;
+}
+
+/* Mini chart */
+.train-mini-chart {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.train-mini-chart.empty {
+  text-align: center;
+  color: #9ca3af;
+  padding: 20px;
+  font-size: 0.9rem;
+}
+
+.train-chart-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 4px;
+  padding: 0 4px;
+}
+
+/* ── Action Buttons ───────────────────────────────────────────────────────── */
+.train-action-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+/* START button — large circle */
+.train-btn-start {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 3px solid #d1d5db;
+  background: white;
+  cursor: pointer;
+  transition: all 0.25s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+}
+
+.train-btn-start.ready {
+  border-color: var(--teal);
+  box-shadow: 0 0 20px rgba(0, 194, 203, 0.3);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.train-btn-start.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.train-btn-start-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.train-btn-start-icon {
+  font-size: 1.6rem;
+  color: #d1d5db;
+  transition: color 0.25s;
+}
+
+.train-btn-start.ready .train-btn-start-icon {
+  color: var(--teal);
+}
+
+.train-btn-start-inner span:last-child {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #6b7280;
+  letter-spacing: 1px;
+}
+
+.train-btn-start.ready .train-btn-start-inner span:last-child {
+  color: var(--teal-dark);
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(0, 194, 203, 0.3); }
+  50% { box-shadow: 0 0 30px rgba(0, 194, 203, 0.5); }
+}
+
+/* STOP button */
+.train-btn-stop {
+  padding: 12px 32px;
+  border-radius: 12px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  transition: background 0.15s;
+}
+
+.train-btn-stop:hover {
+  background: #dc2626;
+}
+
+.train-recording-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: white;
+  animation: blink-dot 1s ease-in-out infinite;
+}
+
+@keyframes blink-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* LAP button */
+.train-btn-lap {
+  padding: 12px 24px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.06);
+  color: #374151;
+  border: none;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-display);
+  transition: background 0.15s;
+}
+
+.train-btn-lap:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.train-btn-lap:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Confirm / Discard buttons */
+.train-btn-confirm {
+  padding: 12px 32px;
+  border-radius: 12px;
+  background: #22c55e;
+  color: white;
+  border: none;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-display);
+  transition: background 0.15s;
+}
+
+.train-btn-confirm:hover { background: #16a34a; }
+.train-btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.train-btn-discard {
+  padding: 12px 24px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.06);
+  color: #6b7280;
+  border: none;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font-display);
+  transition: all 0.15s;
+}
+
+.train-btn-discard:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.train-btn-discard:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Error */
+.train-error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  text-align: center;
+  width: 100%;
+}
+
+/* Last saved */
+.train-last-saved {
+  color: #16a34a;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* ── Session History ──────────────────────────────────────────────────────── */
+.train-session-empty {
+  color: #9ca3af;
+  text-align: center;
+  padding: 24px;
+  font-size: 0.9rem;
+}
+
+.train-session-table {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.train-session-header-row {
+  display: grid;
+  grid-template-columns: 40px 1fr 70px 70px 80px 90px;
+  padding: 6px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.train-session-row {
+  display: grid;
+  grid-template-columns: 40px 1fr 70px 70px 80px 90px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  color: #374151;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  align-items: center;
+}
+
+.train-session-row:hover {
+  background: rgba(0, 194, 203, 0.06);
+}
+
+.train-session-num {
+  font-weight: 600;
+  color: #9ca3af;
+  font-size: 0.8rem;
+}
+
+.train-session-class {
+  font-weight: 500;
+}
+
+.train-status-badge {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.train-status-badge.confirmed {
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+}
+
+.train-status-badge.discarded {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.train-status-badge.pending {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .train-ai-page {
+    padding: 16px;
+    padding-bottom: 80px;
+  }
+
+  .train-progress-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .train-timer {
+    font-size: 2.2rem;
+  }
+
+  .train-btn-start {
+    width: 100px;
+    height: 100px;
+  }
+
+  .train-session-header-row,
+  .train-session-row {
+    grid-template-columns: 30px 1fr 60px 60px 70px 70px;
+    font-size: 0.8rem;
+  }
+}

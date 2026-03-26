@@ -1,10 +1,12 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { useUser, useClerk } from '@clerk/clerk-react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useUser, useClerk, useOrganization } from '@clerk/clerk-react';
 import { useMediaQuery } from 'react-responsive';
 import SchoolNotificationSystem from '../components/SchoolNotificationSystem';
+import { useDevices } from '../hooks/useDevices';
+import api from '../services/api';
 import {
   Bell, Shield, Users, LogOut, Volume2, Wifi,
-  AlertTriangle, Zap, ChevronRight,
+  AlertTriangle, Zap, ChevronRight, Clock, Calendar,
 } from 'lucide-react';
 
 // ── Custom toggle switch ───────────────────────────────────────────────────────
@@ -100,6 +102,7 @@ const SectionCard = ({ title, subtitle, children }) => (
 // ── Nav items config ──────────────────────────────────────────────────────────
 const NAV_ITEMS = [
   { key: 'notifications', label: 'Notifications', sub: 'Alerts & thresholds', icon: <Bell size={15} /> },
+  { key: 'schedule',      label: 'Schedule',      sub: 'School hours & holidays', icon: <Clock size={15} /> },
   { key: 'account',       label: 'Account',       sub: 'Org & security',     icon: <Shield size={15} /> },
 ];
 
@@ -127,15 +130,74 @@ const TOGGLE_ROWS = [
 ];
 
 // ── Main component ────────────────────────────────────────────────────────────
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DEFAULT_SCHEDULE = {
+  enabled: false, start_hour: 8, start_minute: 0,
+  end_hour: 15, end_minute: 0, active_days: [1,2,3,4,5],
+  sniff_interval_sec: 60, deep_sense_sec: 30,
+  heartbeat_interval: 4, cooldown_sec: 20,
+};
+
 const Settings = () => {
   const { user } = useUser();
   const { signOut, openUserProfile, openOrganizationProfile } = useClerk();
+  const { organization } = useOrganization();
+  const school = (organization?.name === 'admin' || organization?.slug === 'admin') ? 'admin' : organization?.id;
+  const { devices } = useDevices(school);
   const notificationSystemRef = useRef(null);
   const isMobile = useMediaQuery({ maxWidth: 768 });
 
   const [activeSection, setActiveSection] = useState('notifications');
   const [testFired, setTestFired] = useState(false);
   const [saveFired, setSaveFired] = useState(false);
+
+  // ── Schedule state ──────────────────────────────────────────────
+  const [selectedDevice, setSelectedDevice] = useState('');
+  const [schedule, setSchedule] = useState({ ...DEFAULT_SCHEDULE });
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleSaved, setScheduleSaved] = useState(false);
+  const [scheduleApplyAll, setScheduleApplyAll] = useState(false);
+
+  // Pick first device on load
+  useEffect(() => {
+    if (devices.length > 0 && !selectedDevice) {
+      setSelectedDevice(devices[0].id || devices[0].device_id);
+    }
+  }, [devices, selectedDevice]);
+
+  // Fetch schedule when device changes
+  useEffect(() => {
+    if (!selectedDevice) return;
+    setScheduleLoading(true);
+    api.get(`/devices/${selectedDevice}/schedule`)
+      .then(res => setSchedule({ ...DEFAULT_SCHEDULE, ...res.data }))
+      .catch(() => setSchedule({ ...DEFAULT_SCHEDULE }))
+      .finally(() => setScheduleLoading(false));
+  }, [selectedDevice]);
+
+  const handleScheduleSave = async () => {
+    const targets = scheduleApplyAll
+      ? devices.map(d => d.id || d.device_id)
+      : [selectedDevice];
+    try {
+      await Promise.all(targets.map(id =>
+        api.put(`/devices/${id}/schedule`, schedule)
+      ));
+      setScheduleSaved(true);
+      setTimeout(() => setScheduleSaved(false), 2000);
+    } catch (err) {
+      console.error('Schedule save error:', err);
+    }
+  };
+
+  const toggleDay = (day) => {
+    setSchedule(prev => {
+      const days = prev.active_days.includes(day)
+        ? prev.active_days.filter(d => d !== day)
+        : [...prev.active_days, day].sort();
+      return { ...prev, active_days: days };
+    });
+  };
 
   const loadSaved = () => {
     try {
@@ -492,6 +554,180 @@ const Settings = () => {
                   </button>
                 </div>
               </div>
+            </SectionCard>
+          )}
+
+          {/* ── SCHEDULE SECTION ── */}
+          {activeSection === 'schedule' && (
+            <SectionCard
+              title="Device Schedule"
+              subtitle="Set active school hours — sensors sleep outside this window to save battery"
+            >
+              {/* Device picker */}
+              <div style={{ padding: '16px 22px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                  Device
+                </div>
+                <select
+                  value={selectedDevice}
+                  onChange={e => setSelectedDevice(e.target.value)}
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: 10,
+                    border: '1px solid rgba(0,0,0,0.1)', background: 'rgba(0,0,0,0.03)',
+                    fontFamily: 'var(--font-body)', fontSize: '0.82rem', color: '#1a1a1a',
+                    outline: 'none', cursor: 'pointer',
+                  }}
+                >
+                  {devices.map(d => (
+                    <option key={d.id || d.device_id} value={d.id || d.device_id}>
+                      {d.name || d.name_override || d.id || d.device_id}
+                    </option>
+                  ))}
+                </select>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={scheduleApplyAll}
+                    onChange={() => setScheduleApplyAll(p => !p)}
+                    style={{ accentColor: 'var(--teal)' }}
+                  />
+                  <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>Apply to all devices</span>
+                </label>
+              </div>
+
+              {scheduleLoading ? (
+                <div style={{ padding: 30, textAlign: 'center', color: '#b0b8c4', fontSize: '0.82rem' }}>Loading schedule...</div>
+              ) : (
+                <>
+                  {/* Enable toggle */}
+                  <RowItem
+                    icon={<Clock size={16} />}
+                    color="#8b5cf6"
+                    bg="rgba(139,92,246,0.09)"
+                    label="Enable Schedule"
+                    desc="Sensor sleeps outside school hours"
+                    right={<Toggle checked={schedule.enabled} onChange={() => setSchedule(p => ({ ...p, enabled: !p.enabled }))} />}
+                  />
+
+                  {/* School hours */}
+                  <div style={{ padding: '16px 22px', borderBottom: '1px solid rgba(0,0,0,0.05)', opacity: schedule.enabled ? 1 : 0.4, pointerEvents: schedule.enabled ? 'auto' : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                      <IconBox icon={<Calendar size={16} />} color="#3b82f6" bg="rgba(59,130,246,0.09)" />
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1a1a1a' }}>School Hours</div>
+                        <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: 1 }}>Active monitoring window</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div>
+                        <label style={{ fontSize: '0.65rem', fontWeight: 600, color: '#9ca3af', display: 'block', marginBottom: 4 }}>START</label>
+                        <input type="time"
+                          value={`${String(schedule.start_hour).padStart(2,'0')}:${String(schedule.start_minute).padStart(2,'0')}`}
+                          onChange={e => { const [h,m] = e.target.value.split(':').map(Number); setSchedule(p => ({...p, start_hour: h, start_minute: m})); }}
+                          style={{
+                            padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.1)',
+                            fontFamily: 'var(--font-body)', fontSize: '0.88rem', fontWeight: 700,
+                            color: '#1a1a1a', background: 'rgba(0,0,0,0.03)', outline: 'none',
+                          }}
+                        />
+                      </div>
+                      <span style={{ fontSize: '0.82rem', color: '#9ca3af', fontWeight: 600, paddingTop: 18 }}>to</span>
+                      <div>
+                        <label style={{ fontSize: '0.65rem', fontWeight: 600, color: '#9ca3af', display: 'block', marginBottom: 4 }}>END</label>
+                        <input type="time"
+                          value={`${String(schedule.end_hour).padStart(2,'0')}:${String(schedule.end_minute).padStart(2,'0')}`}
+                          onChange={e => { const [h,m] = e.target.value.split(':').map(Number); setSchedule(p => ({...p, end_hour: h, end_minute: m})); }}
+                          style={{
+                            padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.1)',
+                            fontFamily: 'var(--font-body)', fontSize: '0.88rem', fontWeight: 700,
+                            color: '#1a1a1a', background: 'rgba(0,0,0,0.03)', outline: 'none',
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Active days */}
+                    <div style={{ marginTop: 16 }}>
+                      <label style={{ fontSize: '0.65rem', fontWeight: 600, color: '#9ca3af', display: 'block', marginBottom: 6 }}>ACTIVE DAYS</label>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {DAY_LABELS.map((label, i) => {
+                          const active = schedule.active_days.includes(i);
+                          return (
+                            <button key={i} onClick={() => toggleDay(i)} style={{
+                              width: 38, height: 38, borderRadius: 10,
+                              border: active ? '2px solid var(--teal)' : '1px solid rgba(0,0,0,0.1)',
+                              background: active ? 'rgba(0,194,203,0.1)' : 'rgba(0,0,0,0.03)',
+                              color: active ? 'var(--teal)' : '#9ca3af',
+                              fontFamily: 'var(--font-body)', fontSize: '0.68rem', fontWeight: 700,
+                              cursor: 'pointer', transition: 'all 0.15s',
+                            }}>
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Advanced sensor timing */}
+                  <div style={{ padding: '16px 22px', borderBottom: '1px solid rgba(0,0,0,0.05)', opacity: schedule.enabled ? 1 : 0.5, pointerEvents: schedule.enabled ? 'auto' : 'none' }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
+                      Sensor Timing
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr 1fr', gap: 12 }}>
+                      {[
+                        { key: 'sniff_interval_sec', label: 'Sniff Interval', unit: 's', min: 10, max: 300 },
+                        { key: 'deep_sense_sec', label: 'Deep Sense', unit: 's', min: 15, max: 120 },
+                        { key: 'heartbeat_interval', label: 'Heartbeat Every', unit: 'th', min: 1, max: 20 },
+                        { key: 'cooldown_sec', label: 'Cooldown', unit: 's', min: 5, max: 120 },
+                      ].map(({ key, label, unit, min, max }) => (
+                        <div key={key}>
+                          <label style={{ fontSize: '0.62rem', fontWeight: 600, color: '#9ca3af', display: 'block', marginBottom: 4 }}>
+                            {label}
+                          </label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <input type="number" min={min} max={max}
+                              value={schedule[key]}
+                              onChange={e => setSchedule(p => ({ ...p, [key]: Math.max(min, Math.min(max, parseInt(e.target.value) || min)) }))}
+                              style={{
+                                width: '100%', padding: '7px 10px', borderRadius: 8,
+                                border: '1px solid rgba(0,0,0,0.1)', background: 'rgba(0,0,0,0.03)',
+                                fontFamily: 'var(--font-display)', fontSize: '0.88rem', fontWeight: 700,
+                                color: '#1a1a1a', outline: 'none', textAlign: 'center',
+                              }}
+                            />
+                            <span style={{ fontSize: '0.68rem', color: '#9ca3af', fontWeight: 600, flexShrink: 0 }}>{unit}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Save button */}
+                  <div style={{ padding: '14px 22px' }}>
+                    <button
+                      onClick={handleScheduleSave}
+                      style={{
+                        width: '100%', padding: '12px',
+                        background: scheduleSaved
+                          ? 'linear-gradient(135deg,#22c55e,#16a34a)'
+                          : 'linear-gradient(135deg,var(--teal),#009fa6)',
+                        border: 'none', borderRadius: 12, color: 'white',
+                        fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: '0.85rem',
+                        cursor: 'pointer', transition: 'all 0.2s',
+                        boxShadow: scheduleSaved
+                          ? '0 3px 12px rgba(34,197,94,0.35)'
+                          : '0 3px 12px rgba(0,194,203,0.35)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      }}
+                    >
+                      {scheduleSaved ? (
+                        <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg> Schedule Saved!</>
+                      ) : (
+                        <><Clock size={14} /> Save Schedule{scheduleApplyAll ? ' (All Devices)' : ''}</>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
             </SectionCard>
           )}
 

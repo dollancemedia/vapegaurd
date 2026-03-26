@@ -10,6 +10,7 @@ from app.routers.sensors import router as sensors_router
 from app.dashboard import router as dashboard_router
 from app.ws import router as ws_router
 from app.routers.admin import router as admin_router
+from app.routers.training import router as training_router
 
 app = FastAPI(
     title="Vape/Fire Detection API",
@@ -95,5 +96,6 @@ app.include_router(sensors_router, prefix="/api/sensors", tags=["sensors"])
 app.include_router(sensors_router, prefix="/api", tags=["legacy"])
 app.include_router(dashboard_router, tags=["dashboard"])
 app.include_router(admin_router, prefix="/api")
+app.include_router(training_router, prefix="/api/training", tags=["training"])
 # Include WebSocket router at root level to match frontend connection URL
 app.include_router(ws_router)

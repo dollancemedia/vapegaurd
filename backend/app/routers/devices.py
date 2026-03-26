@@ -142,8 +142,13 @@ class DeviceSchedule(BaseModel):
     start_hour: int = 8
     start_minute: int = 30
     end_hour: int = 15
-    end_minute: int = 11
+    end_minute: int = 0
     timezone: Optional[str] = "America/Los_Angeles"
+    active_days: Optional[list] = [1, 2, 3, 4, 5]  # 0=Sun, 1=Mon, ..., 6=Sat
+    sniff_interval_sec: Optional[int] = 60
+    deep_sense_sec: Optional[int] = 30
+    heartbeat_interval: Optional[int] = 4
+    cooldown_sec: Optional[int] = 20
 
 @router.get("/{device_id}/schedule")
 async def get_device_schedule(device_id: str):
@@ -158,7 +163,12 @@ async def get_device_schedule(device_id: str):
             "start_minute": 0,
             "end_hour": 23,
             "end_minute": 59,
-            "timezone": "America/Los_Angeles"
+            "timezone": "America/Los_Angeles",
+            "active_days": [1, 2, 3, 4, 5],
+            "sniff_interval_sec": 60,
+            "deep_sense_sec": 30,
+            "heartbeat_interval": 4,
+            "cooldown_sec": 20
         }
     return {
         "device_id": doc["device_id"],
@@ -167,7 +177,12 @@ async def get_device_schedule(device_id: str):
         "start_minute": doc.get("start_minute", 0),
         "end_hour": doc.get("end_hour", 23),
         "end_minute": doc.get("end_minute", 59),
-        "timezone": doc.get("timezone", "America/Los_Angeles")
+        "timezone": doc.get("timezone", "America/Los_Angeles"),
+        "active_days": doc.get("active_days", [1, 2, 3, 4, 5]),
+        "sniff_interval_sec": doc.get("sniff_interval_sec", 60),
+        "deep_sense_sec": doc.get("deep_sense_sec", 30),
+        "heartbeat_interval": doc.get("heartbeat_interval", 4),
+        "cooldown_sec": doc.get("cooldown_sec", 20)
     }
 
 @router.put("/{device_id}/schedule")

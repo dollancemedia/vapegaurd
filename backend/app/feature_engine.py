@@ -210,13 +210,79 @@ class FeatureEngine:
                      if (t_end - s['timestamp']).total_seconds() > 5.0:
                          break
                 last_5s_vals.append(s.get('pm25'))
-        
+
         # Filter Nones
         last_5s_vals = [v for v in last_5s_vals if v is not None]
-        
+
         if len(last_5s_vals) > 1:
             features['pm25_std_last5s'] = statistics.stdev(last_5s_vals)
         else:
             features['pm25_std_last5s'] = 0.0
+
+        # ── 10. NEW: Cross-sensor interactions ──────────────────────────
+        # Pressure at event start
+        features['pressure_start'] = start_sample.get('pressure', 0)
+
+        # Temperature/humidity ratio — vape produces warm, humid aerosol
+        hum_start = features['humidity_start']
+        temp_start = features['temp_start']
+        if hum_start and hum_start > 0 and temp_start is not None:
+            features['temp_humidity_ratio'] = temp_start / hum_start
+        else:
+            features['temp_humidity_ratio'] = 0.0
+
+        # Gas-temperature interaction — VOC sensitivity varies with temperature
+        gas_start = features['gas_start']
+        if gas_start is not None and temp_start is not None:
+            features['gas_temp_interaction'] = gas_start * temp_start
+        else:
+            features['gas_temp_interaction'] = 0.0
+
+        # ── 11. NEW: Decay dynamics ─────────────────────────────────────
+        # PM2.5 decay rate: slope from peak to end of window
+        # Vape aerosol dissipates quickly (~3-5s), fire/cooking lingers
+        features['pm25_decay_rate'] = 0.0
+        if pm25_vals and len(pm25_vals) >= 3:
+            peak_idx_in_vals = pm25_vals.index(pm25_peak) if pm25_peak in pm25_vals else 0
+            post_peak = pm25_vals[peak_idx_in_vals:]
+            if len(post_peak) >= 2:
+                # Time from peak to end
+                dt_decay = len(post_peak) - 1  # approximate 1 sample/sec
+                if event_samples and len(event_samples) > peak_idx_in_vals:
+                    try:
+                        t_pk = event_samples[peak_idx_in_vals]['timestamp']
+                        t_last = event_samples[-1]['timestamp']
+                        if hasattr(t_pk, 'timestamp') and hasattr(t_last, 'timestamp'):
+                            dt_decay = max((t_last - t_pk).total_seconds(), 1.0)
+                    except Exception:
+                        pass
+                decay_amount = pm25_peak - post_peak[-1]
+                features['pm25_decay_rate'] = decay_amount / max(dt_decay, 1.0)
+
+        # Gas recovery slope: how fast gas resistance recovers after VOC event
+        # Higher recovery = transient aerosol (vape), low recovery = persistent (fire)
+        gas_vals = get_vals(event_samples, 'gas_resistance')
+        features['gas_recovery_slope'] = 0.0
+        if gas_vals and len(gas_vals) >= 3:
+            gas_min = min(gas_vals)
+            gas_min_idx = gas_vals.index(gas_min)
+            post_min = gas_vals[gas_min_idx:]
+            if len(post_min) >= 2:
+                dt_recovery = len(post_min) - 1
+                try:
+                    if event_samples and len(event_samples) > gas_min_idx:
+                        t_gmin = event_samples[gas_min_idx]['timestamp']
+                        t_glast = event_samples[-1]['timestamp']
+                        if hasattr(t_gmin, 'timestamp') and hasattr(t_glast, 'timestamp'):
+                            dt_recovery = max((t_glast - t_gmin).total_seconds(), 1.0)
+                except Exception:
+                    pass
+                features['gas_recovery_slope'] = (post_min[-1] - gas_min) / max(dt_recovery, 1.0)
+
+        # PM ratio at peak: pm25/pm10 (vape ~0.7-0.9, fire ~0.3-0.5)
+        if pm25_peak is not None and pm10_peak is not None and pm10_peak > eps:
+            features['pm_ratio_peak'] = pm25_peak / pm10_peak
+        else:
+            features['pm_ratio_peak'] = 0.0
 
         return features

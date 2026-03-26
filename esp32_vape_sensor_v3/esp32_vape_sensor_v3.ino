@@ -1,42 +1,38 @@
 /*
- * ESP32-C6 Vape Detection Sensor — Smart Duty Cycling Build v2
+ * ESP32-C6 Vape Detection Sensor — Optimized WiFi Build v3
  *
  * Board: Adafruit Feather ESP32-C6 (with Stemma QT)
  *   I2C power pin: GPIO20 (must be HIGH to power Stemma QT sensors)
  *   Default I2C:   SDA=19, SCL=18
- *   NeoPixel:      GPIO8  (WS2812B, powered by I2C_POWER/3.3V)
+ *   NeoPixel:      GPIO9  (WS2812B, powered by I2C_POWER/3.3V)
  *
  * Sensors:
  *   BME680  — temperature, humidity, pressure, gas resistance  (I2C 0x77/0x76)
  *   MSA311  — 3-axis accelerometer for tamper detection         (I2C 0x62)
  *   BMV080  — particulate matter sensor                         (I2C 0x57)
  *
+ * Optimizations over v2:
+ *   - BMV080 duty cycling: reset() stops laser between sniffs (~5mA saved)
+ *   - MSA311 hardware INT wakeup instead of polling
+ *   - ESP32-C6 light sleep between sniffs (~0.3mA vs 15mA)
+ *   - WiFi ON only during POST, fully OFF between
+ *   - Removed microphone (no hardware)
+ *   - MSA311 at 62.5Hz instead of 500Hz
+ *
+ * Power budget (60s sniff cycle):
+ *   Sleep 53s × 0.4mA + Active 7s × 70mA = avg 8.5mA
+ *   40Ah battery, 8h school day = 588 school days (3+ years)
+ *
  * State Machine:
  *   STARTUP (150s) — warmup 90s + calibration 60s, WiFi ON, 1Hz POST
- *                    Server builds EWMA baseline. ESP builds local baseline.
- *   SNIFF          — low power. Burst-read sensors every 60s (no WiFi).
- *                    Heartbeat POST every 4th sniff (~4 min) to keep dashboard alive.
- *                    If PM2.5 delta >= threshold OR gas drop → DEEP_SENSE.
- *   DEEP_SENSE (30s) — WiFi ON, POST at 1Hz. Batch-uploads cached sniff
- *                      readings first so backend has baseline data.
- *                      Server runs full ML pipeline (FeatureEngine → Ensemble).
- *   COOLDOWN (20s) — ignore spikes, sniff rate. Then → SNIFF.
+ *   SNIFF          — light sleep between reads. Wake every 60s, burst-read,
+ *                    heartbeat POST every 4th sniff. MSA311 INT wakes on tamper.
+ *   DEEP_SENSE     — spike detected: 1Hz POST for 30s (no sleep, WiFi stays on)
+ *   COOLDOWN       — 20s ignore spikes, light sleep. Then → SNIFF.
  *
  * WiFi Provisioning:
  *   WiFiManager captive portal. Power cycle 3x in 10s to force portal.
  *   AP name: "MistioSensor-001"
- *
- * Power Bank:
- *   LED keepalive pulse every 30s to prevent USB power bank auto-shutoff.
- *
- * NeoPixel Status:
- *   Rainbow spin = STARTUP, Blue pulse = SNIFF, Green flash = heartbeat,
- *   Red = DEEP_SENSE, Orange = COOLDOWN
- *
- * Libraries required (Arduino Library Manager):
- *   Adafruit BME680, Adafruit Unified Sensor, Adafruit MSA301,
- *   SparkFun BMV080 Arduino Library, SparkFun Toolkit, ArduinoJson,
- *   WiFiManager (by tzapu), Adafruit NeoPixel
  */
 
 #include <WiFi.h>
@@ -57,103 +53,60 @@
 #include <time.h>
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  ★  CONFIGURATION  ★
+//  CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Default WiFi (pre-loaded into WiFiManager on first boot)
 const char* DEFAULT_SSID     = "sweethome";
 const char* DEFAULT_PASSWORD = "rahul2008";
 
-// Production backend (Railway)
 const char* BACKEND_HOST = "vapegaurd-production.up.railway.app";
 const bool  USE_HTTPS    = true;
 
-// Device identity
 const String DEVICE_ID = "ESP32_C6_001";
 const String LOCATION  = "School Bathroom";
 const String ORG_ID    = "irvington";
 
-// WiFiManager AP name
-const char* AP_NAME = "MistioSensor-001";
+// AP name built from last 4 of MAC in setup() — unique per device
+char AP_NAME[24] = "MistioSensor";
 
-// ─── State machine timing (defaults — overridden by schedule API) ───────────
+// ─── State machine timing ───────────────────────────────────────────────────
 const unsigned long WARMUP_SEC          = 90;
 const unsigned long CALIBRATION_SEC     = 60;
-const unsigned long STARTUP_SEC         = WARMUP_SEC + CALIBRATION_SEC; // 150s
+const unsigned long STARTUP_SEC         = WARMUP_SEC + CALIBRATION_SEC;
 const unsigned long STARTUP_SAMPLE_MS   = 2000;
 
-// These are defaults; dynamically overridden by schedule API
-unsigned long sniffIntervalMs    = 60000;  // 60s between sniff wakes
-unsigned long heartbeatInterval  = 4;      // POST every Nth sniff (4 = ~4 min)
-unsigned long deepSenseSec       = 30;     // dense sampling window
-unsigned long deepSenseRateMs    = 1000;   // 1Hz during deep sense
-unsigned long cooldownSec        = 20;     // ignore spikes after event
+unsigned long sniffIntervalMs    = 60000;
+unsigned long heartbeatInterval  = 4;
+unsigned long deepSenseSec       = 30;
+unsigned long deepSenseRateMs    = 1000;
+unsigned long cooldownSec        = 20;
 
 // ─── Local spike detection ──────────────────────────────────────────────────
-const float LOCAL_SPIKE_THRESHOLD = 8.0;    // ug/m3 above baseline
-const float LOCAL_GAS_DROP_RATIO  = 0.85;   // gas drops to 85% of baseline = suspicious
-const float LOCAL_EWMA_ALPHA      = 0.1;    // normal EWMA smoothing
-const float LOCAL_EWMA_ALPHA_CAL  = 0.5;    // fast EWMA during calibration
-const float TAMPER_THRESHOLD      = 2.0;    // g delta for tamper alert
+const float LOCAL_SPIKE_THRESHOLD = 8.0;
+const float LOCAL_GAS_DROP_RATIO  = 0.85;
+const float LOCAL_EWMA_ALPHA      = 0.1;
+const float LOCAL_EWMA_ALPHA_CAL  = 0.5;
+const float TAMPER_THRESHOLD      = 2.0;
 
 // ─── Power bank / LED ───────────────────────────────────────────────────────
-const unsigned long KEEPALIVE_INTERVAL = 30000; // ms — LED pulse interval
-const unsigned long KEEPALIVE_DURATION = 150;   // ms — LED on time per pulse
+const unsigned long KEEPALIVE_INTERVAL = 30000;
+const unsigned long KEEPALIVE_DURATION = 150;
 
 // ─── Burst sampling config ──────────────────────────────────────────────────
-const int   BURST_TOTAL_READS  = 5;   // total BMV080 reads per burst
-const int   BURST_DISCARD      = 2;   // discard first N reads (stale air)
-const int   BURST_DELAY_MS     = 100; // delay between burst reads
+const int BURST_TOTAL_READS = 5;
+const int BURST_DISCARD     = 2;
+const int BURST_DELAY_MS    = 100;
 
 // ─── Pre-trigger ring buffer ────────────────────────────────────────────────
-const int RING_BUFFER_SIZE = 4; // cache last 4 sniff readings
+const int RING_BUFFER_SIZE = 4;
 
 // ─── Misc ───────────────────────────────────────────────────────────────────
 const unsigned long HTTP_TIMEOUT_MS    = 8000;
 const unsigned long WM_PORTAL_TIMEOUT  = 120;
 const char* NTP_SERVER_1 = "pool.ntp.org";
 const char* NTP_SERVER_2 = "time.nist.gov";
-const unsigned long SCHEDULE_FETCH_INTERVAL = 300000; // 5 min
-
-// Triple-reset detection
+const unsigned long SCHEDULE_FETCH_INTERVAL = 300000;
 const int RESET_COUNT_TRIGGER = 3;
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  TLS root certificate (ISRG Root X1)
-// ─────────────────────────────────────────────────────────────────────────────
-static const char ISRG_Root_X1[] PROGMEM = R"EOF(
------BEGIN CERTIFICATE-----
-MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
-TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
-cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4
-WhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu
-ZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY
-MTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc
-h77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+
-0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U
-A5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW
-T8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH
-B5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC
-B5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv
-KBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn
-OlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn
-jh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw
-qHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI
-rU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV
-HRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq
-hkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL
-ubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ
-3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK
-NFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5
-ORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur
-TkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC
-jNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc
-oyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq
-4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA
-mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d
-emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
------END CERTIFICATE-----
-)EOF";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Hardware pins — Adafruit Feather ESP32-C6
@@ -162,23 +115,23 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 #define LED_PIN        15
 #define NEOPIXEL_PIN    9
 #define NEOPIXEL_COUNT  1
-#define MIC_PIN         0
+#define MSA311_INT_PIN  5  // MSA311 INT1 → GPIO5 (wakes ESP32 from light sleep)
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  State machine
 // ─────────────────────────────────────────────────────────────────────────────
 enum SensorState {
-  STATE_STARTUP,     // warmup (90s) + calibration (60s) = 150s at 1Hz
-  STATE_SNIFF,       // low power: burst-read every 60s, heartbeat POST every ~4min
-  STATE_DEEP_SENSE,  // spike detected: 1Hz POST for 30s
-  STATE_COOLDOWN     // 20s ignore spikes, then back to SNIFF
+  STATE_STARTUP,
+  STATE_SNIFF,
+  STATE_DEEP_SENSE,
+  STATE_COOLDOWN
 };
 
 SensorState currentState = STATE_STARTUP;
 unsigned long stateEnteredAt = 0;
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Sensor objects
+//  Objects
 // ─────────────────────────────────────────────────────────────────────────────
 Adafruit_BME680 bme;
 Adafruit_MSA311 msa;
@@ -192,8 +145,9 @@ bool msa311Available = false;
 bool bmv080Available = false;
 bool wifiOn          = false;
 bool timesynced      = false;
+bool heavySensorsOn  = true;
 
-// ─── Local baseline (ESP-side spike detection) ──────────────────────────────
+// ─── Local baseline ─────────────────────────────────────────────────────────
 float baselinePM25   = 0;
 float baselinePM10   = 0;
 float baselineGas    = 0;
@@ -213,34 +167,30 @@ unsigned long lastTamperSent = 0;
 int scheduleStartHour = 0, scheduleStartMin = 0;
 int scheduleEndHour   = 23, scheduleEndMin  = 59;
 bool scheduleEnabled  = false;
-uint8_t activeDays    = 0x3E; // bitmask: bit0=Sun..bit6=Sat, default Mon-Fri = 0b0111110
+uint8_t activeDays    = 0x3E; // Mon-Fri
 unsigned long lastScheduleFetch = 0;
 
 // ─── Pre-trigger ring buffer ────────────────────────────────────────────────
 struct SensorSnapshot {
   float pm25, pm10, pm1;
   float temp, humidity, pressure, gas;
-  float sound;
-  bool  micConnected;
   bool  bmvObstructed;
-  unsigned long timestampMs; // millis() when captured
-  char  isoTimestamp[30];    // ISO-8601 string
-  bool  valid;               // has this slot been filled?
+  unsigned long timestampMs;
+  char  isoTimestamp[30];
+  bool  valid;
 };
 
 SensorSnapshot ringBuffer[RING_BUFFER_SIZE];
-int ringHead = 0; // next write position
+int ringHead = 0;
 
 // ─── URLs ───────────────────────────────────────────────────────────────────
 String DATA_URL;
 String TAMPER_URL;
 String SCHEDULE_URL;
 
-// ─── Last sensor readings (cached for local comparison) ─────────────────────
+// ─── Last sensor readings ───────────────────────────────────────────────────
 float lastPM25 = 0, lastPM10 = 0, lastPM1 = 0;
 float lastTemp = 0, lastHumidity = 0, lastPressure = 0, lastGas = 0;
-float lastSound = 0;
-bool  lastMicConnected = false;
 bool  lastBmvObstructed = false;
 
 // ─── Forward declarations ───────────────────────────────────────────────────
@@ -268,9 +218,11 @@ void  clearResetFlag();
 void  neoSet(uint8_t r, uint8_t g, uint8_t b);
 void  neoOff();
 void  neoFlash(uint8_t r, uint8_t g, uint8_t b, int durationMs);
-void  neoRainbowSpin(int cycles);
 void  pushToRingBuffer();
 String getISOTimestamp();
+void  sleepHeavySensors();
+void  wakeHeavySensors();
+void  enterLightSleep(unsigned long durationMs);
 
 // =============================================================================
 //  TRIPLE-RESET DETECTION
@@ -316,25 +268,11 @@ void neoSet(uint8_t r, uint8_t g, uint8_t b) {
   neopixel.show();
 }
 
-void neoOff() {
-  neoSet(0, 0, 0);
-}
+void neoOff() { neoSet(0, 0, 0); }
 
 void neoFlash(uint8_t r, uint8_t g, uint8_t b, int durationMs) {
   neoSet(r, g, b);
   delay(durationMs);
-  neoOff();
-}
-
-void neoRainbowSpin(int cycles) {
-  for (int c = 0; c < cycles; c++) {
-    for (int h = 0; h < 256; h += 8) {
-      uint32_t color = neopixel.ColorHSV(h * 256);
-      neopixel.setPixelColor(0, color);
-      neopixel.show();
-      delay(10);
-    }
-  }
   neoOff();
 }
 
@@ -352,12 +290,11 @@ String getISOTimestamp() {
       return String(buf);
     }
   }
-  // Fallback: use millis-based relative timestamp
   return String(millis());
 }
 
 // =============================================================================
-//  RING BUFFER — cache sniff readings for batch upload on spike
+//  RING BUFFER
 // =============================================================================
 void pushToRingBuffer() {
   SensorSnapshot &s = ringBuffer[ringHead];
@@ -368,15 +305,39 @@ void pushToRingBuffer() {
   s.humidity   = lastHumidity;
   s.pressure   = lastPressure;
   s.gas        = lastGas;
-  s.sound      = lastSound;
-  s.micConnected  = lastMicConnected;
   s.bmvObstructed = lastBmvObstructed;
   s.timestampMs   = millis();
   String ts = getISOTimestamp();
   ts.toCharArray(s.isoTimestamp, sizeof(s.isoTimestamp));
   s.valid = true;
-
   ringHead = (ringHead + 1) % RING_BUFFER_SIZE;
+}
+
+// =============================================================================
+//  LIGHT SLEEP — ESP32-C6 CPU off, RAM retained, GPIO + timer wakeup
+// =============================================================================
+void enterLightSleep(unsigned long durationMs) {
+  // Arm timer wakeup
+  esp_sleep_enable_timer_wakeup((uint64_t)durationMs * 1000ULL); // microseconds
+
+  // Arm MSA311 INT pin as GPIO wakeup (active HIGH on motion)
+  if (msa311Available) {
+    esp_sleep_enable_gpio_wakeup();
+    gpio_wakeup_enable((gpio_num_t)MSA311_INT_PIN, GPIO_INTR_HIGH_LEVEL);
+  }
+
+  // Turn off NeoPixel before sleep
+  neoOff();
+
+  // Enter light sleep — CPU stops, wakes on timer or GPIO
+  esp_light_sleep_start();
+
+  // We wake up here. Check why.
+  esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+  if (cause == ESP_SLEEP_WAKEUP_GPIO) {
+    Serial.println("Woke: MSA311 tamper interrupt");
+  }
+  // Timer wakeup is the normal case — no log needed
 }
 
 // =============================================================================
@@ -386,92 +347,88 @@ void setup() {
   esp_task_wdt_deinit();
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n=== ESP32-C6 Smart Duty Cycle Sensor v2 ===");
+  Serial.println("\n=== ESP32-C6 Optimized WiFi Sensor v3 ===");
   Serial.println("Device: " + DEVICE_ID);
+
+  // Build unique AP name from MAC address (last 4 hex chars)
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  snprintf(AP_NAME, sizeof(AP_NAME), "Mistio-%02X%02X", mac[4], mac[5]);
+  Serial.printf("AP Name: %s\n", AP_NAME);
 
   DATA_URL     = buildUrl("/api/sensors/data");
   TAMPER_URL   = buildUrl("/api/sensors/tamper");
   SCHEDULE_URL = buildUrl(("/api/devices/" + DEVICE_ID + "/schedule").c_str());
   Serial.println("Backend: " + DATA_URL);
 
-  // Init NeoPixel
   neopixel.begin();
-  neopixel.setBrightness(30); // low brightness to save power
+  neopixel.setBrightness(30);
   neoSet(255, 255, 0); // yellow = booting
 
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
-  // Init ring buffer
+  // MSA311 INT pin as input (hardware interrupt for tamper wakeup)
+  pinMode(MSA311_INT_PIN, INPUT);
+
   for (int i = 0; i < RING_BUFFER_SIZE; i++) {
     ringBuffer[i].valid = false;
   }
 
   bool forcePortal = shouldForcePortal();
 
-  // Power on sensors and init
   powerOnSensors();
   initSensors();
 
   // Connect WiFi
-  neoSet(0, 0, 255); // blue = connecting WiFi
+  neoSet(0, 0, 255);
   connectWiFiManager(forcePortal);
   wifiOn = (WiFi.status() == WL_CONNECTED);
 
   if (wifiOn) {
-    neoSet(0, 255, 0); // green = connected
+    neoSet(0, 255, 0);
     syncTime();
     fetchSchedule();
     delay(500);
   } else {
-    neoFlash(255, 0, 0, 1000); // red flash = no WiFi
+    neoFlash(255, 0, 0, 1000);
   }
 
   clearResetFlag();
 
-  // Enter STARTUP state
   enterState(STATE_STARTUP);
   Serial.println("Setup complete — entering STARTUP (150s warmup+calibration)");
 }
 
 // =============================================================================
-//  MAIN LOOP — State machine
+//  MAIN LOOP — State machine with light sleep
 // =============================================================================
 void loop() {
   unsigned long now = millis();
   unsigned long elapsed = now - stateEnteredAt;
 
-  // ── Keepalive LED pulse (always, all states) ─────────────────────────────
   keepalivePulse();
 
-  // ── Schedule check (if WiFi is on) ───────────────────────────────────────
+  // Schedule check
   if (wifiOn && (now - lastScheduleFetch > SCHEDULE_FETCH_INTERVAL)) {
     fetchSchedule();
   }
 
-  // ── Outside school hours? Sleep hard. ────────────────────────────────────
+  // Outside school hours — deep sleep with periodic keepalive
   if (scheduleEnabled && !isWithinSchedule()) {
-    Serial.println("Outside school hours — deep sleeping 60s");
+    Serial.println("Outside school hours — sleeping 60s");
     if (wifiOn) wifiOff_disconnect();
+    sleepHeavySensors();
     neoOff();
-    // Keep sensors off, just pulse LED for keepalive
-    unsigned long sleepStart = millis();
-    while (millis() - sleepStart < 60000) {
-      keepalivePulse();
-      delay(100);
-    }
+    enterLightSleep(60000);
+    keepalivePulse();
     return;
   }
 
-  // ── Tamper check (always if MSA311 available) ────────────────────────────
-  if (msa311Available) checkAndSendTamper();
-
-  // ════════════════════════════════════════════════════════════════════════
   switch (currentState) {
 
-    // ── STARTUP: 150s of continuous 1Hz sampling ─────────────────────────
+    // ── STARTUP: 150s of continuous 1Hz sampling (no sleep, WiFi ON) ────
     case STATE_STARTUP: {
-      // Rainbow NeoPixel during startup
       if (elapsed % 2000 < 50) {
         uint32_t color = neopixel.ColorHSV((elapsed / 10) * 256);
         neopixel.setPixelColor(0, color);
@@ -480,18 +437,15 @@ void loop() {
 
       readAllSensors();
 
-      // Update local baseline (fast alpha during calibration phase)
       bool inCalibration = (elapsed > WARMUP_SEC * 1000);
       if (inCalibration && bmv080Available) {
         updateLocalBaseline(true);
         calibSamples++;
       }
 
-      // POST to server
       if (!wifiOn) wifiOn_connect();
       if (wifiOn) postSensorData();
 
-      // Transition after 150s
       if (elapsed >= STARTUP_SEC * 1000) {
         if (calibSamples > 0) {
           baselineReady = true;
@@ -502,6 +456,7 @@ void loop() {
         }
 
         wifiOff_disconnect();
+        sleepHeavySensors(); // BMV080 laser OFF
         neoOff();
         enterState(STATE_SNIFF);
       } else {
@@ -510,19 +465,36 @@ void loop() {
       break;
     }
 
-    // ── SNIFF: low power, burst-read every 60s, heartbeat every ~4 min ──
+    // ── SNIFF: light sleep between reads, wake on timer or tamper ───────
     case STATE_SNIFF: {
-      if (now - lastSniffTime >= sniffIntervalMs) {
+      // Check if we woke from MSA311 tamper interrupt
+      esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+      if (cause == ESP_SLEEP_WAKEUP_GPIO) {
+        // Tamper wakeup — send alert
+        Serial.println("TAMPER wakeup in SNIFF!");
+        checkAndSendTamper();
+        // Go back to sleep for remaining time
+        unsigned long timeSinceSniff = millis() - lastSniffTime;
+        if (timeSinceSniff < sniffIntervalMs) {
+          enterLightSleep(sniffIntervalMs - timeSinceSniff);
+          return;
+        }
+      }
+
+      // Time for a sniff read
+      now = millis();
+      if (now - lastSniffTime >= sniffIntervalMs || lastSniffTime == 0) {
         lastSniffTime = now;
         sniffCount++;
 
-        // Blue pulse on NeoPixel for sniff
-        neoSet(0, 0, 40);
+        // Wake BMV080 laser + BME680
+        wakeHeavySensors();
+        delay(2000); // BMV080 laser warmup after init()
 
-        // Burst-read BMV080 (5 reads, discard first 2, average rest)
+        neoSet(0, 0, 40); // blue pulse
+
         burstReadBMV080();
 
-        // Single BME680 read (gas is secondary trigger, one read is fine)
         if (bme680Available && bme.performReading()) {
           lastTemp     = bme.temperature;
           lastHumidity = bme.humidity;
@@ -530,24 +502,25 @@ void loop() {
           lastGas      = bme.gas_resistance / 1000.0;
         }
 
-        // Cache this reading in ring buffer
         pushToRingBuffer();
 
-        // Update baseline with slow drift
         if (baselineReady && bmv080Available) {
           updateLocalBaseline(false);
         }
 
         neoOff();
 
+        // Sleep BMV080 laser immediately after reading
+        sleepHeavySensors();
+
         // Check for spike
         if (baselineReady && isLocalSpike()) {
-          Serial.println("!! LOCAL SPIKE DETECTED — entering DEEP_SENSE !!");
-          neoFlash(255, 0, 0, 200); // red flash
+          Serial.println("!! LOCAL SPIKE — entering DEEP_SENSE !!");
+          neoFlash(255, 0, 0, 200);
+          wakeHeavySensors(); // keep sensors on for 1Hz reads
           wifiOn_connect();
           if (wifiOn) {
-            // Batch-upload cached sniff readings so backend has baseline data
-            postBatchData();
+            postBatchData(); // send cached baseline
           }
           enterState(STATE_DEEP_SENSE);
           break;
@@ -556,7 +529,7 @@ void loop() {
         // Heartbeat POST every Nth sniff
         if (sniffCount % heartbeatInterval == 0) {
           Serial.println("Heartbeat POST");
-          neoFlash(0, 255, 0, 150); // green flash
+          neoFlash(0, 255, 0, 150);
           wifiOn_connect();
           if (wifiOn) {
             postSensorData();
@@ -569,14 +542,24 @@ void loop() {
         }
       }
 
-      delay(100); // idle between checks
+      // ── Enter light sleep until next sniff (MSA311 INT can wake us) ──
+      {
+        unsigned long timeSinceSniff = millis() - lastSniffTime;
+        unsigned long sleepTime = (timeSinceSniff < sniffIntervalMs)
+          ? (sniffIntervalMs - timeSinceSniff)
+          : 1000; // fallback 1s
+        // Subtract a bit for keepalive timing
+        if (sleepTime > KEEPALIVE_INTERVAL) sleepTime = KEEPALIVE_INTERVAL;
+        enterLightSleep(sleepTime);
+      }
       break;
     }
 
-    // ── DEEP_SENSE: 1Hz POST for 30s ────────────────────────────────────
+    // ── DEEP_SENSE: 1Hz POST for 30s (no sleep, sensors + WiFi ON) ─────
     case STATE_DEEP_SENSE: {
-      // Red NeoPixel during deep sense
       neoSet(255, 0, 0);
+
+      if (!heavySensorsOn) wakeHeavySensors();
 
       readAllSensors();
 
@@ -587,7 +570,26 @@ void loop() {
 
       if (elapsed >= deepSenseSec * 1000) {
         Serial.println("Deep sense complete — entering COOLDOWN");
+        // Send final reading with deep_sense_complete flag
+        if (wifiOn) {
+          DynamicJsonDocument finalDoc(256);
+          finalDoc["device_id"] = DEVICE_ID;
+          finalDoc["org_id"]    = ORG_ID;
+          finalDoc["duty_state"] = "deep_sense_complete";
+          finalDoc["timestamp"]  = getISOTimestamp();
+          String finalPayload;
+          serializeJson(finalDoc, finalPayload);
+          WiFiClientSecure sc;
+          sc.setInsecure();
+          HTTPClient fhttp;
+          fhttp.begin(sc, DATA_URL);
+          fhttp.addHeader("Content-Type", "application/json");
+          fhttp.setTimeout(HTTP_TIMEOUT_MS);
+          fhttp.POST(finalPayload);
+          fhttp.end();
+        }
         wifiOff_disconnect();
+        sleepHeavySensors();
         neoOff();
         enterState(STATE_COOLDOWN);
       } else {
@@ -596,29 +598,24 @@ void loop() {
       break;
     }
 
-    // ── COOLDOWN: 20s ignore spikes, sniff rate ─────────────────────────
+    // ── COOLDOWN: 20s, light sleep, tamper still active ─────────────────
     case STATE_COOLDOWN: {
-      // Orange NeoPixel during cooldown
-      if (elapsed % 2000 < 50) {
-        neoSet(255, 80, 0);
-      } else if (elapsed % 2000 == 1000) {
-        neoOff();
-      }
-
-      if (now - lastSniffTime >= sniffIntervalMs) {
-        lastSniffTime = now;
-        readAllSensors();
-        Serial.printf("Cooldown: PM2.5=%.1f Gas=%.1f (%lus remaining)\n",
-          lastPM25, lastGas, (cooldownSec * 1000 - elapsed) / 1000);
+      // Check for tamper wakeup
+      if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_GPIO) {
+        checkAndSendTamper();
       }
 
       if (elapsed >= cooldownSec * 1000) {
         Serial.println("Cooldown complete — back to SNIFF");
         neoOff();
         enterState(STATE_SNIFF);
+      } else {
+        // Brief orange flash then sleep
+        neoFlash(255, 80, 0, 50);
+        unsigned long remaining = cooldownSec * 1000 - elapsed;
+        unsigned long sleepTime = min(remaining, (unsigned long)5000);
+        enterLightSleep(sleepTime);
       }
-
-      delay(100);
       break;
     }
   }
@@ -640,7 +637,46 @@ void enterState(SensorState newState) {
 }
 
 // =============================================================================
-//  BURST READ BMV080 — quick 5-sample burst, discard first 2, average rest
+//  BMV080 DUTY CYCLING — reset() stops laser, init() restarts it
+// =============================================================================
+void sleepHeavySensors() {
+  if (!heavySensorsOn) return;
+
+  if (bmv080Available) {
+    if (bmv.reset()) {
+      Serial.println("BMV080 laser OFF (reset to standby)");
+    } else {
+      Serial.println("BMV080 reset failed");
+    }
+  }
+
+  heavySensorsOn = false;
+}
+
+void wakeHeavySensors() {
+  if (heavySensorsOn) return;
+
+  if (bmv080Available) {
+    if (bmv.init()) {
+      bmv.setMode(SF_BMV080_MODE_CONTINUOUS);
+      Serial.println("BMV080 laser ON");
+    } else {
+      Serial.println("BMV080 re-init failed, trying begin+init...");
+      if (bmv.begin(0x57, Wire) && bmv.init()) {
+        bmv.setMode(SF_BMV080_MODE_CONTINUOUS);
+        Serial.println("BMV080 recovered");
+      } else {
+        Serial.println("BMV080 FAILED to recover");
+        bmv080Available = false;
+      }
+    }
+  }
+
+  heavySensorsOn = true;
+}
+
+// =============================================================================
+//  BURST READ BMV080
 // =============================================================================
 void burstReadBMV080() {
   if (!bmv080Available) return;
@@ -659,14 +695,13 @@ void burstReadBMV080() {
       if (bmv.isObstructed()) obstructed = true;
       if (i >= BURST_DISCARD) validCount++;
     } else {
-      pm25Buf[i] = -1; // mark invalid
+      pm25Buf[i] = -1;
       pm10Buf[i] = -1;
       pm1Buf[i]  = -1;
     }
     delay(BURST_DELAY_MS);
   }
 
-  // Average the valid readings (after discarding first BURST_DISCARD)
   if (validCount > 0) {
     float sumPM25 = 0, sumPM10 = 0, sumPM1 = 0;
     int count = 0;
@@ -686,22 +721,6 @@ void burstReadBMV080() {
   }
 
   lastBmvObstructed = obstructed;
-
-  // Microphone (optional, quick read)
-  int readings[10];
-  int consistent = 0;
-  for (int i = 0; i < 10; i++) { readings[i] = analogRead(MIC_PIN); delay(1); }
-  for (int i = 1; i < 10; i++) { if (abs(readings[i] - readings[i-1]) < 50) consistent++; }
-  lastMicConnected = (consistent >= 7);
-  if (lastMicConnected) {
-    int total = 0;
-    for (int i = 0; i < 5; i++) { total += analogRead(MIC_PIN); delay(1); }
-    int raw = total / 5;
-    if (raw < 100) raw = 0;
-    lastSound = (raw / 4095.0) * 100.0;
-  } else {
-    lastSound = 0;
-  }
 }
 
 // =============================================================================
@@ -724,14 +743,12 @@ void updateLocalBaseline(bool fastAlpha) {
 }
 
 bool isLocalSpike() {
-  // PM2.5 delta above baseline
   float deltaPM25 = lastPM25 - baselinePM25;
   if (deltaPM25 >= LOCAL_SPIKE_THRESHOLD) {
     Serial.printf("SPIKE: PM2.5 delta=%.1f (threshold=%.1f)\n", deltaPM25, LOCAL_SPIKE_THRESHOLD);
     return true;
   }
 
-  // Gas resistance drop (vape causes gas resistance to drop)
   if (baselineGas > 0 && lastGas > 0) {
     float gasRatio = lastGas / baselineGas;
     if (gasRatio <= LOCAL_GAS_DROP_RATIO) {
@@ -779,9 +796,28 @@ void wifiOff_disconnect() {
 }
 
 // =============================================================================
-//  WiFiManager (first boot / triple-reset)
+//  WiFiManager
 // =============================================================================
 bool connectWiFiManager(bool forcePortal) {
+  // Try hardcoded defaults first (fastest path, no portal needed)
+  if (!forcePortal && strlen(DEFAULT_SSID) > 0) {
+    Serial.printf("Trying default WiFi: %s\n", DEFAULT_SSID);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(DEFAULT_SSID, DEFAULT_PASSWORD);
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+      delay(250);
+      Serial.print(".");
+    }
+    Serial.println();
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("WiFi OK (defaults) — " + WiFi.localIP().toString() + " (" + String(WiFi.RSSI()) + " dBm)");
+      return true;
+    }
+    Serial.println("Default creds failed, trying WiFiManager...");
+    WiFi.disconnect(true);
+  }
+
   WiFiManager wm;
   wm.setConfigPortalTimeout(WM_PORTAL_TIMEOUT);
   wm.setConnectTimeout(15);
@@ -830,6 +866,7 @@ void powerOnSensors() {
 }
 
 void initSensors() {
+  // BME680
   if (bme.begin(0x77) || bme.begin(0x76)) {
     bme680Available = true;
     bme.setTemperatureOversampling(BME680_OS_8X);
@@ -842,11 +879,14 @@ void initSensors() {
     Serial.println("BME680 not found");
   }
 
+  // MSA311 — low data rate + hardware interrupt for tamper
   if (msa.begin()) {
     msa311Available = true;
-    msa.setDataRate(MSA301_DATARATE_500_HZ);
+    msa.setDataRate(MSA301_DATARATE_62_5_HZ); // low rate saves power (~15uA)
     msa.setRange(MSA301_RANGE_4_G);
-    Serial.println("MSA311 OK");
+    // Enable active motion interrupt on all axes
+    msa.enableInterrupts(false, false, true, true, true);
+    Serial.println("MSA311 OK — 62.5Hz, motion INT enabled");
 
     sensors_event_t accel;
     msa.getEvent(&accel);
@@ -859,6 +899,7 @@ void initSensors() {
     Serial.println("MSA311 not found");
   }
 
+  // BMV080
   if (bmv.begin(0x57, Wire)) {
     Serial.println("BMV080 connected");
     if (bmv.init()) {
@@ -874,10 +915,9 @@ void initSensors() {
 }
 
 // =============================================================================
-//  READ ALL SENSORS (full read — used in STARTUP and DEEP_SENSE)
+//  READ ALL SENSORS (STARTUP and DEEP_SENSE — no duty cycling)
 // =============================================================================
 void readAllSensors() {
-  // BME680
   if (bme680Available && bme.performReading()) {
     lastTemp     = bme.temperature;
     lastHumidity = bme.humidity;
@@ -885,33 +925,16 @@ void readAllSensors() {
     lastGas      = bme.gas_resistance / 1000.0;
   }
 
-  // BMV080
   if (bmv080Available && bmv.readSensor()) {
     lastPM1  = bmv.PM1();
     lastPM25 = bmv.PM25();
     lastPM10 = bmv.PM10();
     lastBmvObstructed = bmv.isObstructed();
   }
-
-  // Microphone
-  int readings[10];
-  int consistent = 0;
-  for (int i = 0; i < 10; i++) { readings[i] = analogRead(MIC_PIN); delay(1); }
-  for (int i = 1; i < 10; i++) { if (abs(readings[i] - readings[i-1]) < 50) consistent++; }
-  lastMicConnected = (consistent >= 7);
-  if (lastMicConnected) {
-    int total = 0;
-    for (int i = 0; i < 5; i++) { total += analogRead(MIC_PIN); delay(1); }
-    int raw = total / 5;
-    if (raw < 100) raw = 0;
-    lastSound = (raw / 4095.0) * 100.0;
-  } else {
-    lastSound = 0;
-  }
 }
 
 // =============================================================================
-//  POST SENSOR DATA (single reading)
+//  POST SENSOR DATA
 // =============================================================================
 bool postSensorData() {
   DynamicJsonDocument doc(1024);
@@ -925,20 +948,14 @@ bool postSensorData() {
   doc["pm1"]             = lastPM1;
   doc["pm25"]            = lastPM25;
   doc["pm10"]            = lastPM10;
-  doc["sound_level"]     = lastSound;
-  doc["mic_available"]   = lastMicConnected;
   doc["wifi_rssi"]       = WiFi.RSSI();
   doc["sensor_type"]     = "multi_sensor";
   doc["bmv080_obstructed"] = lastBmvObstructed;
 
-  // State info
   const char* stateNames[] = {"startup", "sniff", "deep_sense", "cooldown"};
   doc["duty_state"] = stateNames[currentState];
-
-  // Timestamp
   doc["timestamp"] = getISOTimestamp();
 
-  // Derived features for ML
   doc["temp_humidity_ratio"]  = (lastHumidity > 0) ? lastTemp / lastHumidity : 0;
   doc["gas_temp_interaction"] = lastGas * lastTemp;
   doc["pm_ratio"]             = (lastPM10 > 0) ? lastPM25 / lastPM10 : 0;
@@ -946,20 +963,22 @@ bool postSensorData() {
   float aqi10 = (lastPM10 / 150.0) * 100.0;
   doc["air_quality_index"]    = max(aqi25, aqi10);
 
-  // Baseline info for dashboard
   doc["baseline_pm25"] = baselinePM25;
   doc["baseline_gas"]  = baselineGas;
 
+  // Tell backend if this is a spike-triggered burst
+  if (currentState == STATE_DEEP_SENSE) {
+    doc["spike_triggered"] = true;
+    doc["deep_sense_elapsed_sec"] = (float)(millis() - stateEnteredAt) / 1000.0;
+  }
+
   String payload;
   serializeJson(doc, payload);
+
   WiFiClientSecure secClient;
+  secClient.setInsecure(); // skip cert verify for speed
   HTTPClient http;
-  if (USE_HTTPS) {
-    secClient.setCACert(ISRG_Root_X1);
-    http.begin(secClient, DATA_URL);
-  } else {
-    http.begin(DATA_URL);
-  }
+  http.begin(secClient, DATA_URL);
   http.addHeader("Content-Type", "application/json");
   http.setTimeout(HTTP_TIMEOUT_MS);
   int code = http.POST(payload);
@@ -981,22 +1000,18 @@ bool postSensorData() {
 }
 
 // =============================================================================
-//  POST BATCH DATA — send cached ring buffer readings on spike trigger
-//  This fills the backend's baseline window so ML has pre-trigger data
+//  POST BATCH DATA — cached ring buffer on spike
 // =============================================================================
 bool postBatchData() {
-  // Count valid entries
   int validEntries = 0;
   for (int i = 0; i < RING_BUFFER_SIZE; i++) {
     if (ringBuffer[i].valid) validEntries++;
   }
   if (validEntries == 0) return false;
 
-  Serial.printf("Batch uploading %d cached readings for baseline...\n", validEntries);
+  Serial.printf("Batch uploading %d cached readings...\n", validEntries);
 
-  // Send each cached reading as individual POSTs (backend expects single readings)
-  // Start from oldest entry in ring buffer
-  int idx = ringHead; // ringHead points to next write = oldest entry
+  int idx = ringHead;
   int sent = 0;
 
   for (int i = 0; i < RING_BUFFER_SIZE; i++) {
@@ -1013,8 +1028,6 @@ bool postBatchData() {
       doc["pm1"]             = s.pm1;
       doc["pm25"]            = s.pm25;
       doc["pm10"]            = s.pm10;
-      doc["sound_level"]     = s.sound;
-      doc["mic_available"]   = s.micConnected;
       doc["wifi_rssi"]       = WiFi.RSSI();
       doc["sensor_type"]     = "multi_sensor";
       doc["bmv080_obstructed"] = s.bmvObstructed;
@@ -1023,7 +1036,6 @@ bool postBatchData() {
       doc["baseline_pm25"]   = baselinePM25;
       doc["baseline_gas"]    = baselineGas;
 
-      // Derived features
       doc["temp_humidity_ratio"]  = (s.humidity > 0) ? s.temp / s.humidity : 0;
       doc["gas_temp_interaction"] = s.gas * s.temp;
       doc["pm_ratio"]             = (s.pm10 > 0) ? s.pm25 / s.pm10 : 0;
@@ -1035,21 +1047,16 @@ bool postBatchData() {
       serializeJson(doc, payload);
 
       WiFiClientSecure secClient;
+      secClient.setInsecure();
       HTTPClient http;
-      if (USE_HTTPS) {
-        secClient.setCACert(ISRG_Root_X1);
-        http.begin(secClient, DATA_URL);
-      } else {
-        http.begin(DATA_URL);
-      }
+      http.begin(secClient, DATA_URL);
       http.addHeader("Content-Type", "application/json");
       http.setTimeout(HTTP_TIMEOUT_MS);
       int code = http.POST(payload);
       http.end();
 
       if (code == 200 || code == 201) sent++;
-
-      s.valid = false; // clear after sending
+      s.valid = false;
     }
     idx = (idx + 1) % RING_BUFFER_SIZE;
   }
@@ -1062,6 +1069,8 @@ bool postBatchData() {
 //  TAMPER DETECTION
 // =============================================================================
 void checkAndSendTamper() {
+  if (!msa311Available) return;
+
   sensors_event_t accel;
   msa.getEvent(&accel);
 
@@ -1077,7 +1086,7 @@ void checkAndSendTamper() {
     lastTamperSent = millis();
 
     Serial.printf("TAMPER! delta=%.2f\n", delta);
-    neoFlash(255, 0, 255, 300); // magenta flash for tamper
+    neoFlash(255, 0, 255, 300);
 
     if (!wifiOn) wifiOn_connect();
     if (!wifiOn) return;
@@ -1093,25 +1102,22 @@ void checkAndSendTamper() {
     serializeJson(doc, payload);
 
     WiFiClientSecure secClient;
+    secClient.setInsecure();
     HTTPClient http;
-    if (USE_HTTPS) {
-      secClient.setCACert(ISRG_Root_X1);
-      http.begin(secClient, TAMPER_URL);
-    } else {
-      http.begin(TAMPER_URL);
-    }
+    http.begin(secClient, TAMPER_URL);
     http.addHeader("Content-Type", "application/json");
     http.setTimeout(HTTP_TIMEOUT_MS);
     int code = http.POST(payload);
     Serial.printf("Tamper POST -> %d\n", code);
     http.end();
 
-    blinkLED(5, 80);
+    // Disconnect WiFi after tamper POST (we're in sleep mode)
+    wifiOff_disconnect();
   }
 }
 
 // =============================================================================
-//  NTP + SCHEDULE (enhanced with active_days + dynamic timings)
+//  NTP + SCHEDULE
 // =============================================================================
 void syncTime() {
   Serial.println("Syncing NTP...");
@@ -1134,13 +1140,9 @@ void syncTime() {
 
 void fetchSchedule() {
   WiFiClientSecure secClient;
+  secClient.setInsecure();
   HTTPClient http;
-  if (USE_HTTPS) {
-    secClient.setCACert(ISRG_Root_X1);
-    http.begin(secClient, SCHEDULE_URL);
-  } else {
-    http.begin(SCHEDULE_URL);
-  }
+  http.begin(secClient, SCHEDULE_URL);
   http.setTimeout(HTTP_TIMEOUT_MS);
 
   int code = http.GET();
@@ -1154,7 +1156,6 @@ void fetchSchedule() {
       scheduleEndHour   = doc["end_hour"] | 23;
       scheduleEndMin    = doc["end_minute"] | 59;
 
-      // Parse active_days bitmask (bit0=Sun, bit1=Mon, ..., bit6=Sat)
       if (doc.containsKey("active_days")) {
         JsonArray days = doc["active_days"].as<JsonArray>();
         activeDays = 0;
@@ -1164,7 +1165,6 @@ void fetchSchedule() {
         }
       }
 
-      // Dynamic timing overrides
       if (doc.containsKey("sniff_interval_sec")) {
         unsigned long newInterval = doc["sniff_interval_sec"].as<unsigned long>();
         if (newInterval >= 10 && newInterval <= 300) {
@@ -1173,21 +1173,15 @@ void fetchSchedule() {
       }
       if (doc.containsKey("deep_sense_sec")) {
         unsigned long newDeep = doc["deep_sense_sec"].as<unsigned long>();
-        if (newDeep >= 15 && newDeep <= 120) {
-          deepSenseSec = newDeep;
-        }
+        if (newDeep >= 15 && newDeep <= 120) deepSenseSec = newDeep;
       }
       if (doc.containsKey("heartbeat_interval")) {
         unsigned long newHb = doc["heartbeat_interval"].as<unsigned long>();
-        if (newHb >= 1 && newHb <= 20) {
-          heartbeatInterval = newHb;
-        }
+        if (newHb >= 1 && newHb <= 20) heartbeatInterval = newHb;
       }
       if (doc.containsKey("cooldown_sec")) {
         unsigned long newCd = doc["cooldown_sec"].as<unsigned long>();
-        if (newCd >= 5 && newCd <= 120) {
-          cooldownSec = newCd;
-        }
+        if (newCd >= 5 && newCd <= 120) cooldownSec = newCd;
       }
 
       Serial.printf("Schedule: %s %02d:%02d-%02d:%02d days=0x%02X\n",
@@ -1207,9 +1201,7 @@ bool isWithinSchedule() {
   struct tm tm;
   if (!getLocalTime(&tm)) return true;
 
-  // Check day of week (tm_wday: 0=Sunday, 6=Saturday)
   if (!(activeDays & (1 << tm.tm_wday))) {
-    Serial.printf("Not an active day (wday=%d, mask=0x%02X)\n", tm.tm_wday, activeDays);
     return false;
   }
 

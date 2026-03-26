@@ -7,6 +7,26 @@ from .ensemble_predictor import ensemble
 import uuid
 
 class Detector:
+    """
+    Detection pipeline that works with v3 firmware's local spike detection.
+
+    The ESP32 sensor does its own spike detection locally and sends duty_state:
+      - "startup"   → warming up + calibrating (1Hz data, build baselines)
+      - "sniff"     → normal monitoring, heartbeat every 4th cycle
+      - "deep_sense" → spike detected locally, 1Hz burst of all sensor data
+      - "deep_sense_complete" → burst finished, run ML inference now
+      - "cooldown"  → post-event cooldown
+      - "batch_baseline" → pre-trigger ring buffer data (baseline context)
+
+    Backend flow:
+      1. All incoming data → rolling buffer + raw storage
+      2. startup/sniff/heartbeat → update baselines (EWMA), no spike detection needed
+      3. batch_baseline → pre-spike context data, store in buffer
+      4. deep_sense → accumulate event window data
+      5. deep_sense_complete → compute features from buffer, run ML ensemble
+      6. Also supports legacy cloud-side spike detection for non-v3 sensors
+    """
+
     def __init__(self):
         pass
 
@@ -35,37 +55,196 @@ class Detector:
 
     def process_sample(self, device_id: str, sample: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[str]]:
         """
-        Main pipeline entry point.
-        Returns:
-            event_doc: Dict to save to 'events' collection (or None)
-            notification_type: 'suspicious', 'confirmed', or None
+        Main pipeline entry point. Handles both v3 firmware (local spike detection)
+        and legacy firmware (cloud-side spike detection).
         """
-        # 1. Parse timestamp (Local variable, do not modify sample in place)
-        # This 'ts_val' is the DATA timestamp from the sensor.
         ts_val = sample.get('timestamp')
         if isinstance(ts_val, str):
             try:
-                data_ts = datetime.fromisoformat(ts_val)
+                data_ts = datetime.fromisoformat(ts_val.replace("Z", "+00:00"))
             except ValueError:
                 data_ts = self._get_now()
         elif isinstance(ts_val, datetime):
             data_ts = ts_val
         else:
             data_ts = self._get_now()
-        
+
         if not data_ts.tzinfo:
             data_ts = data_ts.replace(tzinfo=timezone.utc)
-            
-        # Use SERVER time for all State Machine logic to prevent "freezing" if sensor clock is stuck
-        server_now = self._get_now()
-        
-        # 2. Add to rolling buffer
-        state_manager.add_sample(device_id, sample)
-        
-        # 3. Get current state
-        state = state_manager.get_state(device_id) or {}
 
-        # Initialize state if new/default
+        server_now = self._get_now()
+
+        # Add to rolling buffer (all data, regardless of duty_state)
+        state_manager.add_sample(device_id, sample)
+
+        # Get current backend state
+        state = state_manager.get_state(device_id) or {}
+        duty_state = sample.get("duty_state", "")
+
+        # ── V3 firmware path: sensor tells us what's happening ──────────
+        if duty_state in ("startup", "sniff", "deep_sense", "deep_sense_complete",
+                          "cooldown", "batch_baseline"):
+            return self._handle_v3_sample(device_id, sample, state, server_now, duty_state)
+
+        # ── Legacy firmware path: cloud-side state machine ──────────────
+        return self._handle_legacy_sample(device_id, sample, state, server_now)
+
+    # =====================================================================
+    #  V3 FIRMWARE PATH — sensor does local spike detection
+    # =====================================================================
+    def _handle_v3_sample(self, device_id: str, sample: Dict[str, Any],
+                          state: Dict[str, Any], server_now: datetime,
+                          duty_state: str) -> Tuple[Optional[Dict], Optional[str]]:
+
+        pm25 = sample.get('pm25')
+
+        if duty_state == "startup":
+            # Sensor is warming up and calibrating — update backend baselines
+            if pm25 is not None:
+                prev_ewma = state.get('ewma_pm25')
+                new_ewma = FeatureEngine.update_ewma(pm25, prev_ewma, settings.EWMA_ALPHA_CALIBRATION)
+                state_manager.update_state(device_id, {
+                    "status": "CALIBRATING",
+                    "ewma_pm25": new_ewma,
+                    "baseline_pm25": sample.get("baseline_pm25", new_ewma),
+                    "baseline_gas_resistance": sample.get("baseline_gas", sample.get("gas_resistance")),
+                    "baseline_humidity": sample.get("humidity"),
+                    "baseline_temperature": sample.get("temperature"),
+                    "baseline_pm10": sample.get("pm10"),
+                })
+            return None, None
+
+        elif duty_state == "sniff":
+            # Normal heartbeat — update baselines with slow drift
+            if pm25 is not None:
+                prev_ewma = state.get('baseline_pm25') or state.get('ewma_pm25')
+                if prev_ewma is None:
+                    prev_ewma = pm25
+                drifted = prev_ewma * (1.0 - settings.BASELINE_DRIFT_ALPHA) + pm25 * settings.BASELINE_DRIFT_ALPHA
+                state_manager.update_state(device_id, {
+                    "status": "IDLE",
+                    "ewma_pm25": drifted,
+                    "baseline_pm25": drifted,
+                    "baseline_gas_resistance": sample.get("baseline_gas", sample.get("gas_resistance")),
+                    "prev_pm25": pm25,
+                    "prev_ts": server_now.isoformat(),
+                })
+            return None, None
+
+        elif duty_state == "batch_baseline":
+            # Pre-trigger ring buffer data — just store in buffer (already done above)
+            return None, None
+
+        elif duty_state == "deep_sense":
+            # Spike-triggered burst — accumulate data
+            status = state.get("status")
+
+            if status != "CONFIRMING":
+                # First deep_sense sample — transition to CONFIRMING
+                event_id = str(uuid.uuid4())
+                t0 = server_now
+
+                baseline_pm25 = state.get('baseline_pm25') or state.get('ewma_pm25') or pm25
+
+                state_manager.update_state(device_id, {
+                    "status": "CONFIRMING",
+                    "t0": t0,
+                    "event_id": event_id,
+                    "last_trigger_time": server_now.isoformat(),
+                    "snapshot_pm25_base": baseline_pm25,
+                    "snapshot_pm1_base": sample.get('pm1'),
+                    "snapshot_pm10_base": sample.get('pm10'),
+                })
+
+                # Emit "suspicious" event
+                event_doc = {
+                    "event_id": event_id,
+                    "device_id": device_id,
+                    "t_start": t0,
+                    "timestamp": self._iso_utc(t0),
+                    "status": "suspected",
+                    "phase1_reason": {
+                        "trigger": "local_spike",
+                        "d_pm25": (pm25 or 0) - (baseline_pm25 or 0),
+                        "trigger_val": pm25,
+                        "baseline_val": baseline_pm25,
+                    },
+                    "created_at": self._get_now()
+                }
+                return event_doc, "suspicious"
+
+            # Already CONFIRMING — just accumulating (data already in buffer)
+            return None, None
+
+        elif duty_state == "deep_sense_complete":
+            # Burst finished — run ML inference NOW
+            return self._v3_make_decision(device_id, state, server_now)
+
+        elif duty_state == "cooldown":
+            # Post-event cooldown — just monitor
+            state_manager.update_state(device_id, {"status": "COOLDOWN"})
+            return None, None
+
+        return None, None
+
+    def _v3_make_decision(self, device_id: str, state: Dict[str, Any],
+                          decision_time: datetime) -> Tuple[Optional[Dict], Optional[str]]:
+        """Run ML inference on the accumulated deep_sense burst data."""
+        t0 = state.get("t0")
+        event_id = state.get("event_id")
+
+        if not t0 or not event_id:
+            # No active event — shouldn't happen, but handle gracefully
+            print(f"[Detector] deep_sense_complete but no active event for {device_id}")
+            state_manager.update_state(device_id, {"status": "IDLE"})
+            return None, None
+
+        # Fetch all samples: baseline = before t0, event = after t0
+        baseline_start = t0 - timedelta(seconds=settings.BASELINE_WINDOW_SEC + 5)
+        all_samples = state_manager.get_samples(device_id, baseline_start, decision_time)
+
+        baseline_samples = [s for s in all_samples if s['timestamp'] <= t0]
+        event_samples = [s for s in all_samples if s['timestamp'] > t0]
+
+        print(f"[Detector] ML DECISION | Dev: {device_id} | baseline={len(baseline_samples)} event={len(event_samples)} samples")
+
+        # Compute features and predict
+        features = FeatureEngine.compute_features(baseline_samples, event_samples)
+        prediction = ensemble.predict(features)
+
+        # Transition to IDLE (sensor handles its own cooldown)
+        cooldown_until = decision_time + timedelta(seconds=settings.COOLDOWN_SEC)
+        state_manager.update_state(device_id, {
+            "status": "COOLDOWN",
+            "cooldown_until": cooldown_until
+        })
+
+        event_doc = {
+            "event_id": event_id,
+            "device_id": device_id,
+            "t_start": t0,
+            "t_decision": decision_time,
+            "timestamp": self._iso_utc(decision_time),
+            "status": prediction["status"],
+            "top_class": prediction["top_class"],
+            "probs": prediction["probs"],
+            "top_prob": prediction["top_prob"],
+            "margin": prediction["margin"],
+            "event_features": features,
+            "ensemble_detail": prediction["per_model"],
+            "created_at": self._get_now()
+        }
+
+        return event_doc, "confirmed"
+
+    # =====================================================================
+    #  LEGACY FIRMWARE PATH — cloud-side state machine (unchanged)
+    # =====================================================================
+    def _handle_legacy_sample(self, device_id: str, sample: Dict[str, Any],
+                              state: Dict[str, Any], server_now: datetime) -> Tuple[Optional[Dict], Optional[str]]:
+        """Original cloud-side spike detection for non-v3 sensors."""
+
+        # Initialize state if new
         if (
             not state
             or "status" not in state
@@ -84,30 +263,28 @@ class Detector:
                 "ewma_pm25": None
             }
             state_manager.update_state(device_id, state)
-            
+
         status = state.get("status", "WARMUP")
-        
-        event_doc = None
-        notification_type = None
-        
-        # 4. State Machine
-        # PASS server_now for logic control, but methods can access sample['timestamp'] if needed for records
+
         if status == "WARMUP":
             self._handle_warmup(device_id, state, server_now)
+            return None, None
 
         elif status == "CALIBRATING":
-             self._handle_calibrating(device_id, sample, state, server_now)
-             
+            self._handle_calibrating(device_id, sample, state, server_now)
+            return None, None
+
         elif status == "IDLE":
-            event_doc, notification_type = self._handle_idle(device_id, sample, state, server_now)
-            
+            return self._handle_idle(device_id, sample, state, server_now)
+
         elif status == "CONFIRMING":
-            event_doc, notification_type = self._handle_confirming(device_id, sample, state, server_now)
-            
+            return self._handle_confirming(device_id, sample, state, server_now)
+
         elif status == "COOLDOWN":
             self._handle_cooldown(device_id, state, server_now)
+            return None, None
 
-        return event_doc, notification_type
+        return None, None
 
     def _handle_warmup(self, device_id: str, state: Dict[str, Any], current_ts: datetime):
         warmup_start_str = state.get("warmup_start")
@@ -136,28 +313,22 @@ class Detector:
             state_manager.update_state(device_id, updates)
 
     def _handle_calibrating(self, device_id: str, sample: Dict[str, Any], state: Dict[str, Any], current_ts: datetime):
-        # Update EWMA aggressively
         pm25 = sample.get('pm25')
         if pm25 is None:
             return
 
         prev_ewma = state.get('ewma_pm25')
-        # Use faster alpha during calibration
         new_ewma = FeatureEngine.update_ewma(pm25, prev_ewma, settings.EWMA_ALPHA_CALIBRATION)
-        
+
         updates = {"ewma_pm25": new_ewma}
-        
-        # Check time
+
         cal_start_str = state.get("calibration_start")
         if cal_start_str:
             cal_start = self._parse_state_dt(cal_start_str)
             if cal_start:
-                # Use server time (current_ts) for reliable duration
                 now = current_ts
-                
                 elapsed = (now - cal_start).total_seconds()
-                
-                # Log calibration progress occasionally
+
                 if int(elapsed) % 5 == 0:
                      print(f"[Detector] CALIBRATING | Dev: {device_id} | PM2.5: {pm25} | Base: {new_ewma:.2f} | T+{elapsed:.1f}s")
 
@@ -165,7 +336,6 @@ class Detector:
                     print(f"[Detector] CALIBRATION COMPLETE | Dev: {device_id} | Final Base: {new_ewma:.2f}")
                     updates.update({
                         "status": "IDLE",
-                        # Freeze baseline after calibration until explicit recalibration
                         "baseline_pm25": new_ewma,
                         "baseline_pm10": sample.get("pm10"),
                         "baseline_humidity": sample.get("humidity"),
@@ -173,15 +343,13 @@ class Detector:
                         "baseline_gas_resistance": sample.get("gas_resistance")
                     })
             else:
-                # If date parsing fails, reset calibration
                 updates["calibration_start"] = self._get_now().isoformat()
         else:
              updates["calibration_start"] = self._get_now().isoformat()
-             
+
         state_manager.update_state(device_id, updates)
 
     def _handle_idle(self, device_id: str, sample: Dict[str, Any], state: Dict[str, Any], current_ts: datetime):
-        # Use frozen baseline from calibration (not rolling) unless missing.
         pm25 = sample.get('pm25')
         if pm25 is None:
             return None, None
@@ -191,14 +359,11 @@ class Detector:
         if prev_ewma is None:
             prev_ewma = pm25
 
-        # Calculate Delta
         d_pm25 = pm25 - prev_ewma
 
-        # Verbose Logging for IDLE state (sampled to avoid flooding)
         if prev_ewma is not None and abs(d_pm25) > 1.0:
             print(f"[Detector] IDLE | Dev: {device_id} | PM2.5: {pm25} | Base: {prev_ewma:.2f} | Delta: {d_pm25:.2f}")
 
-        # Slope: µg/m³ per second since last reading (catches slow/low-output vaping)
         slope = 0.0
         prev_pm25 = state.get('prev_pm25')
         prev_ts_str = state.get('prev_ts')
@@ -208,20 +373,14 @@ class Detector:
                 dt = max((current_ts - prev_ts_dt).total_seconds(), 0.5)
                 slope = (pm25 - prev_pm25) / dt
 
-        # Trigger Check
         is_triggered = False
         trigger_reason = None
 
-        # Trigger 1: Sudden jump (delta)
         if d_pm25 >= settings.D_PM25_SUS:
-            print(f"[Detector] TRIGGERED (delta) | Dev: {device_id} | Delta {d_pm25:.2f} >= {settings.D_PM25_SUS}")
             is_triggered = True
             trigger_reason = "delta"
 
-        # Trigger 2: Sustained rise rate (catches slow/low-output vaping that never
-        # produces a single large jump but rises consistently above SLOPE_SUS µg/m³/s)
         if not is_triggered and slope >= settings.SLOPE_SUS:
-            print(f"[Detector] TRIGGERED (slope) | Dev: {device_id} | Slope {slope:.2f} µg/m³/s >= {settings.SLOPE_SUS}")
             is_triggered = True
             trigger_reason = "slope"
 
@@ -232,7 +391,6 @@ class Detector:
         }
 
         if is_triggered:
-            # Transition to CONFIRMING
             t0 = current_ts
             event_id = str(uuid.uuid4())
 
@@ -265,10 +423,6 @@ class Detector:
             }
             return event_doc, "suspicious"
         else:
-            # Slow baseline drift: nudge baseline toward current ambient only when
-            # the environment has been quiet for BASELINE_QUIET_SEC seconds.
-            # This corrects for multi-hour drift (humidity, outdoor PM, temperature)
-            # without chasing acute spikes.
             last_trigger_str = state.get('last_trigger_time')
             quiet_enough = True
             if last_trigger_str:
@@ -287,71 +441,56 @@ class Detector:
     def _handle_confirming(self, device_id: str, sample: Dict[str, Any], state: Dict[str, Any], current_ts: datetime):
         t0 = state.get("t0")
         if not t0:
-            # Error state, reset
             state_manager.clear_state(device_id)
             return None, None
-            
-        now = current_ts # Use server time
+
+        now = current_ts
         duration = (now - t0).total_seconds()
-        
-        # Log progress every ~5 seconds
+
         if int(duration) % 5 == 0:
              print(f"[Detector] CONFIRMING | Dev: {device_id} | T+{duration:.1f}s / {settings.CONFIRM_WINDOW_SEC}s")
 
         if duration >= settings.CONFIRM_WINDOW_SEC:
-            # DECISION TIME
             print(f"[Detector] DECISION TIME | Dev: {device_id} | Window Complete")
             return self._make_decision(device_id, state, now)
-            
+
         return None, None
 
     def _make_decision(self, device_id: str, state: Dict[str, Any], decision_time: datetime):
         t0 = state.get("t0")
         event_id = state.get("event_id")
-        
-        # Fetch Data
-        # Baseline: [t0 - 10s, t0]
-        # Event: [t0, t0 + 20s] (or current time)
-        
+
         baseline_start = t0 - timedelta(seconds=settings.BASELINE_WINDOW_SEC)
-        
-        # We fetch all needed samples in one go
         all_samples = state_manager.get_samples(device_id, baseline_start, decision_time)
-        
-        # Split them
+
         baseline_samples = [s for s in all_samples if s['timestamp'] <= t0]
         event_samples = [s for s in all_samples if s['timestamp'] > t0]
-        
-        # Compute Features
+
         features = FeatureEngine.compute_features(baseline_samples, event_samples)
-        
-        # Predict
         prediction = ensemble.predict(features)
-        
-        # Transition to COOLDOWN
+
         cooldown_until = decision_time + timedelta(seconds=settings.COOLDOWN_SEC)
         state_manager.update_state(device_id, {
             "status": "COOLDOWN",
             "cooldown_until": cooldown_until
         })
-        
-        # Construct Final Event Doc
+
         event_doc = {
             "event_id": event_id,
             "device_id": device_id,
             "t_start": t0,
             "t_decision": decision_time,
             "timestamp": self._iso_utc(decision_time),
-            "status": prediction["status"], # confirmed or uncertain
+            "status": prediction["status"],
             "top_class": prediction["top_class"],
             "probs": prediction["probs"],
             "top_prob": prediction["top_prob"],
             "margin": prediction["margin"],
-            "event_features": features, # Optional: store features
+            "event_features": features,
             "ensemble_detail": prediction["per_model"],
             "created_at": self._get_now()
         }
-        
+
         return event_doc, "confirmed"
 
     def _handle_cooldown(self, device_id: str, state: Dict[str, Any], current_ts: datetime):

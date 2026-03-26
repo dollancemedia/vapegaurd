@@ -52,17 +52,16 @@ class EnsemblePredictor:
     def predict(self, features: Dict[str, Any]) -> Dict[str, Any]:
         """
         Runs the ensemble prediction.
+        Handles models trained with different feature counts (backward compat).
         """
-        # Convert features dict to ordered list/array
-        # Handle None values -> 0.0 or mean? 
-        # Ideally features shouldn't be None. If they are, impute with 0.
+        # Build full feature vector from current FEATURE_ORDER
         feature_vector = []
         for key in FEATURE_ORDER:
             val = features.get(key)
             if val is None:
                 val = 0.0
             feature_vector.append(val)
-        
+
         # Reshape for sklearn (1, n_features)
         X = np.array([feature_vector])
         
@@ -73,8 +72,24 @@ class EnsemblePredictor:
 
         for name, model in self.models.items():
             try:
+                # Handle models trained with fewer features (backward compat)
+                n_expected = None
+                if hasattr(model, 'n_features_in_'):
+                    n_expected = model.n_features_in_
+                elif hasattr(model, '_scaler') and hasattr(model._scaler, 'n_features_in_'):
+                    n_expected = model._scaler.n_features_in_
+
+                X_input = X
+                if n_expected is not None and n_expected < X.shape[1]:
+                    # Model was trained with fewer features — truncate to match
+                    X_input = X[:, :n_expected]
+
+                # Apply scaler if model has one (e.g. LogisticRegression)
+                if hasattr(model, '_scaler'):
+                    X_input = model._scaler.transform(X_input)
+
                 # predict_proba returns [n_samples, n_classes]
-                probs = model.predict_proba(X)[0]
+                probs = model.predict_proba(X_input)[0]
                 
                 # Flexible Class Mapping
                 model_classes = []

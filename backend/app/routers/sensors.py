@@ -80,7 +80,8 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
              payload["timestamp"] = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
 
         # Sanitize numerics
-        numeric_fields = ["humidity", "temperature", "pm25", "pm10", "gas_resistance", "sound_level"]
+        numeric_fields = ["humidity", "temperature", "pm25", "pm10", "pm1", "gas_resistance",
+                          "pressure", "sound_level", "baseline_pm25", "baseline_gas"]
         for field in numeric_fields:
             val = payload.get(field)
             try:
@@ -187,12 +188,21 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
         except Exception as e:
             logger.error(f"Broadcast reading failed: {e}")
 
-        return {
+        response = {
             "status": "success",
             "message": "Processed",
             "event_id": stored_event_id,
-            "state": notification_type or "monitoring"
+            "state": notification_type or "monitoring",
         }
+
+        # Include prediction for sensor firmware (v3 reads this)
+        if event_doc and event_doc.get("top_class"):
+            response["prediction"] = {
+                "predicted_class": event_doc.get("top_class"),
+                "confidence": float(event_doc.get("top_prob", 0)) * 100,
+            }
+
+        return response
 
     except Exception as e:
         logger.exception(f"Error processing sensor data: {e}")

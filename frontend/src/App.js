@@ -4,9 +4,10 @@ import { ClerkProvider, SignedIn, SignedOut, RedirectToSignIn, UserButton } from
 import Devices from './pages/Devices';
 import Settings from './pages/Settings';
 import Analytics from './pages/Analytics';
+import TrainAI from './pages/TrainAI';
 import NotificationController from './components/NotificationController';
 import ErrorBoundary from './components/ErrorBoundary';
-import { LayoutDashboard, BarChart2, Settings as SettingsIcon } from 'lucide-react';
+import { LayoutDashboard, BarChart2, Settings as SettingsIcon, Brain } from 'lucide-react';
 import './App.css';
 
 const CLERK_PUBLISHABLE_KEY = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY || 'pk_test_PLACEHOLDER_KEY';
@@ -43,6 +44,11 @@ function App() {
                         </NavLink>
                       </li>
                       <li>
+                        <NavLink to="/train" className={({ isActive }) => isActive ? 'active' : ''}>
+                          Train AI
+                        </NavLink>
+                      </li>
+                      <li>
                         <NavLink to="/settings" className={({ isActive }) => isActive ? 'active' : ''}>
                           Settings
                         </NavLink>
@@ -62,6 +68,7 @@ function App() {
                   <Route path="/" element={<Navigate to="/devices" replace />} />
                   <Route path="/devices" element={<Devices />} />
                   <Route path="/analytics" element={<Analytics />} />
+                  <Route path="/train" element={<TrainAI />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>
               </main>
@@ -76,6 +83,10 @@ function App() {
                   <NavLink to="/analytics" className={({ isActive }) => isActive ? 'active' : ''}>
                     <BarChart2 size={22} />
                     <span>Analytics</span>
+                  </NavLink>
+                  <NavLink to="/train" className={({ isActive }) => isActive ? 'active' : ''}>
+                    <Brain size={22} />
+                    <span>Train AI</span>
                   </NavLink>
                   <NavLink to="/settings" className={({ isActive }) => isActive ? 'active' : ''}>
                     <SettingsIcon size={22} />

@@ -36,10 +36,10 @@ import numpy as np
 import pandas as pd
 from pymongo import MongoClient
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.utils.class_weight import compute_sample_weight
 
 try:
@@ -174,16 +174,27 @@ def train_all(X_train, y_train, X_val, y_val, seed):
     models = {}
     sw = compute_sample_weight("balanced", y=y_train)
 
+    # Random Forest — strong ensemble learner, handles feature interactions
     rf = RandomForestClassifier(n_estimators=300, random_state=seed,
                                 class_weight="balanced_subsample")
     rf.fit(X_train, y_train, sample_weight=sw)
     models["rf"] = rf
 
-    knn = KNeighborsClassifier(n_neighbors=min(7, len(X_train) - 1),
-                               weights="distance")
-    knn.fit(X_train, y_train)
-    models["knn"] = knn
+    # Logistic Regression — well-calibrated probabilities, fast inference
+    # Replaces KNN: better probability calibration, no distance metric issues
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    lr = LogisticRegression(
+        random_state=seed, max_iter=1000,
+        class_weight="balanced", solver="lbfgs",
+        multi_class="multinomial", C=1.0
+    )
+    lr.fit(X_train_scaled, y_train, sample_weight=sw)
+    # Attach scaler so inference can use it
+    lr._scaler = scaler
+    models["lr"] = lr
 
+    # XGBoost — gradient boosted trees, typically best performer
     if XGB_AVAILABLE:
         le = LabelEncoder()
         yt_enc = le.fit_transform(y_train)
@@ -287,14 +298,15 @@ def main():
 
     models = train_all(X_train, y_train, X_val, y_val, seed=args.seed)
 
-    save_map = {"rf": "rf_model.joblib", "knn": "knn_model.joblib", "xgb": "xgb_model.joblib"}
+    save_map = {"rf": "rf_model.joblib", "lr": "lr_model.joblib", "xgb": "xgb_model.joblib"}
     report = {"n_features": len(FEATURE_ORDER), "feature_order": FEATURE_ORDER,
               "class_distribution": dict(class_counts), "models": {}}
 
     for name, model in models.items():
         path = models_dir / save_map[name]
         joblib.dump(model, path)
-        y_pred = model.predict(X_test)
+        X_test_input = model._scaler.transform(X_test) if hasattr(model, '_scaler') else X_test
+        y_pred = model.predict(X_test_input)
         if hasattr(model, "custom_classes_"):
             y_pred = model.custom_classes_[y_pred.astype(int)]
         rep = classification_report(y_test, y_pred, output_dict=True, zero_division=0)

@@ -78,11 +78,11 @@ class DeviceStateManager:
             self._local_samples[device_id].insert(0, stored_sample)
             # Local time trim
             now = self._get_now_utc()
-            # Keep samples within 60s window
+            # Keep samples within 120s window (enough for baseline + deep_sense burst)
             valid_samples = []
             for s in self._local_samples[device_id]:
                 ts = self._parse_dt(s['timestamp'])
-                if ts and (now - ts).total_seconds() < 60:
+                if ts and (now - ts).total_seconds() < 120:
                     valid_samples.append(s)
                 else:
                     break # Assuming ordered

@@ -17,20 +17,35 @@ const normalizeConf = (c) => {
   return c <= 1 ? Math.round(c * 100) : Math.round(c);
 };
 
-const normalizeEvent = (e) => ({
-  id:         e._id || e.id || e.event_id || String(Math.random()),
-  deviceId:   e.device_id,
-  timestamp:  e.timestamp,
-  // Backend stores top_class (e.g. "vape") and status (e.g. "suspected") — check those first
-  type:       (e.top_class || e.type || e.predicted_class || e.detection_type || e.event_type || e.status || 'unknown').toLowerCase(),
-  // Backend stores top_prob as 0–1; normalizeConf converts ≤1 → ×100
-  confidence: normalizeConf(e.confidence ?? e.top_prob ?? e.prediction?.confidence),
-  pm25:       e.sensor_data?.pm25 ?? e.pm25 ?? null,
-});
+const normalizeEvent = (e) => {
+  // Determine event type from the various backend field names
+  let type = (e.top_class || e.type || e.predicted_class || e.detection_type || e.event_type || 'unknown').toLowerCase();
+  // If event status is "suspected" and no top_class yet, mark as suspected
+  if ((!e.top_class || e.top_class === 'normal') && (e.status === 'suspected' || e.status === 'confirming')) {
+    type = 'suspected';
+  }
+  // Tamper events
+  if (e.event_type === 'tamper') type = 'tamper';
 
-const isVape      = (e) => e.type === 'vape'  || e.type === 'alarm';
-const isSuspected = (e) => e.type === 'suspected' || e.type === 'confirming';
-const isIncident  = (e) => isVape(e) || isSuspected(e);
+  return {
+    id:         e._id || e.id || e.event_id || String(Math.random()),
+    deviceId:   e.device_id,
+    school:     e.school || e.org_id || '',
+    timestamp:  e.timestamp || e.t_start || e.created_at,
+    type,
+    status:     (e.status || 'unknown').toLowerCase(),
+    confidence: normalizeConf(e.confidence ?? e.top_prob ?? e.prediction?.confidence),
+    pm25:       e.sensor_data?.pm25 ?? e.pm25 ?? null,
+    probs:      e.probs || null,
+  };
+};
+
+const TYPE_COLORS = {
+  vape: '#ef4444', cologne: '#8b5cf6', 'hair spray': '#f97316', cleaning: '#3b82f6',
+  fire: '#dc2626', suspected: '#f59e0b', tamper: '#6366f1', normal: '#22c55e', unknown: '#9ca3af',
+};
+
+const isIncident  = (e) => e.type !== 'normal' && e.type !== 'unknown';
 
 const fmtDate = (ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 const fmtTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -206,19 +221,17 @@ const HourHeatmap = ({ byHour, isMobile }) => {
   );
 };
 
-// Type badge
+// Type badge — supports all event types
 const TypeBadge = ({ type }) => {
-  const v = isVape({ type });
-  const s = isSuspected({ type });
-  if (!v && !s) return <span style={{ fontSize: '0.65rem', color: '#9ca3af' }}>{type}</span>;
+  const color = TYPE_COLORS[type] || TYPE_COLORS.unknown;
+  const display = type === 'hair spray' ? 'Hair Spray' : type.charAt(0).toUpperCase() + type.slice(1);
   return (
     <span style={{
       fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.05em',
       textTransform: 'uppercase', borderRadius: 6, padding: '2px 7px',
-      color: v ? '#ef4444' : '#f97316',
-      background: v ? 'rgba(239,68,68,0.1)' : 'rgba(249,115,22,0.1)',
+      color, background: `${color}18`,
     }}>
-      {v ? 'Vape' : 'Suspected'}
+      {display}
     </span>
   );
 };
@@ -261,29 +274,35 @@ const Analytics = () => {
   const school = (organization?.name === 'admin' || organization?.slug === 'admin') ? 'admin' : organization?.id;
   const { devices } = useDevices(school);
 
-  const [events,      setEvents]      = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [range,       setRange]       = useState('30d');
-  const [typeFilter,  setTypeFilter]  = useState('all');   // all | vape | suspected
-  const [search,      setSearch]      = useState('');
-  const [sortCol,     setSortCol]     = useState('timestamp');
-  const [sortDir,     setSortDir]     = useState('desc');
-  const [page,        setPage]        = useState(0);
+  const [events,        setEvents]      = useState([]);
+  const [loading,       setLoading]     = useState(true);
+  const [range,         setRange]       = useState('30d');
+  const [typeFilter,    setTypeFilter]  = useState('all');
+  const [deviceFilter,  setDeviceFilter] = useState('all');
+  const [search,        setSearch]      = useState('');
+  const [sortCol,       setSortCol]     = useState('timestamp');
+  const [sortDir,       setSortDir]     = useState('desc');
+  const [page,          setPage]        = useState(0);
   const PAGE_SIZE = 25;
 
   // ── Fetch events ────────────────────────────────────────────────────────────
   const fetchEvents = useCallback(async () => {
     try {
-      const res = await api.get('/events?limit=500');
+      const res = await api.get('/events?limit=1000');
       const raw = res.data;
       const arr = Array.isArray(raw) ? raw : (raw?.events || raw?.data || []);
-      setEvents(arr.map(normalizeEvent).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
+      let normalized = arr.map(normalizeEvent).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      // Filter by school/org if not admin
+      if (school && school !== 'admin') {
+        normalized = normalized.filter(e => !e.school || e.school === school || e.school === 'unknown');
+      }
+      setEvents(normalized);
     } catch (err) {
       console.error('Analytics events fetch error:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [school]);
 
   useEffect(() => {
     fetchEvents();
@@ -293,12 +312,12 @@ const Analytics = () => {
 
   // Device lookup
   const deviceMap  = useMemo(() => Object.fromEntries(devices.map(d => [d.id, d])), [devices]);
-  const devName    = (id) => deviceMap[id]?.name || id || '—';
-  const devLoc     = (id) => {
+  const devName    = useCallback((id) => deviceMap[id]?.name || id || '—', [deviceMap]);
+  const devLoc     = useCallback((id) => {
     const d = deviceMap[id];
     if (!d) return null;
     return [d.location?.building, d.location?.room].filter(Boolean).join(' · ') || null;
-  };
+  }, [deviceMap]);
 
   // ── Filter to selected range ─────────────────────────────────────────────────
   const rangeStart   = getRangeMs(range);
@@ -407,20 +426,38 @@ const Analytics = () => {
 
   const logFiltered = useMemo(() => {
     let arr = incidents;
-    if (typeFilter === 'vape')      arr = arr.filter(isVape);
-    if (typeFilter === 'suspected') arr = arr.filter(isSuspected);
+    if (typeFilter !== 'all') arr = arr.filter(e => e.type === typeFilter);
+    if (deviceFilter !== 'all') arr = arr.filter(e => e.deviceId === deviceFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
       arr = arr.filter(e =>
         devName(e.deviceId).toLowerCase().includes(q) ||
-        (devLoc(e.deviceId) || '').toLowerCase().includes(q)
+        (devLoc(e.deviceId) || '').toLowerCase().includes(q) ||
+        e.type.toLowerCase().includes(q)
       );
     }
     return sortEvents(arr, sortCol, sortDir);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [incidents, typeFilter, search, sortCol, sortDir]);
+  }, [incidents, typeFilter, deviceFilter, search, sortCol, sortDir, devName, devLoc]);
 
   const paginated = logFiltered.slice(0, (page + 1) * PAGE_SIZE);
+
+  // CSV export
+  const exportCSV = useCallback(() => {
+    const headers = ['Date', 'Time', 'Device', 'Location', 'Type', 'Confidence', 'PM2.5'];
+    const rows = logFiltered.map(ev => [
+      fmtDate(ev.timestamp), fmtTime(ev.timestamp),
+      devName(ev.deviceId), devLoc(ev.deviceId) || '',
+      ev.type, ev.confidence ?? '', ev.pm25 ?? '',
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `incidents_${range}_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [logFiltered, range, devName, devLoc]);
 
   // ── Shared styles ────────────────────────────────────────────────────────────
   const card = {
@@ -587,8 +624,8 @@ const Analytics = () => {
             </span>
           </div>
 
-          {/* Search + filter row on mobile */}
-          <div style={{ display: 'flex', gap: 8, width: isMobile ? '100%' : undefined, flexWrap: 'wrap' }}>
+          {/* Filters row */}
+          <div style={{ display: 'flex', gap: 8, width: isMobile ? '100%' : undefined, flexWrap: 'wrap', alignItems: 'center' }}>
             {/* Search */}
             <div style={{ position: 'relative', flex: isMobile ? 1 : undefined }}>
               <svg style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#b0b8c4', pointerEvents: 'none' }}
@@ -602,20 +639,39 @@ const Analytics = () => {
                   paddingLeft: 30, paddingRight: 12, height: 32,
                   background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)',
                   borderRadius: 10, fontFamily: 'var(--font-body)', fontSize: '0.78rem', color: '#1a1a1a',
-                  outline: 'none', width: isMobile ? '100%' : 210,
+                  outline: 'none', width: isMobile ? '100%' : 180,
                   boxSizing: 'border-box',
                 }}
               />
             </div>
 
+            {/* Device filter */}
+            <select
+              value={deviceFilter}
+              onChange={e => { setDeviceFilter(e.target.value); setPage(0); }}
+              style={{
+                height: 32, padding: '0 10px', borderRadius: 8,
+                background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)',
+                fontFamily: 'var(--font-body)', fontSize: '0.72rem', color: '#6b7280',
+                outline: 'none', cursor: 'pointer',
+              }}
+            >
+              <option value="all">All Devices</option>
+              {devices.map(d => (
+                <option key={d.id || d.device_id} value={d.id || d.device_id}>
+                  {d.name || d.name_override || d.id || d.device_id}
+                </option>
+              ))}
+            </select>
+
             {/* Type filter */}
-            <div style={{ display: 'flex', gap: 4 }}>
-              {[['all','All'],['vape','Vape'],['suspected','Suspected']].map(([k, lb]) => (
+            <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+              {[['all','All'],['vape','Vape'],['suspected','Suspected'],['cologne','Cologne'],['tamper','Tamper']].map(([k, lb]) => (
                 <button key={k} onClick={() => { setTypeFilter(k); setPage(0); }} style={{
-                  padding: '5px 10px', borderRadius: 8,
+                  padding: '5px 9px', borderRadius: 8,
                   background: typeFilter === k ? 'rgba(0,194,203,0.12)' : 'rgba(0,0,0,0.05)',
                   color: typeFilter === k ? 'var(--teal)' : '#6b7280',
-                  fontFamily: 'var(--font-body)', fontSize: '0.72rem',
+                  fontFamily: 'var(--font-body)', fontSize: '0.68rem',
                   fontWeight: typeFilter === k ? 700 : 500,
                   cursor: 'pointer', transition: 'all 0.15s',
                   border: typeFilter === k ? '1px solid rgba(0,194,203,0.28)' : '1px solid transparent',
@@ -623,6 +679,22 @@ const Analytics = () => {
                 }}>{lb}</button>
               ))}
             </div>
+
+            {/* CSV export */}
+            {!isMobile && logFiltered.length > 0 && (
+              <button onClick={exportCSV} style={{
+                height: 32, padding: '0 12px', borderRadius: 8,
+                background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)',
+                fontFamily: 'var(--font-body)', fontSize: '0.72rem', fontWeight: 600,
+                color: '#6b7280', cursor: 'pointer', whiteSpace: 'nowrap',
+                display: 'flex', alignItems: 'center', gap: 5,
+              }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Export CSV
+              </button>
+            )}
           </div>
         </div>
 
