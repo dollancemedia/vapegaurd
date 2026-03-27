@@ -98,16 +98,31 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
             await db.samples.insert_one(payload.copy())
             
             # Update Device 'last_seen' to keep it Online in Dashboard
+            # Use upsert=True so sensors auto-register on first data post
             device_update = {
                 "last_seen": datetime.utcnow().isoformat() + "Z",
                 "updated_at": datetime.utcnow().isoformat() + "Z",
             }
             if payload.get("firmware_version"):
                 device_update["firmware_version"] = payload["firmware_version"]
+            # Build $setOnInsert for auto-registration of new devices
+            set_on_insert = {"created_at": datetime.utcnow().isoformat() + "Z"}
+            if payload.get("org_id") and payload["org_id"] != "unknown":
+                # Only set org_id on first insert (dashboard registration takes precedence)
+                set_on_insert["org_id"] = payload["org_id"]
             await db.devices.update_one(
                 {"device_id": payload.get("device_id")},
-                {"$set": device_update},
-                upsert=False
+                {
+                    "$set": device_update,
+                    "$setOnInsert": set_on_insert
+                },
+                upsert=True
+            )
+            # Also ensure device_metadata exists for new devices
+            await db.device_metadata.update_one(
+                {"device_id": payload.get("device_id")},
+                {"$setOnInsert": {"name": f"Device {payload.get('device_id', '')[-4:]}", "location": "Unassigned"}},
+                upsert=True
             )
         except Exception as e:
             logger.error(f"Failed to store raw sample or update device: {e}")

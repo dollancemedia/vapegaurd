@@ -143,7 +143,8 @@ const Settings = () => {
   const { user } = useUser();
   const { signOut, openUserProfile, openOrganizationProfile } = useClerk();
   const { organization } = useOrganization();
-  const school = (organization?.name === 'admin' || organization?.slug === 'admin') ? 'admin' : organization?.id;
+  const isAdmin = organization?.name === 'admin' || organization?.slug === 'admin';
+  const school = isAdmin ? 'admin' : organization?.id;
   const { devices } = useDevices(school);
   const notificationSystemRef = useRef(null);
   const isMobile = useMediaQuery({ maxWidth: 768 });
@@ -397,7 +398,7 @@ const Settings = () => {
             flexDirection: isMobile ? 'row' : 'column',
             gap: isMobile ? 4 : 3,
           }}>
-            {NAV_ITEMS.map(item => {
+            {NAV_ITEMS.filter(item => item.key !== 'firmware' || isAdmin).map(item => {
               const active = activeSection === item.key;
               return (
                 <button
@@ -783,7 +784,7 @@ const Settings = () => {
           )}
 
           {/* ── FIRMWARE SECTION ── */}
-          {activeSection === 'firmware' && (
+          {activeSection === 'firmware' && isAdmin && (
             <SectionCard title="Firmware Updates" subtitle="Upload new firmware for OTA deployment to sensors">
               {/* Upload form */}
               <div style={{ padding: '18px 22px', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
