@@ -51,10 +51,17 @@
 #include <esp_task_wdt.h>
 #include <Preferences.h>
 #include <time.h>
+#include <NimBLEDevice.h>
+#include <esp_mac.h>
+#include <esp_ota_ops.h>
+#include <esp_https_ota.h>
+#include <HTTPUpdate.h>
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
+
+const char* FIRMWARE_VERSION = "3.1.0";
 
 const char* DEFAULT_SSID     = "sweethome";
 const char* DEFAULT_PASSWORD = "rahul2008";
@@ -62,9 +69,9 @@ const char* DEFAULT_PASSWORD = "rahul2008";
 const char* BACKEND_HOST = "vapegaurd-production.up.railway.app";
 const bool  USE_HTTPS    = true;
 
-const String DEVICE_ID = "ESP32_C6_001";
+String DEVICE_ID = "ESP32_C6_001";  // overwritten from NVS or MAC
 const String LOCATION  = "School Bathroom";
-const String ORG_ID    = "irvington";
+String ORG_ID    = "irvington";     // overwritten from BLE provisioning
 
 // AP name built from last 4 of MAC in setup() — unique per device
 char AP_NAME[24] = "MistioSensor";
@@ -170,6 +177,22 @@ bool scheduleEnabled  = false;
 uint8_t activeDays    = 0x3E; // Mon-Fri
 unsigned long lastScheduleFetch = 0;
 
+// ─── NimBLE Provisioning ───────────────────────────────────────────────────
+NimBLEServer         *bleServer = nullptr;
+NimBLECharacteristic *bleSsidChar;
+NimBLECharacteristic *blePassChar;
+NimBLECharacteristic *bleOrgChar;
+bool bleProvisioned = false;
+String bleIncomingSSID = "";
+String bleIncomingPASS = "";
+String bleIncomingORG  = "";
+bool   bleActive       = false;
+
+// ─── OTA ───────────────────────────────────────────────────────────────────
+String OTA_CHECK_URL;
+unsigned long lastOtaCheck = 0;
+const unsigned long OTA_CHECK_INTERVAL = 86400000UL;  // 24 hours
+
 // ─── Pre-trigger ring buffer ────────────────────────────────────────────────
 struct SensorSnapshot {
   float pm25, pm10, pm1;
@@ -223,6 +246,11 @@ String getISOTimestamp();
 void  sleepHeavySensors();
 void  wakeHeavySensors();
 void  enterLightSleep(unsigned long durationMs);
+void  startBLEProvisioning();
+void  stopBLEProvisioning();
+void  checkBLEProvisioning();
+void  checkForOTA();
+void  loadDeviceIdentity();
 
 // =============================================================================
 //  TRIPLE-RESET DETECTION
@@ -347,7 +375,10 @@ void setup() {
   esp_task_wdt_deinit();
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n=== ESP32-C6 Optimized WiFi Sensor v3 ===");
+  Serial.printf("\n=== Mistio Sensor v%s ===\n", FIRMWARE_VERSION);
+
+  // Load device ID from MAC, org/WiFi from NVS (if BLE-provisioned previously)
+  loadDeviceIdentity();
   Serial.println("Device: " + DEVICE_ID);
 
   // Build unique AP name from MAC address (last 4 hex chars)
@@ -359,6 +390,7 @@ void setup() {
   DATA_URL     = buildUrl("/api/sensors/data");
   TAMPER_URL   = buildUrl("/api/sensors/tamper");
   SCHEDULE_URL = buildUrl(("/api/devices/" + DEVICE_ID + "/schedule").c_str());
+  OTA_CHECK_URL = buildUrl("/api/firmware/latest");
   Serial.println("Backend: " + DATA_URL);
 
   neopixel.begin();
@@ -380,6 +412,10 @@ void setup() {
   powerOnSensors();
   initSensors();
 
+  // BLE provisioning disabled for now — heap conflict with WiFiClientSecure
+  // TODO: re-enable once heap usage is optimized
+  // startBLEProvisioning();
+
   // Connect WiFi
   neoSet(0, 0, 255);
   connectWiFiManager(forcePortal);
@@ -389,6 +425,8 @@ void setup() {
     neoSet(0, 255, 0);
     syncTime();
     fetchSchedule();
+    // OTA check on boot — only if firmware endpoint is deployed
+    checkForOTA();
     delay(500);
   } else {
     neoFlash(255, 0, 0, 1000);
@@ -397,7 +435,7 @@ void setup() {
   clearResetFlag();
 
   enterState(STATE_STARTUP);
-  Serial.println("Setup complete — entering STARTUP (150s warmup+calibration)");
+  Serial.printf("Setup complete — entering STARTUP (150s warmup+calibration)\n");
 }
 
 // =============================================================================
@@ -414,8 +452,28 @@ void loop() {
     fetchSchedule();
   }
 
-  // Outside school hours — deep sleep with periodic keepalive
+  // Daily OTA check
+  if (wifiOn && (now - lastOtaCheck > OTA_CHECK_INTERVAL)) {
+    checkForOTA();
+  }
+
+  // Outside school hours — deep sleep, but wake every 5min to re-fetch schedule
   if (scheduleEnabled && !isWithinSchedule()) {
+    unsigned long sinceFetch = now - lastScheduleFetch;
+    if (sinceFetch >= SCHEDULE_FETCH_INTERVAL) {
+      // Reconnect WiFi briefly to check for schedule updates
+      Serial.println("Outside hours — reconnecting WiFi to check schedule...");
+      if (!wifiOn) wifiOn_connect();
+      if (wifiOn) {
+        fetchSchedule();
+        wifiOff_disconnect();
+      }
+      // Re-check: maybe schedule was just updated to include now
+      if (!scheduleEnabled || isWithinSchedule()) {
+        Serial.println("Schedule updated — resuming normal operation");
+        return; // fall through to main state machine
+      }
+    }
     Serial.println("Outside school hours — sleeping 60s");
     if (wifiOn) wifiOff_disconnect();
     sleepHeavySensors();
@@ -941,6 +999,7 @@ bool postSensorData() {
   doc["device_id"]       = DEVICE_ID;
   doc["location"]        = LOCATION;
   doc["org_id"]          = ORG_ID;
+  doc["firmware_version"] = FIRMWARE_VERSION;
   doc["temperature"]     = lastTemp;
   doc["humidity"]        = lastHumidity;
   doc["pressure"]        = lastPressure;
@@ -1211,6 +1270,231 @@ bool isWithinSchedule() {
   int endMin    = scheduleEndHour * 60 + scheduleEndMin;
 
   return (nowMin >= startMin && nowMin <= endMin);
+}
+
+// =============================================================================
+//  NimBLE PROVISIONING
+// =============================================================================
+class BLEProvisionCallback : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic *pCharacteristic) {
+    std::string value = pCharacteristic->getValue();
+    if (pCharacteristic == bleSsidChar) {
+      bleIncomingSSID = String(value.c_str());
+      Serial.println("[BLE] Received SSID: " + bleIncomingSSID);
+    }
+    if (pCharacteristic == blePassChar) {
+      bleIncomingPASS = String(value.c_str());
+      Serial.println("[BLE] Received PASS");
+    }
+    if (pCharacteristic == bleOrgChar) {
+      bleIncomingORG = String(value.c_str());
+      Serial.println("[BLE] Received ORG: " + bleIncomingORG);
+    }
+    if (bleIncomingSSID.length() > 0 && bleIncomingPASS.length() > 0 && bleIncomingORG.length() > 0) {
+      bleProvisioned = true;
+    }
+  }
+};
+
+class MistioBLEServerCB : public NimBLEServerCallbacks {
+  void onDisconnect(NimBLEServer *pServer) {
+    NimBLEDevice::startAdvertising();
+    Serial.println("[BLE] Client disconnected, re-advertising");
+  }
+};
+
+void startBLEProvisioning() {
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  char bleName[24];
+  snprintf(bleName, sizeof(bleName), "MISTIO-%02X%02X%02X%02X%02X%02X",
+           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+  NimBLEDevice::init(bleName);
+  bleServer = NimBLEDevice::createServer();
+  bleServer->setCallbacks(new MistioBLEServerCB());
+
+  NimBLEService *svc = bleServer->createService("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
+
+  bleSsidChar = svc->createCharacteristic("6E400002-B5A3-F393-E0A9-E50E24DCCA9E",
+    NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
+  bleSsidChar->setCallbacks(new BLEProvisionCallback());
+
+  blePassChar = svc->createCharacteristic("6E400003-B5A3-F393-E0A9-E50E24DCCA9E",
+    NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
+  blePassChar->setCallbacks(new BLEProvisionCallback());
+
+  bleOrgChar = svc->createCharacteristic("6E400004-B5A3-F393-E0A9-E50E24DCCA9E",
+    NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
+  bleOrgChar->setCallbacks(new BLEProvisionCallback());
+
+  svc->start();
+
+  NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
+  NimBLEAdvertisementData advData;
+  advData.setName(bleName);
+  advData.addServiceUUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
+  adv->setAdvertisementData(advData);
+
+  NimBLEAdvertisementData scanData;
+  scanData.setName(bleName);
+  adv->setScanResponseData(scanData);
+  adv->start();
+
+  bleActive = true;
+  Serial.println("[BLE] Advertising as: " + String(bleName));
+}
+
+void stopBLEProvisioning() {
+  if (bleActive) {
+    NimBLEDevice::deinit(true);
+    bleActive = false;
+    Serial.println("[BLE] Stopped");
+  }
+}
+
+void checkBLEProvisioning() {
+  if (!bleProvisioned) return;
+
+  Serial.println("[BLE] Provisioning complete — saving credentials");
+
+  // Save to NVS
+  prefs.begin("mistio", false);
+  prefs.putString("wifi_ssid", bleIncomingSSID);
+  prefs.putString("wifi_pass", bleIncomingPASS);
+  prefs.putString("org_id", bleIncomingORG);
+  prefs.end();
+
+  // Update runtime variables
+  ORG_ID = bleIncomingORG;
+
+  stopBLEProvisioning();
+
+  // Connect to the new WiFi
+  Serial.println("[BLE] Connecting to provisioned WiFi: " + bleIncomingSSID);
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(bleIncomingSSID.c_str(), bleIncomingPASS.c_str());
+
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
+    delay(250);
+    Serial.print(".");
+  }
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("[BLE] WiFi connected: " + WiFi.localIP().toString());
+    wifiOn = true;
+    neoSet(0, 255, 0);
+    syncTime();
+  } else {
+    Serial.println("[BLE] WiFi failed — will retry next cycle");
+    neoFlash(255, 0, 0, 1000);
+  }
+
+  // Reset provisioning state for next time
+  bleProvisioned = false;
+  bleIncomingSSID = "";
+  bleIncomingPASS = "";
+  bleIncomingORG = "";
+}
+
+// Load device identity from NVS (MAC-based ID + saved org)
+void loadDeviceIdentity() {
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  char macStr[18];
+  snprintf(macStr, sizeof(macStr), "%02X%02X%02X%02X%02X%02X",
+           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  DEVICE_ID = String(macStr);
+
+  prefs.begin("mistio", true); // read-only
+  String savedOrg = prefs.getString("org_id", "");
+  String savedSsid = prefs.getString("wifi_ssid", "");
+  String savedPass = prefs.getString("wifi_pass", "");
+  prefs.end();
+
+  if (savedOrg.length() > 0) {
+    ORG_ID = savedOrg;
+    Serial.println("Loaded org from NVS: " + ORG_ID);
+  }
+
+  // If NVS has WiFi creds from BLE provisioning, use those as defaults
+  if (savedSsid.length() > 0) {
+    DEFAULT_SSID = strdup(savedSsid.c_str());
+    DEFAULT_PASSWORD = strdup(savedPass.c_str());
+    Serial.println("Loaded WiFi creds from NVS: " + savedSsid);
+  }
+}
+
+// =============================================================================
+//  OTA FIRMWARE UPDATE
+// =============================================================================
+void checkForOTA() {
+  if (!wifiOn) return;
+
+  Serial.printf("[OTA] Checking for updates (current: %s)...\n", FIRMWARE_VERSION);
+  lastOtaCheck = millis();
+
+  // Use a separate scope so HTTPClient/WiFiClientSecure are fully destroyed before returning
+  {
+    WiFiClientSecure secClient;
+    secClient.setInsecure();
+    HTTPClient http;
+
+    String url = OTA_CHECK_URL + "?device_id=" + DEVICE_ID + "&current_version=" + FIRMWARE_VERSION;
+    http.begin(secClient, url);
+    http.setTimeout(10000);
+
+    int code = http.GET();
+    if (code != 200) {
+      Serial.printf("[OTA] Check returned %d — skipping\n", code);
+      http.end();
+      return;
+    }
+
+    String payload = http.getString();
+    http.end();
+
+    DynamicJsonDocument doc(512);
+    if (deserializeJson(doc, payload)) {
+      Serial.println("[OTA] Bad JSON response");
+      return;
+    }
+
+    bool updateAvailable = doc["update_available"] | false;
+    String newVersion = doc["version"] | "";
+    String binUrl = doc["download_url"] | "";
+
+    if (!updateAvailable || binUrl.length() == 0) {
+      Serial.printf("[OTA] Up to date (latest: %s)\n", newVersion.c_str());
+      return;
+    }
+
+    Serial.printf("[OTA] Update available: %s -> %s\n", FIRMWARE_VERSION, newVersion.c_str());
+    Serial.printf("[OTA] Downloading: %s\n", binUrl.c_str());
+    neoSet(255, 165, 0); // orange = updating
+
+    // New secure client for the download (previous one may be stale)
+    WiFiClientSecure dlClient;
+    dlClient.setInsecure();
+    httpUpdate.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+    t_httpUpdate_return ret = httpUpdate.update(dlClient, binUrl);
+
+    switch (ret) {
+      case HTTP_UPDATE_FAILED:
+        Serial.printf("[OTA] FAILED: %s\n", httpUpdate.getLastErrorString().c_str());
+        neoFlash(255, 0, 0, 2000);
+        break;
+      case HTTP_UPDATE_NO_UPDATES:
+        Serial.println("[OTA] No update needed");
+        break;
+      case HTTP_UPDATE_OK:
+        Serial.println("[OTA] Success — rebooting...");
+        break;
+    }
+  }
 }
 
 // =============================================================================

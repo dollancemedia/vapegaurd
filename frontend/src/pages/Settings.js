@@ -6,7 +6,7 @@ import { useDevices } from '../hooks/useDevices';
 import api from '../services/api';
 import {
   Bell, Shield, Users, LogOut, Volume2, Wifi,
-  AlertTriangle, Zap, ChevronRight, Clock, Calendar,
+  AlertTriangle, Zap, ChevronRight, Clock, Calendar, Upload,
 } from 'lucide-react';
 
 // ── Custom toggle switch ───────────────────────────────────────────────────────
@@ -103,6 +103,7 @@ const SectionCard = ({ title, subtitle, children }) => (
 const NAV_ITEMS = [
   { key: 'notifications', label: 'Notifications', sub: 'Alerts & thresholds', icon: <Bell size={15} /> },
   { key: 'schedule',      label: 'Schedule',      sub: 'School hours & holidays', icon: <Clock size={15} /> },
+  { key: 'firmware',      label: 'Firmware',      sub: 'OTA updates',         icon: <Upload size={15} /> },
   { key: 'account',       label: 'Account',       sub: 'Org & security',     icon: <Shield size={15} /> },
 ];
 
@@ -158,6 +159,52 @@ const Settings = () => {
   const [scheduleSaved, setScheduleSaved] = useState(false);
   const [scheduleApplyAll, setScheduleApplyAll] = useState(false);
 
+  // ── Firmware state ────────────────────────────────────────────
+  const [firmwareList, setFirmwareList] = useState([]);
+  const [fwUploading, setFwUploading] = useState(false);
+  const [fwVersion, setFwVersion] = useState('');
+  const [fwChangelog, setFwChangelog] = useState('');
+  const [fwFile, setFwFile] = useState(null);
+  const fwInputRef = useRef(null);
+
+  useEffect(() => {
+    if (activeSection === 'firmware') {
+      api.get('/firmware/list').then(res => setFirmwareList(res.data)).catch(() => {});
+    }
+  }, [activeSection]);
+
+  const handleFwUpload = async () => {
+    if (!fwFile || !fwVersion.trim()) return;
+    setFwUploading(true);
+    try {
+      const form = new FormData();
+      form.append('file', fwFile);
+      form.append('version', fwVersion.trim());
+      form.append('changelog', fwChangelog.trim());
+      await api.post('/firmware/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setFwFile(null); setFwVersion(''); setFwChangelog('');
+      if (fwInputRef.current) fwInputRef.current.value = '';
+      const res = await api.get('/firmware/list');
+      setFirmwareList(res.data);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Upload failed');
+    } finally {
+      setFwUploading(false);
+    }
+  };
+
+  const handleFwActivate = async (id) => {
+    await api.put(`/firmware/activate/${id}`);
+    const res = await api.get('/firmware/list');
+    setFirmwareList(res.data);
+  };
+
+  const handleFwDelete = async (id, version) => {
+    if (!window.confirm(`Delete firmware ${version}?`)) return;
+    await api.delete(`/firmware/${id}`);
+    setFirmwareList(prev => prev.filter(f => f.id !== id));
+  };
+
   // Pick first device on load
   useEffect(() => {
     if (devices.length > 0 && !selectedDevice) {
@@ -176,6 +223,10 @@ const Settings = () => {
   }, [selectedDevice]);
 
   const handleScheduleSave = async () => {
+    if (schedule.enabled && schedule.active_days.length === 0) {
+      alert('No active days selected — the sensor will sleep until you update the schedule. Add at least one day.');
+      return;
+    }
     const targets = scheduleApplyAll
       ? devices.map(d => d.id || d.device_id)
       : [selectedDevice];
@@ -728,6 +779,147 @@ const Settings = () => {
                   </div>
                 </>
               )}
+            </SectionCard>
+          )}
+
+          {/* ── FIRMWARE SECTION ── */}
+          {activeSection === 'firmware' && (
+            <SectionCard title="Firmware Updates" subtitle="Upload new firmware for OTA deployment to sensors">
+              {/* Upload form */}
+              <div style={{ padding: '18px 22px', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <div style={{ flex: 1, minWidth: 140 }}>
+                    <label style={{ fontSize: '0.68rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Version</label>
+                    <input type="text" placeholder="e.g. 3.2.0" value={fwVersion}
+                      onChange={e => setFwVersion(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(0,0,0,0.1)', background: 'rgba(0,0,0,0.03)', fontFamily: 'var(--font-display)', fontSize: '0.88rem', fontWeight: 700, color: '#1a1a1a', outline: 'none', boxSizing: 'border-box', marginTop: 4 }}
+                    />
+                  </div>
+                  <div style={{ flex: 2, minWidth: 200 }}>
+                    <label style={{ fontSize: '0.68rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Changelog</label>
+                    <input type="text" placeholder="What changed?" value={fwChangelog}
+                      onChange={e => setFwChangelog(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(0,0,0,0.1)', background: 'rgba(0,0,0,0.03)', fontFamily: 'var(--font-body)', fontSize: '0.82rem', color: '#1a1a1a', outline: 'none', boxSizing: 'border-box', marginTop: 4 }}
+                    />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input ref={fwInputRef} type="file" accept=".bin"
+                    onChange={e => setFwFile(e.target.files[0] || null)}
+                    style={{ fontFamily: 'var(--font-body)', fontSize: '0.78rem', color: '#6b7280' }}
+                  />
+                  <button onClick={handleFwUpload} disabled={fwUploading || !fwFile || !fwVersion.trim()}
+                    style={{
+                      padding: '8px 20px', borderRadius: 10,
+                      background: fwUploading ? '#9ca3af' : 'linear-gradient(135deg,var(--teal),#009fa6)',
+                      border: 'none', color: 'white', fontFamily: 'var(--font-body)',
+                      fontWeight: 700, fontSize: '0.8rem', cursor: fwUploading ? 'not-allowed' : 'pointer',
+                      opacity: (!fwFile || !fwVersion.trim()) ? 0.5 : 1,
+                    }}
+                  >
+                    {fwUploading ? 'Uploading…' : 'Upload & Deploy'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Firmware list */}
+              <div style={{ padding: '14px 22px' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                  Uploaded Versions
+                </div>
+                {firmwareList.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '24px 0', color: '#b0b8c4', fontSize: '0.82rem' }}>
+                    No firmware uploaded yet
+                  </div>
+                ) : (
+                  firmwareList.map(fw => (
+                    <div key={fw.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0',
+                      borderBottom: '1px solid rgba(0,0,0,0.04)',
+                    }}>
+                      <div style={{
+                        width: 8, height: 8, borderRadius: '50%',
+                        background: fw.is_active ? '#22c55e' : '#d1d5db',
+                        flexShrink: 0,
+                      }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9rem', color: '#1a1a1a' }}>
+                            v{fw.version}
+                          </span>
+                          {fw.is_active && (
+                            <span style={{
+                              padding: '2px 8px', borderRadius: 6,
+                              background: 'rgba(34,197,94,0.1)', color: '#16a34a',
+                              fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase',
+                            }}>Active</span>
+                          )}
+                          <span style={{ fontSize: '0.7rem', color: '#b0b8c4' }}>
+                            {(fw.size / 1024).toFixed(0)} KB
+                          </span>
+                        </div>
+                        {fw.changelog && (
+                          <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 2 }}>{fw.changelog}</div>
+                        )}
+                        <div style={{ fontSize: '0.65rem', color: '#c4cad4', marginTop: 1 }}>
+                          {new Date(fw.uploaded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        {!fw.is_active && (
+                          <button onClick={() => handleFwActivate(fw.id)}
+                            style={{
+                              padding: '5px 10px', borderRadius: 8,
+                              background: 'rgba(0,194,203,0.08)', border: '1px solid rgba(0,194,203,0.2)',
+                              color: 'var(--teal)', fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer',
+                            }}
+                          >Activate</button>
+                        )}
+                        <button onClick={() => handleFwDelete(fw.id, fw.version)}
+                          style={{
+                            padding: '5px 10px', borderRadius: 8,
+                            background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)',
+                            color: '#ef4444', fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer',
+                          }}
+                        >Delete</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Device firmware status */}
+              <div style={{ padding: '14px 22px', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                  Sensor Firmware Status
+                </div>
+                {devices.length === 0 ? (
+                  <div style={{ color: '#b0b8c4', fontSize: '0.82rem' }}>No devices registered</div>
+                ) : (
+                  devices.map(d => {
+                    const fv = d.firmware_version || 'unknown';
+                    const activeVer = firmwareList.find(f => f.is_active)?.version;
+                    const upToDate = activeVer && fv === activeVer;
+                    return (
+                      <div key={d.id || d.device_id} style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0',
+                        borderBottom: '1px solid rgba(0,0,0,0.03)',
+                      }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.82rem', color: '#1a1a1a', flex: 1 }}>
+                          {d.name || d.device_id}
+                        </span>
+                        <span style={{
+                          padding: '3px 8px', borderRadius: 6, fontSize: '0.68rem', fontWeight: 700,
+                          background: upToDate ? 'rgba(34,197,94,0.1)' : fv === 'unknown' ? 'rgba(0,0,0,0.05)' : 'rgba(245,158,11,0.1)',
+                          color: upToDate ? '#16a34a' : fv === 'unknown' ? '#9ca3af' : '#d97706',
+                        }}>
+                          v{fv} {upToDate ? '— up to date' : activeVer && fv !== 'unknown' ? '— update pending' : ''}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </SectionCard>
           )}
 

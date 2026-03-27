@@ -63,7 +63,7 @@ export const deviceService = {
       mappedDevices = devicesArray.map((device) => {
         const latest = device.latest_event || {};
         const lastSeenTime = device.last_seen ? new Date(device.last_seen) : new Date(0);
-        const isOnline = (new Date() - lastSeenTime) < 120000; // Online if seen in last 2 mins
+        const isOnline = (new Date() - lastSeenTime) < 360000; // Online if seen in last 6 mins (sniff heartbeat is every ~4 min)
 
         const deviceName = device.name_override || device.device_id;
 
