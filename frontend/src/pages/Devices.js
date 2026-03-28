@@ -212,6 +212,7 @@ const Devices = () => {
   
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isCalibratingAll, setIsCalibratingAll] = useState(false);
+  const [mapEditAfterAdd, setMapEditAfterAdd] = useState(false);
   const [deviceHistory, setDeviceHistory] = useState({}); // Map of deviceId -> array of readings
   const lastHistoryUpdateRef = useRef({});
   const { organization } = useOrganization();
@@ -243,7 +244,7 @@ const Devices = () => {
   useEffect(() => {
     const pollInterval = setInterval(() => {
       refreshDevices();
-    }, 5000);
+    }, 15000);
 
     return () => clearInterval(pollInterval);
   }, [refreshDevices]);
@@ -572,11 +573,18 @@ const Devices = () => {
 
         {/* ── Left: campus map ── */}
         <div className="mistio-map-panel">
+          {mapEditAfterAdd && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 mb-2 flex items-center justify-between">
+              <span className="text-sm text-blue-700">Drag the new sensor to its location on the map, then click Done Editing.</span>
+              <button onClick={() => setMapEditAfterAdd(false)} className="text-blue-400 hover:text-blue-600 text-lg leading-none">&times;</button>
+            </div>
+          )}
           <DeviceMap
             devices={[...filteredDevices, demoDevice]}
             selectedDevice={selectedDevice}
             onDeviceSelect={handleDeviceSelect}
-            onRefresh={refreshDevices}
+            onRefresh={() => { refreshDevices(); setMapEditAfterAdd(false); }}
+            isEditingExternal={mapEditAfterAdd || undefined}
             forceSkeletonMap={demoAlertActive}
           />
         </div>
@@ -684,7 +692,7 @@ const Devices = () => {
       <AddDeviceModal
         isOpen={isAddDeviceOpen}
         onClose={() => setIsAddDeviceOpen(false)}
-        onDeviceAdded={() => { refreshDevices(); }}
+        onDeviceAdded={() => { refreshDevices(); setMapEditAfterAdd(true); }}
       />
     </div>
   );

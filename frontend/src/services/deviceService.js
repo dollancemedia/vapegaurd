@@ -8,7 +8,7 @@ const API_BASE_URL = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
 // Create axios instance with default config
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 20000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -63,7 +63,7 @@ export const deviceService = {
       mappedDevices = devicesArray.map((device) => {
         const latest = device.latest_event || {};
         const lastSeenTime = device.last_seen ? new Date(device.last_seen) : new Date(0);
-        const isOnline = (new Date() - lastSeenTime) < 360000; // Online if seen in last 6 mins (sniff heartbeat is every ~4 min)
+        const isOnline = (new Date() - lastSeenTime) < 600000; // Online if seen in last 10 mins (sniff heartbeat every ~4 min, plus startup gap)
 
         const deviceName = device.name_override || device.device_id;
 
@@ -128,8 +128,8 @@ export const deviceService = {
       });
     } catch (error) {
       console.error('Error fetching devices:', error);
-      // Fallback to empty array if fetch fails, but we still want to add the test sensor
-      mappedDevices = [];
+      // Re-throw so useDevices preserves existing state instead of wiping to empty
+      throw error;
     }
 
     // Add Test Sensor for UI changes (Always added, even if backend fails)
