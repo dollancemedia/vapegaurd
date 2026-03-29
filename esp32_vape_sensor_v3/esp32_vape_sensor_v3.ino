@@ -61,7 +61,7 @@
 //  CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-const char* FIRMWARE_VERSION = "3.1.0";
+const char* FIRMWARE_VERSION = "3.2.0";
 
 const char* DEFAULT_SSID     = "sweethome";
 const char* DEFAULT_PASSWORD = "rahul2008";
@@ -412,14 +412,31 @@ void setup() {
   powerOnSensors();
   initSensors();
 
-  // BLE provisioning disabled for now — heap conflict with WiFiClientSecure
-  // TODO: re-enable once heap usage is optimized
-  // startBLEProvisioning();
+  // Start BLE provisioning — runs alongside WiFi setup.
+  // BLE is stopped BEFORE any HTTPS calls to avoid heap conflict with WiFiClientSecure.
+  startBLEProvisioning();
 
   // Connect WiFi
   neoSet(0, 0, 255);
   connectWiFiManager(forcePortal);
   wifiOn = (WiFi.status() == WL_CONNECTED);
+
+  if (!wifiOn && bleActive) {
+    // WiFi failed — keep BLE alive for up to 120s for provisioning
+    Serial.println("[BLE] WiFi failed, waiting for BLE provisioning (120s)...");
+    neoSet(0, 0, 255); // blue = waiting for BLE
+    unsigned long bleWaitStart = millis();
+    while (!bleProvisioned && millis() - bleWaitStart < 120000) {
+      delay(500);
+    }
+    if (bleProvisioned) {
+      checkBLEProvisioning(); // saves creds, stops BLE, connects WiFi
+      wifiOn = (WiFi.status() == WL_CONNECTED);
+    }
+  }
+
+  // Always stop BLE before HTTPS operations (heap conflict with WiFiClientSecure)
+  stopBLEProvisioning();
 
   if (wifiOn) {
     neoSet(0, 255, 0);
@@ -1347,9 +1364,16 @@ void startBLEProvisioning() {
 
 void stopBLEProvisioning() {
   if (bleActive) {
-    NimBLEDevice::deinit(true);
+    // Only stop advertising — NimBLEDevice::deinit() crashes on ESP32-C6
+    // (Store access fault in r_ble_hci_trans_cfg_hs during HCI transport teardown).
+    // Stopping advertising + disconnecting clients is enough; the NimBLE stack
+    // stays resident but idle (~15KB), which is acceptable given our heap budget.
+    NimBLEDevice::getAdvertising()->stop();
+    if (bleServer && bleServer->getConnectedCount() > 0) {
+      bleServer->disconnect(bleServer->getPeerInfo(0).getConnHandle());
+    }
     bleActive = false;
-    Serial.println("[BLE] Stopped");
+    Serial.println("[BLE] Stopped (advertising off)");
   }
 }
 
