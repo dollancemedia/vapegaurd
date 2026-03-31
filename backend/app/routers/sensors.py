@@ -297,7 +297,7 @@ async def get_sensor_status():
         raise HTTPException(status_code=500, detail=f"Error getting sensor status: {e}")
 
 @router.get("/sensor-data")
-async def get_sensor_data(limit: int = 50):
+async def get_sensor_data(limit: int = 200):
     """Recent sensor data formatted for the frontend dashboard.
     Fetches from 'samples' collection to show raw environmental data history.
     """

@@ -94,7 +94,7 @@ const float LOCAL_SPIKE_THRESHOLD = 8.0;
 const float LOCAL_GAS_DROP_RATIO  = 0.85;
 const float LOCAL_EWMA_ALPHA      = 0.1;
 const float LOCAL_EWMA_ALPHA_CAL  = 0.5;
-const float TAMPER_THRESHOLD      = 12.0; // vigorous shaking only — ignores bumps, doors, fans
+const float TAMPER_THRESHOLD      = 6.0;  // moderate shake triggers — still ignores bumps, doors, fans
 
 // ─── Power bank / LED ───────────────────────────────────────────────────────
 const unsigned long KEEPALIVE_INTERVAL = 30000;
@@ -1480,21 +1480,14 @@ void stopBLEProvisioning() {
 
   Serial.printf("[BLE] Stopping... heap before: %u\n", ESP.getFreeHeap());
 
-  // Stop advertising and disconnect any clients first
+  // Stop advertising and disconnect any clients — do NOT call deinit(),
+  // it causes a Store access fault crash on ESP32-C6.
   NimBLEDevice::getAdvertising()->stop();
   if (bleServer && bleServer->getConnectedCount() > 0) {
     bleServer->disconnect(bleServer->getPeerInfo(0).getConnHandle());
   }
   delay(100);  // let disconnect complete
-
-  // Attempt full deinit — previously crashed due to PSRAM bug (NULL allocs in HCI transport).
-  // With CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_INTERNAL fix, this should now work.
-  bool deinitOk = NimBLEDevice::deinit(true);  // true = free all objects
-  if (deinitOk) {
-    Serial.printf("[BLE] Full deinit OK — heap after: %u\n", ESP.getFreeHeap());
-  } else {
-    Serial.printf("[BLE] deinit returned false — heap: %u (stack stays resident)\n", ESP.getFreeHeap());
-  }
+  Serial.printf("[BLE] Stopped (no deinit) — heap after: %u\n", ESP.getFreeHeap());
 
   bleServer = nullptr;
   bleSsidChar = blePassChar = bleOrgChar = nullptr;
