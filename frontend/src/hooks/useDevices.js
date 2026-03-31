@@ -25,7 +25,37 @@ export const useDevices = (school) => {
       }
       setError(null);
       const data = await deviceService.getAllDevices(school);
-      setDevices(data);
+
+      // Merge with existing state so that WS-sourced sensor data isn't wiped
+      setDevices(prevDevices => {
+        if (prevDevices.length === 0) return data;
+
+        return data.map(newDevice => {
+          const existing = prevDevices.find(d => d.id === newDevice.id);
+          if (!existing) return newDevice;
+
+          // Keep the fresher sensorData: compare timestamps
+          const existingTs = existing.sensorData?.timestamp
+            ? new Date(existing.sensorData.timestamp).getTime() : 0;
+          const newTs = newDevice.sensorData?.timestamp
+            ? new Date(newDevice.sensorData.timestamp).getTime() : 0;
+
+          // If existing (WS) data is newer, preserve it; merge in any new metadata
+          if (existingTs >= newTs) {
+            return {
+              ...newDevice,
+              sensorData: existing.sensorData,
+              status: existing.status,
+            };
+          }
+
+          // API data is newer — merge so undefined fields don't overwrite real values
+          return {
+            ...newDevice,
+            sensorData: mergeDefined(existing.sensorData, newDevice.sensorData),
+          };
+        });
+      });
     } catch (err) {
       setError(err.message || 'Failed to fetch devices');
       console.error('Error fetching devices:', err);

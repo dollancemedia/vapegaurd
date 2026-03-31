@@ -11,24 +11,25 @@
  *   MSA311  — 3-axis accelerometer for tamper detection         (I2C 0x62)
  *   BMV080  — particulate matter sensor                         (I2C 0x57)
  *
- * Optimizations over v2:
- *   - BMV080 duty cycling: reset() stops laser between sniffs (~5mA saved)
- *   - MSA311 hardware INT wakeup instead of polling
- *   - ESP32-C6 light sleep between sniffs (~0.3mA vs 15mA)
- *   - WiFi ON only during POST, fully OFF between
- *   - Removed microphone (no hardware)
+ * Optimizations (v3.3.0):
+ *   - WiFi modem sleep (MIN_MODEM): radio sleeps between DTIM beacons (~15-20mA)
+ *     WiFi stays associated — POSTs are instant, no reconnect needed.
+ *   - MSA311 ISR-based tamper: latched interrupt + IRAM ISR catches every event,
+ *     even during delay(). Works continuously through all states.
  *   - MSA311 at 62.5Hz instead of 500Hz
+ *   - POST every sniff (every 60s) — cheap with modem sleep
+ *   - Removed microphone (no hardware)
  *
- * Power budget (60s sniff cycle):
- *   Sleep 53s × 0.4mA + Active 7s × 70mA = avg 8.5mA
- *   40Ah battery, 8h school day = 588 school days (3+ years)
+ * Power budget (60s sniff cycle, modem sleep):
+ *   Idle 53s × 18mA + Active 7s × 80mA = avg ~27mA
+ *   40Ah battery, 8h school day = ~185 school days (conservative)
  *
  * State Machine:
- *   STARTUP (150s) — warmup 90s + calibration 60s, WiFi ON, 1Hz POST
- *   SNIFF          — light sleep between reads. Wake every 60s, burst-read,
- *                    heartbeat POST every 4th sniff. MSA311 INT wakes on tamper.
+ *   STARTUP (60s)  — warmup 45s + calibration 15s, WiFi ON, 1Hz POST
+ *   SNIFF          — modem sleep between reads. Wake every 60s, burst-read,
+ *                    heartbeat POST every 4th sniff. MSA311 ISR wakes on tamper.
  *   DEEP_SENSE     — spike detected: 1Hz POST for 30s (no sleep, WiFi stays on)
- *   COOLDOWN       — 20s ignore spikes, light sleep. Then → SNIFF.
+ *   COOLDOWN       — 20s ignore spikes, modem sleep. Then → SNIFF.
  *
  * WiFi Provisioning:
  *   WiFiManager captive portal. Power cycle 3x in 10s to force portal.
@@ -61,7 +62,7 @@
 //  CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-const char* FIRMWARE_VERSION = "3.2.0";
+const char* FIRMWARE_VERSION = "3.4.1";
 
 const char* DEFAULT_SSID     = "sweethome";
 const char* DEFAULT_PASSWORD = "rahul2008";
@@ -77,13 +78,13 @@ String ORG_ID    = "irvington";     // overwritten from BLE provisioning
 char AP_NAME[24] = "MistioSensor";
 
 // ─── State machine timing ───────────────────────────────────────────────────
-const unsigned long WARMUP_SEC          = 90;
-const unsigned long CALIBRATION_SEC     = 60;
+const unsigned long WARMUP_SEC          = 45;
+const unsigned long CALIBRATION_SEC     = 15;
 const unsigned long STARTUP_SEC         = WARMUP_SEC + CALIBRATION_SEC;
 const unsigned long STARTUP_SAMPLE_MS   = 2000;
 
 unsigned long sniffIntervalMs    = 60000;
-unsigned long heartbeatInterval  = 4;
+unsigned long heartbeatInterval  = 1;
 unsigned long deepSenseSec       = 30;
 unsigned long deepSenseRateMs    = 1000;
 unsigned long cooldownSec        = 20;
@@ -93,7 +94,7 @@ const float LOCAL_SPIKE_THRESHOLD = 8.0;
 const float LOCAL_GAS_DROP_RATIO  = 0.85;
 const float LOCAL_EWMA_ALPHA      = 0.1;
 const float LOCAL_EWMA_ALPHA_CAL  = 0.5;
-const float TAMPER_THRESHOLD      = 2.0;
+const float TAMPER_THRESHOLD      = 12.0; // vigorous shaking only — ignores bumps, doors, fans
 
 // ─── Power bank / LED ───────────────────────────────────────────────────────
 const unsigned long KEEPALIVE_INTERVAL = 30000;
@@ -110,6 +111,9 @@ const int RING_BUFFER_SIZE = 4;
 // ─── Misc ───────────────────────────────────────────────────────────────────
 const unsigned long HTTP_TIMEOUT_MS    = 8000;
 const unsigned long WM_PORTAL_TIMEOUT  = 120;
+const unsigned long WDT_TIMEOUT_SEC    = 60;   // watchdog: reboot if loop hangs >60s
+const unsigned long POST_DEAD_MS       = 300000; // reboot if no successful POST in 5 min
+const uint32_t      HEAP_MIN_BYTES     = 30000;  // reboot if free heap drops below this
 const char* NTP_SERVER_1 = "pool.ntp.org";
 const char* NTP_SERVER_2 = "time.nist.gov";
 const unsigned long SCHEDULE_FETCH_INTERVAL = 300000;
@@ -123,6 +127,8 @@ const int RESET_COUNT_TRIGGER = 3;
 #define NEOPIXEL_PIN    9
 #define NEOPIXEL_COUNT  1
 #define MSA311_INT_PIN  5  // MSA311 INT1 → GPIO5 (wakes ESP32 from light sleep)
+#define SDA_PIN        19  // Feather ESP32-C6 Stemma QT SDA
+#define SCL_PIN        18  // Feather ESP32-C6 Stemma QT SCL
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  State machine
@@ -145,6 +151,7 @@ Adafruit_MSA311 msa;
 SparkFunBMV080  bmv;
 Preferences     prefs;
 Adafruit_NeoPixel neopixel(NEOPIXEL_COUNT, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+WiFiClientSecure  secClient;  // Reuse across POSTs to avoid heap fragmentation
 
 // ─── Sensor state ───────────────────────────────────────────────────────────
 bool bme680Available = false;
@@ -169,6 +176,11 @@ unsigned long lastKeepAlive    = 0;
 // ─── Tamper ─────────────────────────────────────────────────────────────────
 float prevAccelMag = 0;
 unsigned long lastTamperSent = 0;
+int16_t prevRawX = 0, prevRawY = 0, prevRawZ = 0;
+uint8_t frozenCount = 0;  // consecutive reads with identical raw values
+
+// ─── Health / Recovery ─────────────────────────────────────────────────────
+unsigned long lastSuccessfulPost = 0;  // millis() of last HTTP 200/201
 
 // ─── Schedule ───────────────────────────────────────────────────────────────
 int scheduleStartHour = 0, scheduleStartMin = 0;
@@ -177,16 +189,12 @@ bool scheduleEnabled  = false;
 uint8_t activeDays    = 0x3E; // Mon-Fri
 unsigned long lastScheduleFetch = 0;
 
-// ─── NimBLE Provisioning ───────────────────────────────────────────────────
+// ─── NimBLE Provisioning ────────────────────────────────────────────────────
 NimBLEServer         *bleServer = nullptr;
-NimBLECharacteristic *bleSsidChar;
-NimBLECharacteristic *blePassChar;
-NimBLECharacteristic *bleOrgChar;
+NimBLECharacteristic *bleSsidChar, *blePassChar, *bleOrgChar;
 bool bleProvisioned = false;
-String bleIncomingSSID = "";
-String bleIncomingPASS = "";
-String bleIncomingORG  = "";
-bool   bleActive       = false;
+bool bleActive       = false;
+String bleIncomingSSID, bleIncomingPASS, bleIncomingORG;
 
 // ─── OTA ───────────────────────────────────────────────────────────────────
 String OTA_CHECK_URL;
@@ -245,7 +253,7 @@ void  pushToRingBuffer();
 String getISOTimestamp();
 void  sleepHeavySensors();
 void  wakeHeavySensors();
-void  enterLightSleep(unsigned long durationMs);
+void  idleSleep(unsigned long durationMs);
 void  startBLEProvisioning();
 void  stopBLEProvisioning();
 void  checkBLEProvisioning();
@@ -342,39 +350,47 @@ void pushToRingBuffer() {
 }
 
 // =============================================================================
-//  LIGHT SLEEP — ESP32-C6 CPU off, RAM retained, GPIO + timer wakeup
+//  IDLE SLEEP — delay-based with modem sleep saving WiFi power
 // =============================================================================
-void enterLightSleep(unsigned long durationMs) {
-  // Arm timer wakeup
-  esp_sleep_enable_timer_wakeup((uint64_t)durationMs * 1000ULL); // microseconds
-
-  // Arm MSA311 INT pin as GPIO wakeup (active HIGH on motion)
-  if (msa311Available) {
-    esp_sleep_enable_gpio_wakeup();
-    gpio_wakeup_enable((gpio_num_t)MSA311_INT_PIN, GPIO_INTR_HIGH_LEVEL);
-  }
-
-  // Turn off NeoPixel before sleep
+void idleSleep(unsigned long durationMs) {
+  // CPU stays awake in delay() loop. WiFi modem sleep saves radio power.
+  // Poll MSA311 over I2C every second for tamper detection.
   neoOff();
-
-  // Enter light sleep — CPU stops, wakes on timer or GPIO
-  esp_light_sleep_start();
-
-  // We wake up here. Check why.
-  esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
-  if (cause == ESP_SLEEP_WAKEUP_GPIO) {
-    Serial.println("Woke: MSA311 tamper interrupt");
+  unsigned long start = millis();
+  unsigned long lastDbg = 0;
+  Serial.printf("idleSleep: %lus\n", durationMs / 1000);
+  while (millis() - start < durationMs) {
+    // Poll tamper every second via I2C
+    if (msa311Available) {
+      checkAndSendTamper();
+    }
+    // Debug: log accel state every 10s
+    unsigned long elapsed = millis() - start;
+    if (elapsed - lastDbg >= 10000) {
+      if (msa311Available) {
+        Serial.printf("  accel: mag=%.2f frozen=%d\n", prevAccelMag, frozenCount);
+      }
+      lastDbg = elapsed;
+    }
+    keepalivePulse();
+    esp_task_wdt_reset();  // feed watchdog during idle sleep
+    delay(1000);
   }
-  // Timer wakeup is the normal case — no log needed
 }
 
 // =============================================================================
 //  SETUP
 // =============================================================================
 void setup() {
-  esp_task_wdt_deinit();
+  esp_task_wdt_deinit();  // disable default WDT during setup (WiFi can take >30s)
+
   Serial.begin(115200);
-  delay(1000);
+  // Wait for USB-CDC to enumerate (essential after flash erase on ESP32-C6)
+  unsigned long serialWait = millis();
+  while (!Serial && (millis() - serialWait < 3000)) {
+    delay(10);
+  }
+  delay(500);
   Serial.printf("\n=== Mistio Sensor v%s ===\n", FIRMWARE_VERSION);
 
   // Load device ID from MAC, org/WiFi from NVS (if BLE-provisioned previously)
@@ -412,31 +428,21 @@ void setup() {
   powerOnSensors();
   initSensors();
 
-  // Start BLE provisioning — runs alongside WiFi setup.
-  // BLE is stopped BEFORE any HTTPS calls to avoid heap conflict with WiFiClientSecure.
+  // BLE provisioning — start advertising while WiFi connects.
+  // If no NVS creds exist, BLE lets a phone app provision WiFi + org.
+  // After provisioning (or if WiFi connects from saved creds), BLE is fully
+  // deinited to free all RAM for WiFiClientSecure HTTPS.
   startBLEProvisioning();
 
-  // Connect WiFi
+  // Connect WiFi (uses saved creds or WiFiManager portal)
   neoSet(0, 0, 255);
   connectWiFiManager(forcePortal);
   wifiOn = (WiFi.status() == WL_CONNECTED);
 
-  if (!wifiOn && bleActive) {
-    // WiFi failed — keep BLE alive for up to 120s for provisioning
-    Serial.println("[BLE] WiFi failed, waiting for BLE provisioning (120s)...");
-    neoSet(0, 0, 255); // blue = waiting for BLE
-    unsigned long bleWaitStart = millis();
-    while (!bleProvisioned && millis() - bleWaitStart < 120000) {
-      delay(500);
-    }
-    if (bleProvisioned) {
-      checkBLEProvisioning(); // saves creds, stops BLE, connects WiFi
-      wifiOn = (WiFi.status() == WL_CONNECTED);
-    }
+  // WiFi connected — shut down BLE to free heap for HTTPS
+  if (wifiOn) {
+    stopBLEProvisioning();
   }
-
-  // Always stop BLE before HTTPS operations (heap conflict with WiFiClientSecure)
-  stopBLEProvisioning();
 
   if (wifiOn) {
     neoSet(0, 255, 0);
@@ -451,16 +457,54 @@ void setup() {
 
   clearResetFlag();
 
+  // Init reusable TLS client (avoids heap fragmentation from repeated alloc/free)
+  secClient.setInsecure();
+  secClient.setTimeout(HTTP_TIMEOUT_MS / 1000);
+
+  // Set I2C timeout so bus lockup can't hang forever (ms)
+  Wire.setTimeout(100);
+
   enterState(STATE_STARTUP);
-  Serial.printf("Setup complete — entering STARTUP (150s warmup+calibration)\n");
+  lastSuccessfulPost = millis();  // grace period — don't reboot during startup
+
+  // Re-enable watchdog now that setup is done
+  esp_task_wdt_config_t wdt_config = {
+    .timeout_ms = WDT_TIMEOUT_SEC * 1000,
+    .idle_core_mask = 0,
+    .trigger_panic = true
+  };
+  esp_task_wdt_init(&wdt_config);
+  esp_task_wdt_add(NULL);  // add current task (loopTask)
+
+  Serial.printf("Setup complete — free heap: %u, WDT=%lus\n", ESP.getFreeHeap(), WDT_TIMEOUT_SEC);
 }
 
 // =============================================================================
 //  MAIN LOOP — State machine with light sleep
 // =============================================================================
 void loop() {
+
+  esp_task_wdt_reset();  // feed watchdog every loop iteration
+
   unsigned long now = millis();
   unsigned long elapsed = now - stateEnteredAt;
+
+  // ── Health checks — reboot if device is stuck ──
+  if (currentState != STATE_STARTUP) {
+    // No successful POST in 5 minutes → something is fundamentally broken
+    if (now - lastSuccessfulPost > POST_DEAD_MS) {
+      Serial.printf("REBOOT: no POST in %lus, heap=%u\n",
+        (now - lastSuccessfulPost) / 1000, ESP.getFreeHeap());
+      delay(100);
+      ESP.restart();
+    }
+    // Heap critically low → TLS can't allocate, reboot before hard crash
+    if (ESP.getFreeHeap() < HEAP_MIN_BYTES) {
+      Serial.printf("REBOOT: heap critical %u < %u\n", ESP.getFreeHeap(), HEAP_MIN_BYTES);
+      delay(100);
+      ESP.restart();
+    }
+  }
 
   keepalivePulse();
 
@@ -495,7 +539,7 @@ void loop() {
     if (wifiOn) wifiOff_disconnect();
     sleepHeavySensors();
     neoOff();
-    enterLightSleep(60000);
+    idleSleep(60000);
     keepalivePulse();
     return;
   }
@@ -530,8 +574,23 @@ void loop() {
           Serial.println("WARNING: No BMV080 data during calibration — baseline not set");
         }
 
-        wifiOff_disconnect();
-        sleepHeavySensors(); // BMV080 laser OFF
+        // Send one final POST so dashboard immediately sees state change
+        postSensorData();
+
+        // Enable WiFi modem sleep — radio powers down between DTIM beacons
+        // (~15-20mA vs 80mA active). WiFi stays associated so POSTs are instant.
+        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+        Serial.println("WiFi modem sleep enabled (MIN_MODEM)");
+        Serial.printf("WiFi: status=%d RSSI=%d\n", WiFi.status(), WiFi.RSSI());
+
+        // Switch BMV080 to duty cycle mode now that calibration is done
+        if (bmv080Available) {
+          bmv.setDutyCyclingPeriod(60);
+          bmv.setMode(SF_BMV080_MODE_DUTY_CYCLE);
+          Serial.printf("BMV080 switched to duty cycle (period=%ds)\n", bmv.dutyCyclingPeriod());
+        }
+
+        sleepHeavySensors();
         neoOff();
         enterState(STATE_SNIFF);
       } else {
@@ -542,20 +601,6 @@ void loop() {
 
     // ── SNIFF: light sleep between reads, wake on timer or tamper ───────
     case STATE_SNIFF: {
-      // Check if we woke from MSA311 tamper interrupt
-      esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
-      if (cause == ESP_SLEEP_WAKEUP_GPIO) {
-        // Tamper wakeup — send alert
-        Serial.println("TAMPER wakeup in SNIFF!");
-        checkAndSendTamper();
-        // Go back to sleep for remaining time
-        unsigned long timeSinceSniff = millis() - lastSniffTime;
-        if (timeSinceSniff < sniffIntervalMs) {
-          enterLightSleep(sniffIntervalMs - timeSinceSniff);
-          return;
-        }
-      }
-
       // Time for a sniff read
       now = millis();
       if (now - lastSniffTime >= sniffIntervalMs || lastSniffTime == 0) {
@@ -592,28 +637,32 @@ void loop() {
         if (baselineReady && isLocalSpike()) {
           Serial.println("!! LOCAL SPIKE — entering DEEP_SENSE !!");
           neoFlash(255, 0, 0, 200);
-          wakeHeavySensors(); // keep sensors on for 1Hz reads
-          wifiOn_connect();
-          if (wifiOn) {
-            postBatchData(); // send cached baseline
+          wakeHeavySensors();
+          if (WiFi.status() != WL_CONNECTED) wifiOn_connect();
+          if (WiFi.status() == WL_CONNECTED) {
+            postBatchData();
           }
           enterState(STATE_DEEP_SENSE);
           break;
         }
 
-        // Heartbeat POST every Nth sniff
-        if (sniffCount % heartbeatInterval == 0) {
+        // Heartbeat POST every Nth sniff (and always on first sniff after state change)
+        if (sniffCount % heartbeatInterval == 0 || sniffCount == 1) {
           Serial.println("Heartbeat POST");
           neoFlash(0, 255, 0, 150);
-          wifiOn_connect();
-          if (wifiOn) {
+          if (WiFi.status() != WL_CONNECTED) {
+            Serial.println("WiFi dropped, reconnecting...");
+            wifiOn_connect();
+          }
+          if (WiFi.status() == WL_CONNECTED) {
             postSensorData();
-            wifiOff_disconnect();
+          } else {
+            Serial.println("WiFi unavailable, skipping heartbeat");
           }
         } else {
-          Serial.printf("Sniff #%d: PM2.5=%.1f (base=%.1f, d=%.1f) Gas=%.1f (base=%.1f)\n",
+          Serial.printf("Sniff #%d: PM2.5=%.1f (base=%.1f, d=%.1f) Gas=%.1f (base=%.1f) WiFi=%d RSSI=%d Heap=%u\n",
             sniffCount, lastPM25, baselinePM25, lastPM25 - baselinePM25,
-            lastGas, baselineGas);
+            lastGas, baselineGas, WiFi.status(), WiFi.RSSI(), ESP.getFreeHeap());
         }
       }
 
@@ -625,7 +674,7 @@ void loop() {
           : 1000; // fallback 1s
         // Subtract a bit for keepalive timing
         if (sleepTime > KEEPALIVE_INTERVAL) sleepTime = KEEPALIVE_INTERVAL;
-        enterLightSleep(sleepTime);
+        idleSleep(sleepTime);
       }
       break;
     }
@@ -638,15 +687,14 @@ void loop() {
 
       readAllSensors();
 
-      if (!wifiOn) wifiOn_connect();
-      if (wifiOn) postSensorData();
+      if (WiFi.status() != WL_CONNECTED) wifiOn_connect();
+      if (WiFi.status() == WL_CONNECTED) postSensorData();
 
       if (msa311Available) checkAndSendTamper();
 
       if (elapsed >= deepSenseSec * 1000) {
         Serial.println("Deep sense complete — entering COOLDOWN");
-        // Send final reading with deep_sense_complete flag
-        if (wifiOn) {
+        if (WiFi.status() == WL_CONNECTED) {
           DynamicJsonDocument finalDoc(256);
           finalDoc["device_id"] = DEVICE_ID;
           finalDoc["org_id"]    = ORG_ID;
@@ -654,16 +702,14 @@ void loop() {
           finalDoc["timestamp"]  = getISOTimestamp();
           String finalPayload;
           serializeJson(finalDoc, finalPayload);
-          WiFiClientSecure sc;
-          sc.setInsecure();
+          secClient.stop();
           HTTPClient fhttp;
-          fhttp.begin(sc, DATA_URL);
+          fhttp.begin(secClient, DATA_URL);
           fhttp.addHeader("Content-Type", "application/json");
           fhttp.setTimeout(HTTP_TIMEOUT_MS);
           fhttp.POST(finalPayload);
           fhttp.end();
         }
-        wifiOff_disconnect();
         sleepHeavySensors();
         neoOff();
         enterState(STATE_COOLDOWN);
@@ -675,11 +721,6 @@ void loop() {
 
     // ── COOLDOWN: 20s, light sleep, tamper still active ─────────────────
     case STATE_COOLDOWN: {
-      // Check for tamper wakeup
-      if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_GPIO) {
-        checkAndSendTamper();
-      }
-
       if (elapsed >= cooldownSec * 1000) {
         Serial.println("Cooldown complete — back to SNIFF");
         neoOff();
@@ -689,7 +730,7 @@ void loop() {
         neoFlash(255, 80, 0, 50);
         unsigned long remaining = cooldownSec * 1000 - elapsed;
         unsigned long sleepTime = min(remaining, (unsigned long)5000);
-        enterLightSleep(sleepTime);
+        idleSleep(sleepTime);
       }
       break;
     }
@@ -716,37 +757,22 @@ void enterState(SensorState newState) {
 // =============================================================================
 void sleepHeavySensors() {
   if (!heavySensorsOn) return;
-
+  // Switch BMV080 back to duty cycle (low power, laser pulses periodically)
   if (bmv080Available) {
-    if (bmv.reset()) {
-      Serial.println("BMV080 laser OFF (reset to standby)");
-    } else {
-      Serial.println("BMV080 reset failed");
-    }
+    bmv.setMode(SF_BMV080_MODE_DUTY_CYCLE);
+    Serial.println("BMV080 -> duty cycle");
   }
-
   heavySensorsOn = false;
 }
 
 void wakeHeavySensors() {
   if (heavySensorsOn) return;
-
+  // Switch BMV080 to continuous for fast 1Hz readings during active sensing
   if (bmv080Available) {
-    if (bmv.init()) {
-      bmv.setMode(SF_BMV080_MODE_CONTINUOUS);
-      Serial.println("BMV080 laser ON");
-    } else {
-      Serial.println("BMV080 re-init failed, trying begin+init...");
-      if (bmv.begin(0x57, Wire) && bmv.init()) {
-        bmv.setMode(SF_BMV080_MODE_CONTINUOUS);
-        Serial.println("BMV080 recovered");
-      } else {
-        Serial.println("BMV080 FAILED to recover");
-        bmv080Available = false;
-      }
-    }
+    bmv.setMode(SF_BMV080_MODE_CONTINUOUS);
+    Serial.println("BMV080 -> continuous");
+    delay(500);  // brief warmup for stable readings
   }
-
   heavySensorsOn = true;
 }
 
@@ -845,8 +871,11 @@ void wifiOn_connect() {
   }
 
   Serial.println("WiFi connecting...");
+  // Clean disconnect first — after light sleep the stack can be stale
+  WiFi.disconnect(true);
+  delay(100);
   WiFi.mode(WIFI_STA);
-  WiFi.begin();
+  WiFi.begin(DEFAULT_SSID, DEFAULT_PASSWORD);
 
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
@@ -861,6 +890,8 @@ void wifiOn_connect() {
   } else {
     wifiOn = false;
     Serial.println("WiFi FAILED");
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
   }
 }
 
@@ -921,14 +952,18 @@ bool connectWiFiManager(bool forcePortal) {
 //  SENSOR POWER + INIT
 // =============================================================================
 void powerOnSensors() {
+  // Force a full power cycle on the I2C sensor rail
+  // (sensors may be in a bad state after ESP32 resets without losing power)
   pinMode(I2C_POWER_PIN, OUTPUT);
+  digitalWrite(I2C_POWER_PIN, LOW);
+  delay(200);  // Ensure sensors fully discharge
   digitalWrite(I2C_POWER_PIN, HIGH);
-  Serial.println("Stemma QT power ON");
-  delay(500);
+  Serial.println("Stemma QT power cycled ON");
+  delay(1500);  // Sensors need time to boot after power-on
 
-  Wire.begin();
+  Wire.begin(SDA_PIN, SCL_PIN);
   Wire.setClock(100000);
-  delay(250);
+  delay(500);
 
   Serial.println("I2C scan:");
   for (byte addr = 1; addr < 127; addr++) {
@@ -941,71 +976,110 @@ void powerOnSensors() {
 }
 
 void initSensors() {
-  // BME680
-  if (bme.begin(0x77) || bme.begin(0x76)) {
-    bme680Available = true;
-    bme.setTemperatureOversampling(BME680_OS_8X);
-    bme.setHumidityOversampling(BME680_OS_2X);
-    bme.setPressureOversampling(BME680_OS_4X);
-    bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
-    bme.setGasHeater(320, 150);
-    Serial.println("BME680 OK");
-  } else {
-    Serial.println("BME680 not found");
-  }
-
-  // MSA311 — low data rate + hardware interrupt for tamper
-  if (msa.begin()) {
-    msa311Available = true;
-    msa.setDataRate(MSA301_DATARATE_62_5_HZ); // low rate saves power (~15uA)
-    msa.setRange(MSA301_RANGE_4_G);
-    // Enable active motion interrupt on all axes
-    msa.enableInterrupts(false, false, true, true, true);
-    Serial.println("MSA311 OK — 62.5Hz, motion INT enabled");
-
-    sensors_event_t accel;
-    msa.getEvent(&accel);
-    prevAccelMag = sqrt(
-      accel.acceleration.x * accel.acceleration.x +
-      accel.acceleration.y * accel.acceleration.y +
-      accel.acceleration.z * accel.acceleration.z
-    );
-  } else {
-    Serial.println("MSA311 not found");
-  }
-
-  // BMV080
-  if (bmv.begin(0x57, Wire)) {
-    Serial.println("BMV080 connected");
-    if (bmv.init()) {
-      bmv080Available = true;
-      bmv.setMode(SF_BMV080_MODE_CONTINUOUS);
-      Serial.println("BMV080 OK — continuous mode");
-    } else {
-      Serial.println("BMV080 init() failed");
+  // Retry sensor init up to 3 times — after full flash erase, I2C bus
+  // can be flaky on first attempt (PHY calibration, power sequencing).
+  for (int attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      Serial.printf("Sensor init retry #%d...\n", attempt + 1);
+      Wire.end();
+      delay(500);
+      Wire.begin(SDA_PIN, SCL_PIN);
+      Wire.setClock(100000);
+      delay(500);
     }
-  } else {
-    Serial.println("BMV080 not found at 0x57");
+
+    // BME680
+    if (!bme680Available) {
+      if (bme.begin(0x77) || bme.begin(0x76)) {
+        bme680Available = true;
+        bme.setTemperatureOversampling(BME680_OS_8X);
+        bme.setHumidityOversampling(BME680_OS_2X);
+        bme.setPressureOversampling(BME680_OS_4X);
+        bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+        bme.setGasHeater(320, 150);
+        Serial.println("BME680 OK");
+      } else if (attempt == 2) {
+        Serial.println("BME680 not found after 3 attempts");
+      }
+    }
+
+    // MSA311 — low data rate + hardware interrupt for tamper
+    if (!msa311Available) {
+      if (msa.begin()) {
+        msa311Available = true;
+        msa.setDataRate(MSA301_DATARATE_62_5_HZ);
+        msa.setRange(MSA301_RANGE_4_G);
+        Serial.println("MSA311 OK — 62.5Hz, I2C polling for tamper");
+
+        sensors_event_t accel;
+        msa.getEvent(&accel);
+        prevAccelMag = sqrt(
+          accel.acceleration.x * accel.acceleration.x +
+          accel.acceleration.y * accel.acceleration.y +
+          accel.acceleration.z * accel.acceleration.z
+        );
+      } else if (attempt == 2) {
+        Serial.println("MSA311 not found after 3 attempts");
+      }
+    }
+
+    // BMV080
+    if (!bmv080Available) {
+      if (bmv.begin(0x57, Wire)) {
+        Serial.println("BMV080 connected");
+        if (bmv.init()) {
+          bmv080Available = true;
+          // Start in continuous mode for STARTUP calibration (need frequent reads).
+          // Switch to duty cycle after STARTUP completes.
+          bmv.setMode(SF_BMV080_MODE_CONTINUOUS);
+          Serial.println("BMV080 OK — continuous mode (will switch to duty cycle after STARTUP)");
+        } else if (attempt == 2) {
+          Serial.println("BMV080 init() failed after 3 attempts");
+        }
+      } else if (attempt == 2) {
+        Serial.println("BMV080 not found at 0x57 after 3 attempts");
+      }
+    }
+
+    // All sensors found — no need to retry
+    if (bme680Available && msa311Available && bmv080Available) break;
   }
+
+  Serial.printf("Sensors: BME680=%s MSA311=%s BMV080=%s\n",
+    bme680Available ? "YES" : "NO",
+    msa311Available ? "YES" : "NO",
+    bmv080Available ? "YES" : "NO");
 }
 
 // =============================================================================
 //  READ ALL SENSORS (STARTUP and DEEP_SENSE — no duty cycling)
 // =============================================================================
 void readAllSensors() {
-  if (bme680Available && bme.performReading()) {
-    lastTemp     = bme.temperature;
-    lastHumidity = bme.humidity;
-    lastPressure = bme.pressure / 100.0;
-    lastGas      = bme.gas_resistance / 1000.0;
+  if (bme680Available) {
+    if (bme.performReading()) {
+      lastTemp     = bme.temperature;
+      lastHumidity = bme.humidity;
+      lastPressure = bme.pressure / 100.0;
+      lastGas      = bme.gas_resistance / 1000.0;
+    } else {
+      Serial.println("BME680: performReading() failed");
+    }
   }
 
-  if (bmv080Available && bmv.readSensor()) {
-    lastPM1  = bmv.PM1();
-    lastPM25 = bmv.PM25();
-    lastPM10 = bmv.PM10();
-    lastBmvObstructed = bmv.isObstructed();
+  if (bmv080Available) {
+    if (bmv.readSensor()) {
+      lastPM1  = bmv.PM1();
+      lastPM25 = bmv.PM25();
+      lastPM10 = bmv.PM10();
+      lastBmvObstructed = bmv.isObstructed();
+    } else {
+      Serial.println("BMV080: readSensor() returned false (no new data)");
+    }
   }
+
+  Serial.printf("READ: T=%.1f H=%.1f G=%.1f PM2.5=%.1f [BME=%d BMV=%d]\n",
+    lastTemp, lastHumidity, lastGas, lastPM25,
+    bme680Available, bmv080Available);
 }
 
 // =============================================================================
@@ -1051,17 +1125,22 @@ bool postSensorData() {
   String payload;
   serializeJson(doc, payload);
 
-  WiFiClientSecure secClient;
-  secClient.setInsecure(); // skip cert verify for speed
+  Serial.printf("Heap before POST: %u\n", ESP.getFreeHeap());
+
+  // Stop any stale connection on the reusable client
+  secClient.stop();
+
   HTTPClient http;
   http.begin(secClient, DATA_URL);
   http.addHeader("Content-Type", "application/json");
   http.setTimeout(HTTP_TIMEOUT_MS);
+  http.setConnectTimeout(HTTP_TIMEOUT_MS);
   int code = http.POST(payload);
 
   bool ok = (code == 200 || code == 201);
-  String resp = http.getString();
   if (ok) {
+    lastSuccessfulPost = millis();
+    String resp = http.getString();
     DynamicJsonDocument respDoc(512);
     if (!deserializeJson(respDoc, resp) && respDoc.containsKey("prediction")) {
       String cls  = respDoc["prediction"]["predicted_class"].as<String>();
@@ -1069,9 +1148,11 @@ bool postSensorData() {
       Serial.printf("  -> %s (%.1f%%)\n", cls.c_str(), conf);
     }
   } else {
-    Serial.printf("POST error: %d — %s\n", code, resp.c_str());
+    Serial.printf("POST error: %d heap=%u\n", code, ESP.getFreeHeap());
   }
   http.end();
+
+  Serial.printf("Heap after POST: %u\n", ESP.getFreeHeap());
   return ok;
 }
 
@@ -1122,8 +1203,7 @@ bool postBatchData() {
       String payload;
       serializeJson(doc, payload);
 
-      WiFiClientSecure secClient;
-      secClient.setInsecure();
+      secClient.stop();
       HTTPClient http;
       http.begin(secClient, DATA_URL);
       http.addHeader("Content-Type", "application/json");
@@ -1131,7 +1211,7 @@ bool postBatchData() {
       int code = http.POST(payload);
       http.end();
 
-      if (code == 200 || code == 201) sent++;
+      if (code == 200 || code == 201) { sent++; lastSuccessfulPost = millis(); }
       s.valid = false;
     }
     idx = (idx + 1) % RING_BUFFER_SIZE;
@@ -1147,25 +1227,60 @@ bool postBatchData() {
 void checkAndSendTamper() {
   if (!msa311Available) return;
 
-  sensors_event_t accel;
-  msa.getEvent(&accel);
+  // Raw I2C read — bypasses Adafruit_MSA301 library which can return stale data
+  // MSA311 accel data registers: 0x02-0x07 (X_LSB, X_MSB, Y_LSB, Y_MSB, Z_LSB, Z_MSB)
+  Wire.beginTransmission(0x62);
+  Wire.write(0x02);
+  if (Wire.endTransmission(false) != 0) return;  // I2C error
 
-  float ax = accel.acceleration.x;
-  float ay = accel.acceleration.y;
-  float az = accel.acceleration.z;
+  uint8_t buf[6] = {0};
+  Wire.requestFrom((uint8_t)0x62, (uint8_t)6);
+  for (int i = 0; i < 6 && Wire.available(); i++) buf[i] = Wire.read();
+
+  int16_t rawX = (buf[1] << 8) | buf[0]; rawX >>= 4;  // MSA311 = 12-bit
+  int16_t rawY = (buf[3] << 8) | buf[2]; rawY >>= 4;
+  int16_t rawZ = (buf[5] << 8) | buf[4]; rawZ >>= 4;
+
+  // Detect frozen sensor — if raw values identical for 10+ consecutive reads, re-init
+  if (rawX == prevRawX && rawY == prevRawY && rawZ == prevRawZ) {
+    frozenCount++;
+    if (frozenCount >= 10) {
+      Serial.println("MSA311 frozen — re-init");
+      msa.begin();
+      msa.setDataRate(MSA301_DATARATE_62_5_HZ);
+      msa.setRange(MSA301_RANGE_4_G);
+      frozenCount = 0;
+      return;
+    }
+  } else {
+    frozenCount = 0;
+  }
+  prevRawX = rawX; prevRawY = rawY; prevRawZ = rawZ;
+
+  // Convert to m/s² (MSA311 at ±4g, 12-bit: range -2048..2047, so 1g = 512 LSB)
+  const float scale = 9.81f / 512.0f;  // 4g range, 12-bit: 1g = 512 LSB
+  float ax = rawX * scale;
+  float ay = rawY * scale;
+  float az = rawZ * scale;
   float mag = sqrt(ax * ax + ay * ay + az * az);
+
+  // Detect tamper using magnitude deviation from gravity (~9.8 m/s²)
+  float deviationFromGravity = abs(mag - 9.81);
   float delta = abs(mag - prevAccelMag);
   prevAccelMag = mag;
 
-  if (delta > TAMPER_THRESHOLD) {
+  bool tampered = (deviationFromGravity > TAMPER_THRESHOLD) || (delta > TAMPER_THRESHOLD);
+
+  if (tampered) {
     if (millis() - lastTamperSent < 5000) return;
     lastTamperSent = millis();
 
-    Serial.printf("TAMPER! delta=%.2f\n", delta);
+    Serial.printf("TAMPER! mag=%.2f gDev=%.2f delta=%.2f raw(%d,%d,%d)\n",
+      mag, deviationFromGravity, delta, rawX, rawY, rawZ);
     neoFlash(255, 0, 255, 300);
 
-    if (!wifiOn) wifiOn_connect();
-    if (!wifiOn) return;
+    if (WiFi.status() != WL_CONNECTED) wifiOn_connect();
+    if (WiFi.status() != WL_CONNECTED) return;
 
     DynamicJsonDocument doc(256);
     doc["device_id"] = DEVICE_ID;
@@ -1177,18 +1292,15 @@ void checkAndSendTamper() {
     String payload;
     serializeJson(doc, payload);
 
-    WiFiClientSecure secClient;
-    secClient.setInsecure();
+    secClient.stop();
     HTTPClient http;
     http.begin(secClient, TAMPER_URL);
     http.addHeader("Content-Type", "application/json");
     http.setTimeout(HTTP_TIMEOUT_MS);
     int code = http.POST(payload);
+    if (code == 200 || code == 201) lastSuccessfulPost = millis();
     Serial.printf("Tamper POST -> %d\n", code);
     http.end();
-
-    // Disconnect WiFi after tamper POST (we're in sleep mode)
-    wifiOff_disconnect();
   }
 }
 
@@ -1215,8 +1327,7 @@ void syncTime() {
 }
 
 void fetchSchedule() {
-  WiFiClientSecure secClient;
-  secClient.setInsecure();
+  secClient.stop();
   HTTPClient http;
   http.begin(secClient, SCHEDULE_URL);
   http.setTimeout(HTTP_TIMEOUT_MS);
@@ -1290,7 +1401,7 @@ bool isWithinSchedule() {
 }
 
 // =============================================================================
-//  NimBLE PROVISIONING
+//  NimBLE PROVISIONING — Minimal config, safe deinit for ESP32-C6
 // =============================================================================
 class BLEProvisionCallback : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic *pCharacteristic) {
@@ -1321,6 +1432,8 @@ class MistioBLEServerCB : public NimBLEServerCallbacks {
 };
 
 void startBLEProvisioning() {
+  Serial.printf("[BLE] Heap before init: %u\n", ESP.getFreeHeap());
+
   uint8_t mac[6];
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
   char bleName[24];
@@ -1359,22 +1472,33 @@ void startBLEProvisioning() {
   adv->start();
 
   bleActive = true;
-  Serial.println("[BLE] Advertising as: " + String(bleName));
+  Serial.printf("[BLE] Advertising as: %s (heap: %u)\n", bleName, ESP.getFreeHeap());
 }
 
 void stopBLEProvisioning() {
-  if (bleActive) {
-    // Only stop advertising — NimBLEDevice::deinit() crashes on ESP32-C6
-    // (Store access fault in r_ble_hci_trans_cfg_hs during HCI transport teardown).
-    // Stopping advertising + disconnecting clients is enough; the NimBLE stack
-    // stays resident but idle (~15KB), which is acceptable given our heap budget.
-    NimBLEDevice::getAdvertising()->stop();
-    if (bleServer && bleServer->getConnectedCount() > 0) {
-      bleServer->disconnect(bleServer->getPeerInfo(0).getConnHandle());
-    }
-    bleActive = false;
-    Serial.println("[BLE] Stopped (advertising off)");
+  if (!bleActive) return;
+
+  Serial.printf("[BLE] Stopping... heap before: %u\n", ESP.getFreeHeap());
+
+  // Stop advertising and disconnect any clients first
+  NimBLEDevice::getAdvertising()->stop();
+  if (bleServer && bleServer->getConnectedCount() > 0) {
+    bleServer->disconnect(bleServer->getPeerInfo(0).getConnHandle());
   }
+  delay(100);  // let disconnect complete
+
+  // Attempt full deinit — previously crashed due to PSRAM bug (NULL allocs in HCI transport).
+  // With CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_INTERNAL fix, this should now work.
+  bool deinitOk = NimBLEDevice::deinit(true);  // true = free all objects
+  if (deinitOk) {
+    Serial.printf("[BLE] Full deinit OK — heap after: %u\n", ESP.getFreeHeap());
+  } else {
+    Serial.printf("[BLE] deinit returned false — heap: %u (stack stays resident)\n", ESP.getFreeHeap());
+  }
+
+  bleServer = nullptr;
+  bleSsidChar = blePassChar = bleOrgChar = nullptr;
+  bleActive = false;
 }
 
 void checkBLEProvisioning() {
@@ -1461,10 +1585,8 @@ void checkForOTA() {
   Serial.printf("[OTA] Checking for updates (current: %s)...\n", FIRMWARE_VERSION);
   lastOtaCheck = millis();
 
-  // Use a separate scope so HTTPClient/WiFiClientSecure are fully destroyed before returning
   {
-    WiFiClientSecure secClient;
-    secClient.setInsecure();
+    secClient.stop();
     HTTPClient http;
 
     String url = OTA_CHECK_URL + "?device_id=" + DEVICE_ID + "&current_version=" + FIRMWARE_VERSION;

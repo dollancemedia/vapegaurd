@@ -84,7 +84,7 @@ const NotificationController = () => {
       // Filter based on settings
       if (predictedClass === 'offline' && !settings.onlineStatus) return;
       
-      const isCritical = ['vape', 'fire', 'alarm'].includes(predictedClass);
+      const isCritical = ['vape', 'fire', 'alarm', 'tamper'].includes(predictedClass);
       const isWarning = ['suspected', 'CONFIRMING', 'calibrating', 'CALIBRATING'].includes(predictedClass);
       
       if (isCritical && !settings.criticalAlerts) return;
