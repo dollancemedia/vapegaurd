@@ -17,7 +17,11 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, 
 // ── Formatters ────────────────────────────────────────────────────────────────
 const toF   = (c) => (c != null ? ((c * 9) / 5 + 32).toFixed(1) : '--');
 const fmtGas = (v) => { const n = Number(v || 0); return n > 1000 ? (n / 1000).toFixed(1) : n.toFixed(1); };
-const fmtTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const fmtTime = (ts) => {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return isNaN(d) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
 
 // ── Status resolver ───────────────────────────────────────────────────────────
 const getStatus = (device) => {
@@ -391,7 +395,7 @@ const RecentEvents = ({ history }) => {
               </span>
               <span style={{ fontSize: '0.65rem', fontWeight: 700, color: dot,
                 background: dot + '1a', borderRadius: 4, padding: '1px 5px', fontFamily: 'var(--font-body)', flexShrink: 0 }}>
-                {h.confidence}%
+                {(h.confidence ?? 0).toFixed(1)}%
               </span>
             </div>
           );

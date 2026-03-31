@@ -149,7 +149,7 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
                 event_doc["_id"] = stored_event_id
                 
                 # Broadcast Event Update to Dashboard
-                await broadcast_event("sensor_data", event_doc)
+                await broadcast_event("event_update", event_doc)
                 
                 # Handle Notifications
                 await process_notifications(event_doc, notification_type, payload.get("org_id"))

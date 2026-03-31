@@ -224,6 +224,17 @@ const Devices = () => {
     
   const { devices, loading, error, refreshDevices, pingDevice, updateDeviceStatus, deleteDevice } = useDevices(school);
 
+  // Keep a ref so handleWebSocketMessage never captures a stale devices array (F1)
+  const devicesRef = useRef(devices);
+  useEffect(() => { devicesRef.current = devices; }, [devices]);
+
+  // Re-sync selectedDevice from devices array after each poll (F4)
+  useEffect(() => {
+    if (!selectedDevice) return;
+    const updated = devices.find(d => d.id === selectedDevice.id);
+    if (updated) setSelectedDevice(prev => ({ ...prev, ...updated }));
+  }, [devices]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Get Clerk token
   const { getToken } = useAuth();
   const [token, setToken] = useState(null);
@@ -322,7 +333,7 @@ const Devices = () => {
       const deviceId = payload.device_id || (payload.sensor_data && payload.sensor_data.device_id);
       
       if (deviceId) {
-        const deviceFromState = devices.find(d => d.id === deviceId);
+        const deviceFromState = devicesRef.current.find(d => d.id === deviceId);
         const latestFullSensorData = deviceFromState?.sensorData || {};
 
         const reading = payload.sensor_data || payload;
@@ -383,7 +394,19 @@ const Devices = () => {
         });
       }
     }
-  }, [devices, updateDeviceStatus]);
+
+    // Handle event_update (confirmed events — B1 fix: status update only, no sensor data overwrite)
+    if (message.type === 'event_update') {
+      const payload = message.data || message;
+      const deviceId = payload.device_id;
+      if (deviceId && payload.status === 'confirmed') {
+        updateDeviceStatus(deviceId, {
+          lastSeen: new Date().toISOString(),
+          isOnline: true,
+        });
+      }
+    }
+  }, [updateDeviceStatus]);
 
   useWebSocket('/ws/events', {
     onMessage: handleWebSocketMessage,

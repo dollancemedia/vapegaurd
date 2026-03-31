@@ -40,8 +40,7 @@ const NotificationController = () => {
   }, []);
 
   // Use ref for tracking time to avoid re-creating the WebSocket handler (which causes reconnects)
-  const lastNotificationTimeRef = useRef({}); 
-  const offlineDevicesRef = useRef(new Set());
+  const lastNotificationTimeRef = useRef({});
 
   // Determine school ID
   const school = (organization?.name === 'Admin' || organization?.slug === 'admin') 
@@ -114,70 +113,6 @@ const NotificationController = () => {
       setEvents([newEvent]);
   }, [settings]);
 
-  // Polling backup to ensure we catch persistent vape states even if WS misses them
-  useEffect(() => {
-    const checkDevices = async () => {
-        try {
-            // Use the school ID to fetch only relevant devices
-            const devices = await deviceService.getAllDevices(school);
-            
-            devices.forEach(device => {
-                const loc = device.location || {};
-                const locationStr = `Building: ${loc.building || '?'}, Room: ${loc.room || '?'}`;
-
-                // Handle offline detection
-                if (device.status === 'offline') {
-                    if (!offlineDevicesRef.current.has(device.id)) {
-                        // Device just went offline
-                        offlineDevicesRef.current.add(device.id);
-                        processAlert(
-                            device.id,
-                            'offline',
-                            100, // 100% confidence it's offline
-                            locationStr,
-                            new Date().toISOString()
-                        );
-                    }
-                    return;
-                } else {
-                    // Device is online, remove from offline set
-                    if (offlineDevicesRef.current.has(device.id)) {
-                        offlineDevicesRef.current.delete(device.id);
-                    }
-                }
-
-                // Check timestamp to ensure data is fresh (within last 60 seconds)
-                const dataTime = new Date(device.sensorData.timestamp).getTime();
-                const now = Date.now();
-                if (now - dataTime > 60000) {
-                    return; // Data is too old, likely a stale state
-                }
-
-                const pClass = device.sensorData?.predictedClass;
-                const status = device.status;
-                const isAlarm = pClass === 'vape' || pClass === 'fire';
-                const isSuspicious = pClass === 'suspected' || status === 'CONFIRMING';
-
-                if (device.sensorData && (isAlarm || isSuspicious)) {
-                    processAlert(
-                        device.id,
-                        isAlarm ? pClass : 'suspected',
-                        device.sensorData.confidence,
-                        locationStr,
-                        device.sensorData.timestamp
-                    );
-                }
-            });
-        } catch (error) {
-            // Silent error to avoid console spam
-        }
-    };
-
-    // Poll every 5 seconds, same as the Devices page
-    const intervalId = setInterval(checkDevices, 5000);
-    return () => clearInterval(intervalId);
-  }, [processAlert, school]);
-
   const handleWebSocketMessage = useCallback((message) => {
     if (!message) return;
 
@@ -212,6 +147,22 @@ const NotificationController = () => {
         }
 
         processAlert(finalDeviceId, predictedClass, confidence, locationStr, reading.timestamp);
+      }
+    }
+
+    // Handle confirmed events broadcast (B1 fix: event_update type)
+    if (message.type === 'event_update') {
+      const payload = message.data || message;
+      const deviceId = payload.device_id;
+      if (allowedDevices && !allowedDevices.has(deviceId)) return;
+      const predictedClass = payload.top_class;
+      if (predictedClass === 'vape' || predictedClass === 'fire') {
+        const confidence = (payload.top_prob ?? 0) * 100;
+        const loc = payload.location || {};
+        const locationStr = loc.building
+          ? `Building: ${loc.building}, Room: ${loc.room || '?'}`
+          : 'Unknown Location';
+        processAlert(deviceId, predictedClass, confidence, locationStr, payload.timestamp);
       }
     }
 
