@@ -67,7 +67,7 @@ const Ring = ({ value = 0, color = '#00C2CB', size = 58 }) => {
         strokeWidth="4.5" strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
         style={{ transform: 'rotate(-90deg)', transformOrigin: `${cx}px ${cy}px`, transition: 'stroke-dasharray 0.5s ease' }} />
       <text x={cx} y={cy + 4} textAnchor="middle" fontSize={size * 0.18} fontWeight="700" fill={color}
-        style={{ fontFamily: 'var(--font-body)' }}>{value}%</text>
+        style={{ fontFamily: 'var(--font-body)' }}>{value.toFixed(2)}%</text>
     </svg>
   );
 };
