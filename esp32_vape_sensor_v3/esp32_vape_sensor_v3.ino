@@ -32,13 +32,14 @@
  *   COOLDOWN       — 20s ignore spikes, modem sleep. Then → SNIFF.
  *
  * WiFi Provisioning:
- *   WiFiManager captive portal. Power cycle 3x in 10s to force portal.
- *   AP name: "MistioSensor-001"
+ *   NimBLE only. On first boot (no NVS creds), device advertises as MISTIO-XXXXXX
+ *   and blocks until a phone app writes SSID/PASS/ORG to the BLE characteristics.
+ *   Creds are saved to NVS and used on all future boots automatically.
  */
 
 #include <WiFi.h>
 #include <esp_wifi.h>
-#include <WiFiManager.h>
+// #include <WiFiManager.h>  // removed — BLE provisioning replaces AP portal
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
@@ -62,10 +63,10 @@
 //  CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-const char* FIRMWARE_VERSION = "3.4.1";
+const char* FIRMWARE_VERSION = "3.4.4";
 
-const char* DEFAULT_SSID     = "sweethome";
-const char* DEFAULT_PASSWORD = "rahul2008";
+const char* DEFAULT_SSID     = "";  // populated from NVS by loadDeviceIdentity()
+const char* DEFAULT_PASSWORD = "";  // populated from NVS by loadDeviceIdentity()
 
 const char* BACKEND_HOST = "vapegaurd-production.up.railway.app";
 const bool  USE_HTTPS    = true;
@@ -74,8 +75,7 @@ String DEVICE_ID = "ESP32_C6_001";  // overwritten from NVS or MAC
 const String LOCATION  = "School Bathroom";
 String ORG_ID    = "irvington";     // overwritten from BLE provisioning
 
-// AP name built from last 4 of MAC in setup() — unique per device
-char AP_NAME[24] = "MistioSensor";
+// AP_NAME removed — WiFiManager AP portal replaced by BLE provisioning
 
 // ─── State machine timing ───────────────────────────────────────────────────
 const unsigned long WARMUP_SEC          = 45;
@@ -110,14 +110,14 @@ const int RING_BUFFER_SIZE = 4;
 
 // ─── Misc ───────────────────────────────────────────────────────────────────
 const unsigned long HTTP_TIMEOUT_MS    = 8000;
-const unsigned long WM_PORTAL_TIMEOUT  = 120;
+// const unsigned long WM_PORTAL_TIMEOUT  = 120;  // removed with WiFiManager
 const unsigned long WDT_TIMEOUT_SEC    = 60;   // watchdog: reboot if loop hangs >60s
 const unsigned long POST_DEAD_MS       = 300000; // reboot if no successful POST in 5 min
 const uint32_t      HEAP_MIN_BYTES     = 30000;  // reboot if free heap drops below this
 const char* NTP_SERVER_1 = "pool.ntp.org";
 const char* NTP_SERVER_2 = "time.nist.gov";
 const unsigned long SCHEDULE_FETCH_INTERVAL = 300000;
-const int RESET_COUNT_TRIGGER = 3;
+// const int RESET_COUNT_TRIGGER = 3;  // removed with WiFiManager triple-reset
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Hardware pins — Adafruit Feather ESP32-C6
@@ -192,14 +192,14 @@ unsigned long lastScheduleFetch = 0;
 // ─── NimBLE Provisioning ────────────────────────────────────────────────────
 NimBLEServer         *bleServer = nullptr;
 NimBLECharacteristic *bleSsidChar, *blePassChar, *bleOrgChar;
-bool bleProvisioned = false;
+volatile bool bleProvisioned = false;
 bool bleActive       = false;
 String bleIncomingSSID, bleIncomingPASS, bleIncomingORG;
 
 // ─── OTA ───────────────────────────────────────────────────────────────────
 String OTA_CHECK_URL;
 unsigned long lastOtaCheck = 0;
-const unsigned long OTA_CHECK_INTERVAL = 86400000UL;  // 24 hours
+const unsigned long OTA_CHECK_INTERVAL = 3600000UL;  // 1 hours
 
 // ─── Pre-trigger ring buffer ────────────────────────────────────────────────
 struct SensorSnapshot {
@@ -225,7 +225,7 @@ float lastTemp = 0, lastHumidity = 0, lastPressure = 0, lastGas = 0;
 bool  lastBmvObstructed = false;
 
 // ─── Forward declarations ───────────────────────────────────────────────────
-bool  connectWiFiManager(bool forcePortal);
+// bool  connectWiFiManager(bool forcePortal);  // removed — BLE provisioning only
 void  wifiOn_connect();
 void  wifiOff_disconnect();
 void  syncTime();
@@ -244,8 +244,8 @@ void  enterState(SensorState newState);
 void  blinkLED(int times, int delayMs);
 void  keepalivePulse();
 String buildUrl(const char* path);
-bool  shouldForcePortal();
-void  clearResetFlag();
+// bool  shouldForcePortal();  // removed with WiFiManager
+// void  clearResetFlag();      // removed with WiFiManager
 void  neoSet(uint8_t r, uint8_t g, uint8_t b);
 void  neoOff();
 void  neoFlash(uint8_t r, uint8_t g, uint8_t b, int durationMs);
@@ -261,40 +261,10 @@ void  checkForOTA();
 void  loadDeviceIdentity();
 
 // =============================================================================
-//  TRIPLE-RESET DETECTION
+//  TRIPLE-RESET DETECTION — removed (was for WiFiManager AP portal)
 // =============================================================================
-bool shouldForcePortal() {
-  prefs.begin("mistio", false);
-  bool pending = prefs.getBool("rstPending", false);
-  int resetCount;
-  if (pending) {
-    resetCount = prefs.getInt("rstCount", 0) + 1;
-  } else {
-    resetCount = 1;
-  }
-  prefs.putInt("rstCount", resetCount);
-  prefs.putBool("rstPending", true);
-  prefs.end();
-
-  Serial.printf("Reset count: %d / %d\n", resetCount, RESET_COUNT_TRIGGER);
-
-  if (resetCount >= RESET_COUNT_TRIGGER) {
-    prefs.begin("mistio", false);
-    prefs.putInt("rstCount", 0);
-    prefs.putBool("rstPending", false);
-    prefs.end();
-    Serial.println(">>> TRIPLE RESET — forcing WiFi portal <<<");
-    return true;
-  }
-  return false;
-}
-
-void clearResetFlag() {
-  prefs.begin("mistio", false);
-  prefs.putBool("rstPending", false);
-  prefs.putInt("rstCount", 0);
-  prefs.end();
-}
+// bool shouldForcePortal() { ... }
+// void clearResetFlag() { ... }
 
 // =============================================================================
 //  NEOPIXEL HELPERS
@@ -397,11 +367,7 @@ void setup() {
   loadDeviceIdentity();
   Serial.println("Device: " + DEVICE_ID);
 
-  // Build unique AP name from MAC address (last 4 hex chars)
-  uint8_t mac[6];
-  esp_read_mac(mac, ESP_MAC_WIFI_STA);
-  snprintf(AP_NAME, sizeof(AP_NAME), "Mistio-%02X%02X", mac[4], mac[5]);
-  Serial.printf("AP Name: %s\n", AP_NAME);
+  // AP_NAME removed — BLE advertises its own MAC-based name in startBLEProvisioning()
 
   DATA_URL     = buildUrl("/api/sensors/data");
   TAMPER_URL   = buildUrl("/api/sensors/tamper");
@@ -423,20 +389,42 @@ void setup() {
     ringBuffer[i].valid = false;
   }
 
-  bool forcePortal = shouldForcePortal();
-
   powerOnSensors();
   initSensors();
 
-  // BLE provisioning — start advertising while WiFi connects.
-  // If no NVS creds exist, BLE lets a phone app provision WiFi + org.
-  // After provisioning (or if WiFi connects from saved creds), BLE is fully
-  // deinited to free all RAM for WiFiClientSecure HTTPS.
+  // BLE provisioning — always start advertising on boot.
+  // If NVS creds exist (prior BLE provisioning), WiFi connects immediately and BLE shuts down.
+  // If no NVS creds, device blocks here until a phone app writes SSID/PASS/ORG via BLE.
   startBLEProvisioning();
 
-  // Connect WiFi (uses saved creds or WiFiManager portal)
+  // Connect WiFi — NVS-saved creds only (no AP portal)
   neoSet(0, 0, 255);
-  connectWiFiManager(forcePortal);
+  if (strlen(DEFAULT_SSID) > 0) {
+    // loadDeviceIdentity() populated DEFAULT_SSID/DEFAULT_PASSWORD from NVS
+    Serial.printf("Connecting WiFi from NVS: %s\n", DEFAULT_SSID);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(DEFAULT_SSID, DEFAULT_PASSWORD);
+    unsigned long wStart = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - wStart < 15000) {
+      delay(250);
+      Serial.print(".");
+    }
+    Serial.println();
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("WiFi OK: " + WiFi.localIP().toString() + " (" + String(WiFi.RSSI()) + " dBm)");
+    } else {
+      Serial.println("WiFi failed with saved creds");
+    }
+  } else {
+    // No saved creds — block until BLE app provisions the device
+    Serial.println("[BLE] No WiFi creds — waiting for BLE provisioning...");
+    neoSet(128, 0, 128); // purple = awaiting provisioning
+    while (!bleProvisioned) {
+      delay(100);
+    }
+    checkBLEProvisioning(); // saves creds to NVS, connects WiFi, syncs time
+  }
+
   wifiOn = (WiFi.status() == WL_CONNECTED);
 
   // WiFi connected — shut down BLE to free heap for HTTPS
@@ -454,8 +442,6 @@ void setup() {
   } else {
     neoFlash(255, 0, 0, 1000);
   }
-
-  clearResetFlag();
 
   // Init reusable TLS client (avoids heap fragmentation from repeated alloc/free)
   secClient.setInsecure();
@@ -902,51 +888,8 @@ void wifiOff_disconnect() {
 }
 
 // =============================================================================
-//  WiFiManager
+//  WiFiManager — removed, BLE provisioning replaces AP portal
 // =============================================================================
-bool connectWiFiManager(bool forcePortal) {
-  // Try hardcoded defaults first (fastest path, no portal needed)
-  if (!forcePortal && strlen(DEFAULT_SSID) > 0) {
-    Serial.printf("Trying default WiFi: %s\n", DEFAULT_SSID);
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(DEFAULT_SSID, DEFAULT_PASSWORD);
-    unsigned long start = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
-      delay(250);
-      Serial.print(".");
-    }
-    Serial.println();
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.println("WiFi OK (defaults) — " + WiFi.localIP().toString() + " (" + String(WiFi.RSSI()) + " dBm)");
-      return true;
-    }
-    Serial.println("Default creds failed, trying WiFiManager...");
-    WiFi.disconnect(true);
-  }
-
-  WiFiManager wm;
-  wm.setConfigPortalTimeout(WM_PORTAL_TIMEOUT);
-  wm.setConnectTimeout(15);
-  wm.setDarkMode(true);
-  wm.setShowInfoUpdate(false);
-  wm.setShowInfoErase(false);
-
-  if (forcePortal) {
-    Serial.println("Opening WiFi portal (forced)...");
-    blinkLED(10, 100);
-    wm.startConfigPortal(AP_NAME);
-  } else {
-    Serial.println("Connecting WiFi (saved creds)...");
-    wm.autoConnect(AP_NAME);
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("WiFi OK — " + WiFi.localIP().toString() + " (" + String(WiFi.RSSI()) + " dBm)");
-    return true;
-  }
-  Serial.println("WiFi not configured");
-  return false;
-}
 
 // =============================================================================
 //  SENSOR POWER + INIT
@@ -1404,7 +1347,7 @@ bool isWithinSchedule() {
 //  NimBLE PROVISIONING — Minimal config, safe deinit for ESP32-C6
 // =============================================================================
 class BLEProvisionCallback : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic *pCharacteristic) {
+  void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override {
     std::string value = pCharacteristic->getValue();
     if (pCharacteristic == bleSsidChar) {
       bleIncomingSSID = String(value.c_str());
@@ -1425,7 +1368,7 @@ class BLEProvisionCallback : public NimBLECharacteristicCallbacks {
 };
 
 class MistioBLEServerCB : public NimBLEServerCallbacks {
-  void onDisconnect(NimBLEServer *pServer) {
+  void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override {
     NimBLEDevice::startAdvertising();
     Serial.println("[BLE] Client disconnected, re-advertising");
   }
@@ -1460,9 +1403,12 @@ void startBLEProvisioning() {
 
   svc->start();
 
+  // Split across two 31-byte packets to avoid overflow:
+  // Main adv: service UUID only (flags 3B + 128-bit UUID 18B = 21B — fits)
+  // Scan response: device name only (20B — fits)
+  // Both together = everything Chrome needs for namePrefix filter + optionalServices
   NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
   NimBLEAdvertisementData advData;
-  advData.setName(bleName);
   advData.addServiceUUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
   adv->setAdvertisementData(advData);
 
@@ -1579,11 +1525,12 @@ void checkForOTA() {
   lastOtaCheck = millis();
 
   {
-    secClient.stop();
+    WiFiClientSecure checkClient;
+    checkClient.setInsecure();
     HTTPClient http;
 
     String url = OTA_CHECK_URL + "?device_id=" + DEVICE_ID + "&current_version=" + FIRMWARE_VERSION;
-    http.begin(secClient, url);
+    http.begin(checkClient, url);
     http.setTimeout(10000);
 
     int code = http.GET();
