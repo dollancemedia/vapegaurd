@@ -76,8 +76,10 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditi
     const status = device.status || 'monitoring'; // Backend sends "CALIBRATING", "CONFIRMING", "IDLE" (monitoring)
     const predictedClass = device.sensorData?.predictedClass;
 
-    if (predictedClass === 'vape' || predictedClass === 'fire') return { color: '#EF4444', pulse: true, icon: '⚠️' }; // Red
-    if (status === 'alarm') return { color: '#EF4444', pulse: false, icon: '🚨' }; // Red
+    const conf = device.sensorData?.confidence ?? 0;
+    if ((predictedClass === 'vape' || predictedClass === 'fire') && conf >= 40) return { color: '#EF4444', pulse: true, icon: '⚠️' }; // Red
+    if (status === 'alarm' && conf >= 40) return { color: '#EF4444', pulse: false, icon: '🚨' }; // Red
+    if (predictedClass === 'vape' && conf > 0 && conf < 40) return { color: '#F97316', pulse: false, icon: '👀' }; // Orange — uncertain
     
     // New States
     if (status === 'WARMUP' || predictedClass === 'warmup') return { color: '#EAB308', pulse: false, icon: '⏳' }; // Yellow
@@ -472,7 +474,9 @@ const DeviceMap = ({ devices, selectedDevice, onDeviceSelect, onRefresh, isEditi
           const statusCfg = (() => {
             const s = hoveredDevice.status;
             const pc = sd?.predictedClass;
-            if (pc === 'vape' || s === 'alarm')    return { label: 'Alert',     bg: 'rgba(239,68,68,0.18)',   color: '#ef4444' };
+            const hConf = sd?.confidence ?? 0;
+            if ((pc === 'vape' || s === 'alarm') && hConf >= 40) return { label: 'Alert', bg: 'rgba(239,68,68,0.18)', color: '#ef4444' };
+            if (pc === 'vape' && hConf > 0 && hConf < 40) return { label: 'Uncertain', bg: 'rgba(249,115,22,0.18)', color: '#f97316' };
             if (s === 'CONFIRMING' || pc === 'suspected') return { label: 'Suspected', bg: 'rgba(249,115,22,0.18)', color: '#f97316' };
             if (s === 'COOLDOWN')                  return { label: 'Cooldown',  bg: 'rgba(59,130,246,0.18)',  color: '#3b82f6' };
             if (s === 'WARMUP' || s === 'CALIBRATING') return { label: 'Warmup', bg: 'rgba(234,179,8,0.18)', color: '#eab308' };

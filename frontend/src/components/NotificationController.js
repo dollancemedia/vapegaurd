@@ -131,14 +131,13 @@ const NotificationController = () => {
 
       const predictedClass = reading.predicted_class || (reading.prediction ? reading.prediction.type : 'normal');
       
-      // Check for vape or fire detection
+      // Check for vape or fire detection — only notify if confidence >= 40%
       if (predictedClass === 'vape' || predictedClass === 'fire') {
-        // Fallback for deviceId to ensure muting always works
+        const confidence = reading.confidence || (reading.prediction && reading.prediction.confidence) || 0;
+        if (confidence < 40) return;
+
         const finalDeviceId = deviceId || 'unknown-device-' + (payload.location ? `${payload.location.building}-${payload.location.room}` : 'no-loc');
 
-        const confidence = reading.confidence || (reading.prediction && reading.prediction.confidence) || 0;
-
-        // Format location string
         let locationStr = 'Unknown Location';
         if (reading.location) {
             locationStr = `Building: ${reading.location.building || '?'}, Room: ${reading.location.room || '?'}`;
@@ -158,6 +157,7 @@ const NotificationController = () => {
       const predictedClass = payload.top_class;
       if (predictedClass === 'vape' || predictedClass === 'fire') {
         const confidence = (payload.top_prob ?? 0) * 100;
+        if (confidence < 40) return;
         const loc = payload.location || {};
         const locationStr = loc.building
           ? `Building: ${loc.building}, Room: ${loc.room || '?'}`
