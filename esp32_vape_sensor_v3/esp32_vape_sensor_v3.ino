@@ -63,7 +63,7 @@
 //  CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-const char* FIRMWARE_VERSION = "3.4.4";
+const char* FIRMWARE_VERSION = "3.6.0";
 
 const char* DEFAULT_SSID     = "";  // populated from NVS by loadDeviceIdentity()
 const char* DEFAULT_PASSWORD = "";  // populated from NVS by loadDeviceIdentity()
@@ -90,8 +90,8 @@ unsigned long deepSenseRateMs    = 1000;
 unsigned long cooldownSec        = 20;
 
 // ─── Local spike detection ──────────────────────────────────────────────────
-const float LOCAL_SPIKE_THRESHOLD = 8.0;
-const float LOCAL_GAS_DROP_RATIO  = 0.85;
+float LOCAL_SPIKE_THRESHOLD = 3.0;   // BMV080 reports lower PM than PMS5003
+float LOCAL_GAS_DROP_RATIO  = 0.85;
 const float LOCAL_EWMA_ALPHA      = 0.1;
 const float LOCAL_EWMA_ALPHA_CAL  = 0.5;
 const float TAMPER_THRESHOLD      = 6.0;  // moderate shake triggers — still ignores bumps, doors, fans
@@ -129,6 +129,7 @@ const unsigned long SCHEDULE_FETCH_INTERVAL = 300000;
 #define MSA311_INT_PIN  5  // MSA311 INT1 → GPIO5 (wakes ESP32 from light sleep)
 #define SDA_PIN        19  // Feather ESP32-C6 Stemma QT SDA
 #define SCL_PIN        18  // Feather ESP32-C6 Stemma QT SCL
+#define BATT_PIN        1  // A1 — Feather ESP32-C6 battery voltage divider (2:1)
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  State machine
@@ -223,6 +224,7 @@ String SCHEDULE_URL;
 float lastPM25 = 0, lastPM10 = 0, lastPM1 = 0;
 float lastTemp = 0, lastHumidity = 0, lastPressure = 0, lastGas = 0;
 bool  lastBmvObstructed = false;
+float lastBatteryVoltage = 0;
 
 // ─── Forward declarations ───────────────────────────────────────────────────
 // bool  connectWiFiManager(bool forcePortal);  // removed — BLE provisioning only
@@ -253,6 +255,7 @@ void  pushToRingBuffer();
 String getISOTimestamp();
 void  sleepHeavySensors();
 void  wakeHeavySensors();
+float readBatteryVoltage();
 void  idleSleep(unsigned long durationMs);
 void  startBLEProvisioning();
 void  stopBLEProvisioning();
@@ -363,6 +366,12 @@ void setup() {
   delay(500);
   Serial.printf("\n=== Mistio Sensor v%s ===\n", FIRMWARE_VERSION);
 
+  // Override NVS WiFi creds — change these when switching networks
+  prefs.begin("mistio", false);
+  prefs.putString("wifi_ssid", "sweethome");
+  prefs.putString("wifi_pass", "rahul2008");
+  prefs.end();
+
   // Load device ID from MAC, org/WiFi from NVS (if BLE-provisioned previously)
   loadDeviceIdentity();
   Serial.println("Device: " + DEVICE_ID);
@@ -381,6 +390,8 @@ void setup() {
 
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
+  pinMode(BATT_PIN, INPUT);
+  analogReadResolution(12);
 
   // MSA311 INT pin as input (hardware interrupt for tamper wakeup)
   pinMode(MSA311_INT_PIN, INPUT);
@@ -645,10 +656,12 @@ void loop() {
           } else {
             Serial.println("WiFi unavailable, skipping heartbeat");
           }
+          // If server forced DEEP_SENSE, postSensorData changed state — skip sleep
+          if (currentState != STATE_SNIFF) break;
         } else {
-          Serial.printf("Sniff #%d: PM2.5=%.1f (base=%.1f, d=%.1f) Gas=%.1f (base=%.1f) WiFi=%d RSSI=%d Heap=%u\n",
+          Serial.printf("Sniff #%d: PM2.5=%.1f (base=%.1f, d=%.1f) Gas=%.1f Batt=%.2fV Heap=%u\n",
             sniffCount, lastPM25, baselinePM25, lastPM25 - baselinePM25,
-            lastGas, baselineGas, WiFi.status(), WiFi.RSSI(), ESP.getFreeHeap());
+            lastGas, readBatteryVoltage(), ESP.getFreeHeap());
         }
       }
 
@@ -830,16 +843,20 @@ void updateLocalBaseline(bool fastAlpha) {
 }
 
 bool isLocalSpike() {
+  // Ignore readings where BMV080 returned 0 — sensor wasn't ready
+  if (lastPM25 <= 0) return false;
+
   float deltaPM25 = lastPM25 - baselinePM25;
   if (deltaPM25 >= LOCAL_SPIKE_THRESHOLD) {
     Serial.printf("SPIKE: PM2.5 delta=%.1f (threshold=%.1f)\n", deltaPM25, LOCAL_SPIKE_THRESHOLD);
     return true;
   }
 
-  if (baselineGas > 0 && lastGas > 0) {
+  // Gas drop only triggers if PM2.5 is also elevated above baseline
+  if (baselineGas > 0 && lastGas > 0 && deltaPM25 > 1.0) {
     float gasRatio = lastGas / baselineGas;
     if (gasRatio <= LOCAL_GAS_DROP_RATIO) {
-      Serial.printf("SPIKE: Gas drop ratio=%.2f (threshold=%.2f)\n", gasRatio, LOCAL_GAS_DROP_RATIO);
+      Serial.printf("SPIKE: Gas drop ratio=%.2f + PM2.5 delta=%.1f\n", gasRatio, deltaPM25);
       return true;
     }
   }
@@ -1026,6 +1043,16 @@ void readAllSensors() {
 }
 
 // =============================================================================
+//  BATTERY VOLTAGE
+// =============================================================================
+float readBatteryVoltage() {
+  int raw = analogRead(BATT_PIN);
+  // ESP32-C6 12-bit ADC (0-4095), 3.3V ref, 2:1 voltage divider on Feather
+  float voltage = (raw / 4095.0f) * 3.3f * 2.0f;
+  return voltage;
+}
+
+// =============================================================================
 //  POST SENSOR DATA
 // =============================================================================
 bool postSensorData() {
@@ -1044,6 +1071,9 @@ bool postSensorData() {
   doc["wifi_rssi"]       = WiFi.RSSI();
   doc["sensor_type"]     = "multi_sensor";
   doc["bmv080_obstructed"] = lastBmvObstructed;
+  lastBatteryVoltage     = readBatteryVoltage();
+  doc["battery_voltage"] = lastBatteryVoltage;
+  doc["free_heap"]       = ESP.getFreeHeap();
 
   const char* stateNames[] = {"startup", "sniff", "deep_sense", "cooldown"};
   doc["duty_state"] = stateNames[currentState];
@@ -1081,14 +1111,21 @@ bool postSensorData() {
   int code = http.POST(payload);
 
   bool ok = (code == 200 || code == 201);
+  bool forceDeepSense = false;
   if (ok) {
     lastSuccessfulPost = millis();
     String resp = http.getString();
     DynamicJsonDocument respDoc(512);
-    if (!deserializeJson(respDoc, resp) && respDoc.containsKey("prediction")) {
-      String cls  = respDoc["prediction"]["predicted_class"].as<String>();
-      float  conf = respDoc["prediction"]["confidence"];
-      Serial.printf("  -> %s (%.1f%%)\n", cls.c_str(), conf);
+    if (!deserializeJson(respDoc, resp)) {
+      if (respDoc.containsKey("prediction")) {
+        String cls  = respDoc["prediction"]["predicted_class"].as<String>();
+        float  conf = respDoc["prediction"]["confidence"];
+        Serial.printf("  -> %s (%.1f%%)\n", cls.c_str(), conf);
+      }
+      if (respDoc["force_deep_sense"] | false) {
+        forceDeepSense = true;
+        Serial.println("!! SERVER REQUESTED DEEP_SENSE !!");
+      }
     }
   } else {
     Serial.printf("POST error: %d heap=%u\n", code, ESP.getFreeHeap());
@@ -1096,6 +1133,15 @@ bool postSensorData() {
   http.end();
 
   Serial.printf("Heap after POST: %u\n", ESP.getFreeHeap());
+
+  if (forceDeepSense && currentState == STATE_SNIFF) {
+    Serial.println("!! SERVER SPIKE — entering DEEP_SENSE !!");
+    neoFlash(255, 165, 0, 200);
+    wakeHeavySensors();
+    postBatchData();
+    enterState(STATE_DEEP_SENSE);
+  }
+
   return ok;
 }
 
@@ -1312,6 +1358,14 @@ void fetchSchedule() {
       if (doc.containsKey("cooldown_sec")) {
         unsigned long newCd = doc["cooldown_sec"].as<unsigned long>();
         if (newCd >= 5 && newCd <= 120) cooldownSec = newCd;
+      }
+      if (doc.containsKey("spike_threshold")) {
+        float newThresh = doc["spike_threshold"].as<float>();
+        if (newThresh >= 1.0 && newThresh <= 50.0) LOCAL_SPIKE_THRESHOLD = newThresh;
+      }
+      if (doc.containsKey("gas_drop_ratio")) {
+        float newRatio = doc["gas_drop_ratio"].as<float>();
+        if (newRatio >= 0.5 && newRatio <= 0.99) LOCAL_GAS_DROP_RATIO = newRatio;
       }
 
       Serial.printf("Schedule: %s %02d:%02d-%02d:%02d days=0x%02X\n",

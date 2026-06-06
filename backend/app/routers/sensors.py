@@ -79,6 +79,9 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
         if "timestamp" not in payload:
              payload["timestamp"] = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
 
+        # Check if payload has real sensor data before sanitization coerces None to 0
+        _has_real_sensor_data = "humidity" in payload or "pm25" in payload
+
         # Sanitize numerics
         numeric_fields = ["humidity", "temperature", "pm25", "pm10", "pm1", "gas_resistance",
                           "pressure", "sound_level", "baseline_pm25", "baseline_gas"]
@@ -158,59 +161,65 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
                 logger.error(f"Failed to process event storage/broadcast: {e}")
 
         # 5. Broadcast Raw Reading (for live charts)
-        # Get real-time state
-        current_state = state_manager.get_state(payload.get("device_id"))
-        current_status = current_state.get("status", "IDLE") if current_state else "IDLE"
-        
-        display_type = "normal"
-        if current_status == "WARMUP":
-            display_type = "warmup"
-        elif current_status == "CALIBRATING":
-            display_type = "calibrating"
-        elif current_status == "CONFIRMING":
-             display_type = "suspected"
-             
-        # Override with specific event details if this sample triggered an event
-        if event_doc:
-             if event_doc.get("status") == "confirmed":
-                 display_type = event_doc.get("top_class", "vape")
-             elif event_doc.get("status") == "uncertain":
-                 display_type = "uncertain"
-             elif event_doc.get("status") == "suspected":
+        # Skip broadcast for deep_sense_complete — it has no sensor data
+        # and would overwrite the dashboard with zeros
+        duty_state = payload.get("duty_state", "")
+
+        if duty_state != "deep_sense_complete" and _has_real_sensor_data:
+            current_state_for_display = state_manager.get_state(payload.get("device_id"))
+            current_status = current_state_for_display.get("status", "IDLE") if current_state_for_display else "IDLE"
+
+            display_type = "normal"
+            if current_status == "WARMUP":
+                display_type = "warmup"
+            elif current_status == "CALIBRATING":
+                display_type = "calibrating"
+            elif current_status == "CONFIRMING":
                  display_type = "suspected"
 
-        # We construct a reading object compatible with frontend expectations
-        server_ts = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
-        sensor_reading = {
-            "device_id": payload.get("device_id"),
-            "school": payload.get("org_id"),
-            # Use server timestamp for live UI freshness; keep device timestamp too.
-            "timestamp": server_ts,
-            "sensor_timestamp": payload.get("timestamp"),
-            "humidity": payload.get("humidity"),
-            "pm25": payload.get("pm25"),
-            "pm10": payload.get("pm10"),
-            "gas_resistance": payload.get("gas_resistance"),
-            "temperature": payload.get("temperature"),
-            "sound_level": payload.get("sound_level", 0),
-            # Add prediction info
-            "prediction": {
-                "type": display_type,
-                "confidence": event_doc.get("top_prob", 0) * 100 if event_doc else 0,
-                "status": current_status
+            # Override with specific event details if this sample triggered an event
+            if event_doc:
+                 if event_doc.get("status") == "confirmed":
+                     display_type = event_doc.get("top_class", "vape")
+                 elif event_doc.get("status") == "uncertain":
+                     display_type = "uncertain"
+                 elif event_doc.get("status") == "suspected":
+                     display_type = "suspected"
+
+            server_ts = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
+            sensor_reading = {
+                "device_id": payload.get("device_id"),
+                "school": payload.get("org_id"),
+                "timestamp": server_ts,
+                "sensor_timestamp": payload.get("timestamp"),
+                "humidity": payload.get("humidity"),
+                "pm25": payload.get("pm25"),
+                "pm10": payload.get("pm10"),
+                "gas_resistance": payload.get("gas_resistance"),
+                "temperature": payload.get("temperature"),
+                "sound_level": payload.get("sound_level", 0),
+                "prediction": {
+                    "type": display_type,
+                    "confidence": event_doc.get("top_prob", 0) * 100 if event_doc else 0,
+                    "status": current_status
+                }
             }
-        }
-        
-        try:
-            await broadcast_sensor_reading(payload.get("device_id"), sensor_reading)
-        except Exception as e:
-            logger.error(f"Broadcast reading failed: {e}")
+
+            try:
+                await broadcast_sensor_reading(payload.get("device_id"), sensor_reading)
+            except Exception as e:
+                logger.error(f"Broadcast reading failed: {e}")
+
+        # Check if backend wants the device to enter DEEP_SENSE
+        current_state = state_manager.get_state(payload.get("device_id"))
+        should_force = bool(current_state.get("force_deep_sense")) if current_state else False
 
         response = {
             "status": "success",
             "message": "Processed",
             "event_id": stored_event_id,
             "state": notification_type or "monitoring",
+            "force_deep_sense": should_force,
         }
 
         # Include prediction for sensor firmware (v3 reads this)

@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     REDIS_URL: Optional[str] = None
     
     # Physics Thresholds
-    D_PM25_SUS: float = 10.0      # Sudden jump in PM2.5
-    SLOPE_SUS: float = 2.0        # Slope of PM2.5 rise
+    D_PM25_SUS: float = 3.0       # BMV080 reports lower PM than PMS5003
+    SLOPE_SUS: float = 0.5        # BMV080 lower magnitude slopes
     
     # Time Windows (in seconds)
     BASELINE_WINDOW_SEC: int = 10

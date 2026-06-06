@@ -25,15 +25,17 @@ const fmtTime = (ts) => {
 
 // ── Status resolver ───────────────────────────────────────────────────────────
 const getStatus = (device) => {
-  const cls = device.sensorData?.predictedClass;
-  const st  = device.status;
-  if (st === 'offline')                           return { color: '#9ca3af', bg: '#f9fafb',              label: 'Offline',         sub: 'Device not responding',    icon: 'offline'  };
-  if (cls === 'vape' || st === 'alarm')           return { color: '#ef4444', bg: 'rgba(239,68,68,0.06)', label: 'Vape Detected',   sub: 'Immediate action required', icon: 'alarm'    };
-  if (st === 'CONFIRMING' || cls === 'suspected') return { color: '#f59e0b', bg: 'rgba(245,158,11,0.06)',label: 'Suspected Event', sub: 'Analysing sensor data',    icon: 'warning'  };
-  if (st === 'WARMUP')                            return { color: '#8b5cf6', bg: 'rgba(139,92,246,0.06)',label: 'Warming Up',      sub: 'Device initialising',      icon: 'warmup'   };
-  if (st === 'CALIBRATING')                       return { color: '#8b5cf6', bg: 'rgba(139,92,246,0.06)',label: 'Calibrating',     sub: 'Establishing baseline',    icon: 'warmup'   };
-  if (st === 'COOLDOWN')                          return { color: '#3b82f6', bg: 'rgba(59,130,246,0.06)',label: 'Cooldown',        sub: 'Recovery period active',   icon: 'cooldown' };
-  return                                                 { color: '#00C2CB', bg: 'rgba(0,194,203,0.05)', label: 'Normal',          sub: 'Air quality normal',        icon: 'ok'       };
+  const cls  = device.sensorData?.predictedClass;
+  const conf = device.sensorData?.confidence ?? 0;
+  const st   = device.status;
+  if (st === 'offline')                                              return { color: '#9ca3af', bg: '#f9fafb',              label: 'Offline',         sub: 'Device not responding',    icon: 'offline'  };
+  if ((cls === 'vape' || st === 'alarm') && conf >= 40)              return { color: '#ef4444', bg: 'rgba(239,68,68,0.06)', label: 'Vape Detected',   sub: 'Immediate action required', icon: 'alarm'    };
+  if ((cls === 'vape' || st === 'alarm') && conf > 0 && conf < 40)  return { color: '#f59e0b', bg: 'rgba(245,158,11,0.06)',label: 'Uncertain',       sub: `Low confidence (${conf.toFixed(0)}%)`, icon: 'warning'  };
+  if (st === 'CONFIRMING' || cls === 'suspected')                    return { color: '#f59e0b', bg: 'rgba(245,158,11,0.06)',label: 'Suspected Event', sub: 'Analysing sensor data',    icon: 'warning'  };
+  if (st === 'WARMUP')                                               return { color: '#8b5cf6', bg: 'rgba(139,92,246,0.06)',label: 'Warming Up',      sub: 'Device initialising',      icon: 'warmup'   };
+  if (st === 'CALIBRATING')                                          return { color: '#8b5cf6', bg: 'rgba(139,92,246,0.06)',label: 'Calibrating',     sub: 'Establishing baseline',    icon: 'warmup'   };
+  if (st === 'COOLDOWN')                                             return { color: '#3b82f6', bg: 'rgba(59,130,246,0.06)',label: 'Cooldown',        sub: 'Recovery period active',   icon: 'cooldown' };
+  return                                                                    { color: '#00C2CB', bg: 'rgba(0,194,203,0.05)', label: 'Normal',          sub: 'Air quality normal',        icon: 'ok'       };
 };
 
 // ── Inline SVG icons ──────────────────────────────────────────────────────────

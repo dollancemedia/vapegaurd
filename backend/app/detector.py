@@ -120,6 +120,43 @@ class Detector:
                 prev_ewma = state.get('baseline_pm25') or state.get('ewma_pm25')
                 if prev_ewma is None:
                     prev_ewma = pm25
+
+                d_pm25 = pm25 - prev_ewma
+
+                # Server-side spike detection: if firmware missed the spike,
+                # flag it and tell the device to enter DEEP_SENSE via response
+                # Skip when PM2.5 is 0 — that's a failed sensor read, not a real spike
+                if pm25 > 0 and d_pm25 >= settings.D_PM25_SUS and state.get("status") != "CONFIRMING":
+                    event_id = str(uuid.uuid4())
+                    state_manager.update_state(device_id, {
+                        "status": "CONFIRMING",
+                        "t0": server_now,
+                        "event_id": event_id,
+                        "last_trigger_time": server_now.isoformat(),
+                        "snapshot_pm25_base": prev_ewma,
+                        "force_deep_sense": True,
+                        "ewma_pm25": prev_ewma,
+                        "baseline_pm25": prev_ewma,
+                        "prev_pm25": pm25,
+                        "prev_ts": server_now.isoformat(),
+                    })
+                    print(f"[Detector] SERVER SPIKE | Dev: {device_id} | PM2.5={pm25} base={prev_ewma:.1f} d={d_pm25:.1f}")
+                    event_doc = {
+                        "event_id": event_id,
+                        "device_id": device_id,
+                        "t_start": server_now,
+                        "timestamp": self._iso_utc(server_now),
+                        "status": "suspected",
+                        "phase1_reason": {
+                            "trigger": "server_spike",
+                            "d_pm25": d_pm25,
+                            "trigger_val": pm25,
+                            "baseline_val": prev_ewma,
+                        },
+                        "created_at": self._get_now()
+                    }
+                    return event_doc, "suspicious"
+
                 drifted = prev_ewma * (1.0 - settings.BASELINE_DRIFT_ALPHA) + pm25 * settings.BASELINE_DRIFT_ALPHA
                 state_manager.update_state(device_id, {
                     "status": "IDLE",
@@ -128,6 +165,7 @@ class Detector:
                     "baseline_gas_resistance": sample.get("baseline_gas", sample.get("gas_resistance")),
                     "prev_pm25": pm25,
                     "prev_ts": server_now.isoformat(),
+                    "force_deep_sense": False,
                 })
             return None, None
 
@@ -137,6 +175,10 @@ class Detector:
 
         elif duty_state == "deep_sense":
             # Spike-triggered burst — accumulate data
+            # Clear force flag since device is now in DEEP_SENSE
+            if state.get("force_deep_sense"):
+                state_manager.update_state(device_id, {"force_deep_sense": False})
+
             status = state.get("status")
 
             if status != "CONFIRMING":
