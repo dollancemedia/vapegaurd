@@ -195,7 +195,8 @@ const NotificationController = () => {
 
   const { isConnected } = useWebSocket('/ws/events', {
     onMessage: handleWebSocketMessage,
-    queryParams: { token }
+    queryParams: { token },
+    enabled: !!token
   });
 
   return (

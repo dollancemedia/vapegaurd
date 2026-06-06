@@ -267,9 +267,16 @@ const Devices = () => {
         const response = await api.get('/sensors/sensor-data');
         const historyData = response.data; // Array of sensor readings
         
+        const isValidTimestamp = (ts) => {
+          if (!ts || typeof ts !== 'string' || !ts.includes('T')) return false;
+          const d = new Date(ts);
+          return !isNaN(d) && d.getFullYear() >= 2020 && d.getFullYear() <= 2100;
+        };
+
         // Group by device_id
         const historyMap = {};
         historyData.forEach(reading => {
+          if (!isValidTimestamp(reading.timestamp)) return;
           const deviceId = reading.device_id;
           if (!historyMap[deviceId]) {
             historyMap[deviceId] = [];

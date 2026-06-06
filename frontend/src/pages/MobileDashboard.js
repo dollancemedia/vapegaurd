@@ -57,7 +57,7 @@ const MobileDashboard = () => {
   useEffect(() => {
     const pollInterval = setInterval(() => {
       refreshDevices();
-    }, 5000);
+    }, 15000);
     return () => clearInterval(pollInterval);
   }, [refreshDevices]);
 
@@ -66,8 +66,15 @@ const MobileDashboard = () => {
       try {
         const response = await api.get('/sensors/sensor-data');
         const historyData = response.data;
+        const isValidTimestamp = (ts) => {
+          if (!ts || typeof ts !== 'string' || !ts.includes('T')) return false;
+          const d = new Date(ts);
+          return !isNaN(d) && d.getFullYear() >= 2020 && d.getFullYear() <= 2100;
+        };
+
         const historyMap = {};
         historyData.forEach(reading => {
+          if (!isValidTimestamp(reading.timestamp)) return;
           const deviceId = reading.device_id;
           if (!historyMap[deviceId]) {
             historyMap[deviceId] = [];
@@ -200,7 +207,8 @@ const MobileDashboard = () => {
 
   useWebSocket('/ws/events', {
     onMessage: handleWebSocketMessage,
-    queryParams: { token }
+    queryParams: { token },
+    enabled: !!token
   });
 
   const handleDeviceSelect = (device) => {

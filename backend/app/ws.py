@@ -84,11 +84,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(None)):
     })
     
     try:
-        # Keep the connection open by waiting for client messages.
-        # Most clients won't send anything; this blocks until disconnect,
-        # which lets us detect closure cleanly.
         while True:
-            await websocket.receive_text()
+            text = await websocket.receive_text()
+            try:
+                msg = json.loads(text)
+                if msg.get("type") == "ping":
+                    await websocket.send_json({"type": "pong", "ts": msg.get("ts")})
+            except (json.JSONDecodeError, TypeError):
+                pass
 
     except WebSocketDisconnect:
         # Remove connection when client disconnects

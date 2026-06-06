@@ -75,9 +75,9 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
         # Ensure defaults
         payload.setdefault("device_id", "unknown")
         payload.setdefault("org_id", "unknown")
-        # Ensure timestamp is present (Detector handles parsing, but we need it for raw storage too)
-        if "timestamp" not in payload:
-             payload["timestamp"] = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
+        raw_ts = payload.get("timestamp")
+        if not raw_ts or not isinstance(raw_ts, str) or "T" not in raw_ts:
+            payload["timestamp"] = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
 
         # Check if payload has real sensor data before sanitization coerces None to 0
         _has_real_sensor_data = "humidity" in payload or "pm25" in payload
@@ -315,6 +315,9 @@ async def get_sensor_data(limit: int = 200):
         cursor = db.samples.find().sort("timestamp", -1).limit(limit)
         sensor_data = []
         async for doc in cursor:
+            ts = doc.get("timestamp", "")
+            if not isinstance(ts, str) or "T" not in ts:
+                continue
             # Format for frontend
             # Note: Raw samples might not have 'status' or 'top_class', default to normal
             sensor_reading = {

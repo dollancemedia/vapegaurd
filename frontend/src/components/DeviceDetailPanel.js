@@ -20,7 +20,8 @@ const fmtGas = (v) => { const n = Number(v || 0); return n > 1000 ? (n / 1000).t
 const fmtTime = (ts) => {
   if (!ts) return '';
   const d = new Date(ts);
-  return isNaN(d) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (isNaN(d) || d.getFullYear() < 2020 || d.getFullYear() > 2100) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
 // ── Status resolver ───────────────────────────────────────────────────────────

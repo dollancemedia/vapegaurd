@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
 // Close codes that should NOT trigger reconnects
-const NO_RECONNECT_CODES = new Set([1000, 1008, 1011]);
+const NO_RECONNECT_CODES = new Set([1000, 1011]);
 
 export const useWebSocket = (url, options = {}) => {
   const [isConnected, setIsConnected] = useState(false);
@@ -20,7 +20,6 @@ export const useWebSocket = (url, options = {}) => {
     onClose,
     onError,
     reconnectInterval = 3000,
-    maxReconnectAttempts = 5,
     heartbeatInterval = 30000,
     protocols = [],
     queryParams = null,
@@ -158,15 +157,12 @@ export const useWebSocket = (url, options = {}) => {
         return;
       }
 
-      if (connectionAttemptsRef.current < maxReconnectAttempts) {
-        connectionAttemptsRef.current += 1;
-        reconnectTimeoutRef.current = setTimeout(
-          connect,
-          reconnectInterval
-        );
-      } else {
-        setError('Max reconnection attempts reached');
-      }
+      connectionAttemptsRef.current += 1;
+      const delay = Math.min(
+        reconnectInterval * Math.pow(2, connectionAttemptsRef.current - 1),
+        30000
+      );
+      reconnectTimeoutRef.current = setTimeout(connect, delay);
     };
 
     wsRef.current.onerror = (event) => {
@@ -179,7 +175,6 @@ export const useWebSocket = (url, options = {}) => {
     memoProtocols,
     heartbeatInterval,
     reconnectInterval,
-    maxReconnectAttempts,
     sendHeartbeat,
     enabled
   ]);
