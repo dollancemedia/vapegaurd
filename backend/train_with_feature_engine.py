@@ -312,7 +312,7 @@ def main():
         rep = classification_report(y_test, y_pred, output_dict=True, zero_division=0)
         acc = float(rep.get("accuracy", 0.0))
         f1  = float(rep.get("weighted avg", {}).get("f1-score", 0.0))
-        print(f"  {name}: test_acc={acc:.3f}  weighted_f1={f1:.3f}  → {path}")
+        print(f"  {name}: test_acc={acc:.3f}  weighted_f1={f1:.3f}  -> {path}")
         report["models"][name] = {"accuracy": acc, "weighted_f1": f1, "path": str(path)}
         if hasattr(model, "_val_accuracy"):
             report["models"][name]["val_accuracy"] = float(model._val_accuracy)

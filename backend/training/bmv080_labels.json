@@ -1,0 +1,28 @@
+{
+  "events": [
+    {"event_id": "clean_air_bmv_001", "event_type": "clean_air", "start_time_zulu": "2026-06-04T17:02:24Z", "end_time_zulu": "2026-06-04T17:32:24Z", "notes": "30 min chunk from 2hr clean air session"},
+    {"event_id": "clean_air_bmv_002", "event_type": "clean_air", "start_time_zulu": "2026-06-04T18:00:00Z", "end_time_zulu": "2026-06-04T18:30:00Z", "notes": "Second 30 min chunk from same session"},
+    {"event_id": "vape_bmv_001", "event_type": "vape", "start_time_zulu": "2026-06-04T19:31:17Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_002", "event_type": "vape", "start_time_zulu": "2026-06-04T19:41:20Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_003", "event_type": "vape", "start_time_zulu": "2026-06-04T19:53:44Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_004", "event_type": "vape", "start_time_zulu": "2026-06-04T20:03:53Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_005", "event_type": "vape", "start_time_zulu": "2026-06-04T21:32:15Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_006", "event_type": "vape", "start_time_zulu": "2026-06-04T23:07:10Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_007", "event_type": "vape", "start_time_zulu": "2026-06-04T23:20:59Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_008", "event_type": "vape", "start_time_zulu": "2026-06-04T23:27:38Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_009", "event_type": "vape", "start_time_zulu": "2026-06-04T23:59:38Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_010", "event_type": "vape", "start_time_zulu": "2026-06-05T20:25:45Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_011", "event_type": "vape", "start_time_zulu": "2026-06-06T00:05:47Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_012", "event_type": "vape", "start_time_zulu": "2026-06-06T01:41:04Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_013", "event_type": "vape", "start_time_zulu": "2026-06-06T01:48:08Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_014", "event_type": "vape", "start_time_zulu": "2026-06-06T01:50:39Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_015", "event_type": "vape", "start_time_zulu": "2026-06-06T01:53:17Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_016", "event_type": "vape", "start_time_zulu": "2026-06-06T01:57:38Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_017", "event_type": "vape", "start_time_zulu": "2026-06-06T02:06:20Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_018", "event_type": "vape", "start_time_zulu": "2026-06-06T02:11:56Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_019", "event_type": "vape", "start_time_zulu": "2026-06-06T02:13:37Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_020", "event_type": "vape", "start_time_zulu": "2026-06-06T02:16:10Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_021", "event_type": "vape", "start_time_zulu": "2026-06-06T02:18:08Z", "end_time_zulu": null, "notes": ""},
+    {"event_id": "vape_bmv_022", "event_type": "vape", "start_time_zulu": "2026-06-06T02:19:40Z", "end_time_zulu": null, "notes": ""}
+  ]
+}
