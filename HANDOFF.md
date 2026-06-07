@@ -1,4 +1,4 @@
-# HANDOFF.md — Mistio / VapeGuard Session Transfer (v6)
+# HANDOFF.md — Mistio / VapeGuard Session Transfer (v8)
 
 ## 1. Project Overview
 
@@ -120,6 +120,54 @@ Full-stack IoT vape detection: ESP32-C6 sensors -> FastAPI backend (ML inference
 - **Symptom:** During/after vape detection, the Live Readings cards (humidity, PM2.5, temp, gas) disappear from the device detail panel.
 - **Root cause:** During COOLDOWN (20s) + next SNIFF (up to 60s), no sensor data is broadcast. The `LiveReadings` component returns `null` if `sd.humidity === undefined`. If a REST poll returns device data where the sensor fields are undefined (because the `devices` collection stores metadata, not live readings), the merge logic may lose previously-WS-sourced sensor values during the 80s data gap.
 - **Status:** Partially addressed by the WebSocket reconnection fix (WS stays alive longer, so data keeps flowing). The 80s gap after COOLDOWN is by design — firmware is sleeping. A full fix would require sending a "normal" heartbeat during COOLDOWN or having the frontend show "last known" values with a stale indicator instead of hiding the cards.
+
+### v8 Files Changed (exact files touched this session)
+
+**3 commits pushed to `main` on 2026-06-06:**
+
+| Commit | Files | What |
+|---|---|---|
+| `0aa86fc` | `backend/app/config.py`, `backend/app/detector.py`, `backend/app/routers/sensors.py`, `esp32_vape_sensor_v3/esp32_vape_sensor_v3.ino`, `frontend/src/components/DeviceDetailPanel.js` | Previous session's threshold + detection + confidence-gated status (was never pushed) |
+| `0d7e4e7` | `frontend/src/hooks/useWebSocket.js`, `frontend/src/components/NotificationController.js`, `frontend/src/components/DeviceDetailPanel.js`, `frontend/src/pages/Devices.js`, `frontend/src/pages/MobileDashboard.js`, `backend/app/routers/sensors.py`, `backend/app/ws.py` | WebSocket reconnection fix + ghost timestamp fix |
+| `7687996` | `frontend/src/components/NotificationController.js`, `frontend/src/components/DeviceList.js`, `frontend/src/components/DeviceMap.js`, `frontend/src/pages/Devices.js` | Confidence >= 40% gate on all alarm indicators + notifications |
+
+**Per-file change summary:**
+
+| File | Changes |
+|---|---|
+| `backend/app/config.py` | `D_PM25_SUS` 10→3, `SLOPE_SUS` 2→0.5 |
+| `backend/app/detector.py` | Server-side spike detection, `force_deep_sense` in state |
+| `backend/app/routers/sensors.py` | `deep_sense_complete` guard, `_has_real_sensor_data` flag, `force_deep_sense` in response, timestamp sanitization (replace non-ISO with server UTC), sensor-data endpoint filters invalid timestamps |
+| `backend/app/ws.py` | Ping/pong: server responds to `{"type":"ping"}` with `{"type":"pong"}` |
+| `esp32_vape_sensor_v3/esp32_vape_sensor_v3.ino` | `LOCAL_SPIKE_THRESHOLD` 8→3, `isLocalSpike()` PM2.5≤0 reject + deltaPM25>1.0 for gas-only, `force_deep_sense` response handling, state-change break after POST |
+| `frontend/src/hooks/useWebSocket.js` | Removed 5-attempt hard cap, exponential backoff (3s→30s), removed 1008 from no-reconnect, removed unused `maxReconnectAttempts` |
+| `frontend/src/components/DeviceDetailPanel.js` | `fmtTime()` year validation (<2020 or >2100 → empty), `getStatus()` confidence≥40% gate |
+| `frontend/src/components/DeviceList.js` | `getStatusClass()` confidence≥40% gate |
+| `frontend/src/components/DeviceMap.js` | `getDeviceVisuals()` + tooltip confidence≥40% gate, orange "uncertain" for <40% |
+| `frontend/src/components/NotificationController.js` | `enabled: !!token`, confidence<40% → skip notification for both sensor_data and event_update |
+| `frontend/src/pages/Devices.js` | `getDevStatusClass()` confidence≥40% gate, `isValidTimestamp()` filter on history fetch |
+| `frontend/src/pages/MobileDashboard.js` | `enabled: !!token`, poll 5s→15s, `isValidTimestamp()` filter on history fetch |
+
+### v8 Detection Flow After Fixes
+
+```
+Sensor reads PM2.5 spike (delta > 3.0 from baseline)
+  → isLocalSpike() confirms (rejects PM2.5≤0, requires delta>1.0 for gas-only)
+  → Firmware enters DEEP_SENSE (30s of 1Hz sampling)
+  → Backend receives samples, broadcasts sensor_reading with prediction.type="suspected"
+  → Dashboard shows yellow "Suspected Event" on device card/map/panel
+  → deep_sense_complete arrives → backend runs ML
+  → If confidence >= 40%:
+      → event_update broadcast with top_class="vape"
+      → Dashboard shows RED alarm on card/map/panel
+      → Notification fires (toast + sound)
+  → If confidence < 40%:
+      → event_update broadcast with status="uncertain"
+      → Dashboard shows ORANGE "Uncertain" on card/map/panel
+      → NO notification fires
+  → Firmware enters COOLDOWN (20s) → SNIFF (60s heartbeat)
+  → Next heartbeat: prediction.type="normal" → dashboard recovers
+```
 
 ## 2c. What Was Fixed (v7 — 2026-06-05)
 
