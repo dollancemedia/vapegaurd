@@ -1,4 +1,4 @@
-# HANDOFF.md — Mistio / VapeGuard Session Transfer (v8)
+# HANDOFF.md — Mistio / VapeGuard Session Transfer (v9)
 
 ## 1. Project Overview
 
@@ -168,6 +168,201 @@ Sensor reads PM2.5 spike (delta > 3.0 from baseline)
   → Firmware enters COOLDOWN (20s) → SNIFF (60s heartbeat)
   → Next heartbeat: prediction.type="normal" → dashboard recovers
 ```
+
+## 2e. What Was Fixed (v9 — 2026-06-06)
+
+### Full Codebase Audit & Pipeline Overhaul
+
+A comprehensive audit of the entire codebase (firmware, backend, frontend) was performed. The audit identified three fatal problems compounding into ~15% detection accuracy even when vaping directly at the sensor:
+
+1. **BMV080 sensor produces unreliable data** during DEEP_SENSE — the mode switch warmup was too short, so most reads returned 0/stale values
+2. **ML pipeline had no sanity checks** — it ran inference on garbage data (negative PM2.5 deltas, zero readings) and output garbage predictions
+3. **Dashboard WebSocket architecture was broken** — duplicate connections, stale status lingering 50-80s, charts too zoomed out to show BMV080-scale spikes
+
+All fixes organized into three tiers. Tiers 1 and 2 implemented this session. Tier 3 (retraining) must wait until the fixed pipeline produces clean data.
+
+---
+
+### TIER 1: Detection Pipeline Fixes
+
+#### Fix T1-1: BMV080 Warmup Increased (firmware)
+- **Problem:** `wakeHeavySensors()` only waited 500ms after switching BMV080 from duty-cycle to continuous mode. The BMV080's internal measurement cycle needs ~3-5s to stabilize. Most reads during DEEP_SENSE returned `false`, leaving `lastPM25` at 0.
+- **Fix:** `wakeHeavySensors()` delay 500ms → 3000ms. SNIFF-path additional warmup 2000ms → 3000ms. Total warmup before first read: ~6 seconds.
+- **Files:** `esp32_vape_sensor_v3/esp32_vape_sensor_v3.ino` — `wakeHeavySensors()` + STATE_SNIFF case
+
+#### Fix T1-2: Zero PM2.5 Readings Rejected System-Wide (firmware + backend)
+- **Problem:** When `bmv.readSensor()` returned false or PM25=0 (failed read), the code kept the stale value (often 0 from boot). These zeros corrupted: EWMA baselines, ring buffer data, DEEP_SENSE event windows, ML features, and dashboard display.
+- **Fix (firmware):**
+  - `readAllSensors()`: If `bmv.PM25()` returns 0, keep previous valid values instead of overwriting with zero
+  - `burstReadBMV080()`: Treat PM25=0 same as a failed read (-1), exclude from averaging. If no valid reads in burst, previous values preserved
+  - `updateLocalBaseline()`: Skip entirely if `lastPM25 <= 0` — prevents baseline drift toward zero
+- **Fix (backend `detector.py`):**
+  - `startup` handler: requires `pm25 > 0` before updating EWMA/baseline
+  - `sniff` handler: requires `pm25 > 0` before baseline drift or spike detection
+- **Files:** `esp32_vape_sensor_v3.ino` — `readAllSensors()`, `burstReadBMV080()`, `updateLocalBaseline()`. `backend/app/detector.py` — `_handle_v3_sample()` startup + sniff branches
+
+#### Fix T1-3: Pre-Inference Sanity Checks (backend)
+- **Problem:** Backend ran ML inference on ANY data from DEEP_SENSE, even when features were physically impossible for vape (negative PM2.5 deltas, zero readings). Model output was garbage-in-garbage-out at ~15-20% confidence.
+- **Fix:** Both `_v3_make_decision()` and `_make_decision()` now:
+  1. Filter out zero-PM2.5 samples from event and baseline windows before computing features
+  2. If fewer than 3 valid event samples after filtering → skip ML, return `{top_class: "normal", top_prob: 1.0}`
+  3. If `d_pm25_peak <= 0` (PM2.5 went DOWN during event — physically impossible for vape) → skip ML, return `{top_class: "normal", top_prob: 1.0}`
+  4. Log reason for skip: `"insufficient_valid_samples"` or `"negative_pm25_delta"` in `event_features`/`ensemble_detail`
+- **Files:** `backend/app/detector.py` — `_v3_make_decision()`, `_make_decision()`
+
+#### Fix T1-4: Cooldown Heartbeat (firmware)
+- **Problem:** After DEEP_SENSE, firmware entered COOLDOWN (20s silence) then SNIFF (up to 60s until next heartbeat). During the 50-80s gap, no sensor_reading broadcasts were sent. Dashboard stayed stuck on last detection status until the next heartbeat overwrote it.
+- **Fix:** At the start of COOLDOWN, firmware sends one `postSensorData()` with `duty_state: "cooldown"`. Dashboard receives this immediately and clears detection status. Uses a static `cooldownHeartbeatSent` flag to send exactly once per cooldown.
+- **Files:** `esp32_vape_sensor_v3/esp32_vape_sensor_v3.ino` — STATE_COOLDOWN case
+
+#### Firmware Version Bumped to v3.7.0
+- Covers all Tier 1 firmware changes. Needs reflash to COM3.
+
+---
+
+### TIER 2: Dashboard Fixes
+
+#### Fix T2-5: Shared WebSocket Context (frontend)
+- **Problem:** Three components independently opened their own WebSocket connections to `/ws/events`: `Devices.js`, `MobileDashboard.js`, and `NotificationController.js`. On desktop this meant 2 simultaneous WS connections per tab; on mobile also 2. Doubled server load on Railway, caused message race conditions, and wasted reconnection attempts.
+- **Fix:** Created `useSharedWebSocket.js` — a React context provider that manages a single WebSocket connection at the App level. All consumers subscribe via `useSharedWebSocket(onMessage)` hook. Token management (Clerk auth) is centralized in the provider.
+  - `App.js`: Wraps `<AppContent>` in `<SharedWebSocketProvider>`
+  - `Devices.js`: Replaced `useWebSocket(...)` with `useSharedWebSocket(handleWebSocketMessage)`, removed token fetching
+  - `MobileDashboard.js`: Same replacement, removed token fetching
+  - `NotificationController.js`: Same replacement, removed token fetching + `useAuth` import
+- **Files:** `frontend/src/hooks/useSharedWebSocket.js` (NEW), `frontend/src/App.js`, `frontend/src/pages/Devices.js`, `frontend/src/pages/MobileDashboard.js`, `frontend/src/components/NotificationController.js`
+- **Note:** The old `useWebSocket.js` hook is preserved — still used by `TrainAI.js` and `RawDataCard.js`
+
+#### Fix T2-6: Auto-Scaling Charts (frontend)
+- **Problem:** The sensor trends chart in DeviceDetailPanel had hardcoded Y-axis max values (PM2.5: 200, Gas: 70). The BMV080 reports PM2.5 of 4-20 μg/m³, so a spike from 5→12 was invisible — only 3.5% of the chart height. The "All" view normalized each metric to `value / hardcoded_max * 100%`, making BMV080 data flat lines at the bottom.
+- **Fix:**
+  - **Single-metric view:** Computes actual data min/max from visible data, adds 30% padding (minimum 1 unit), and sets explicit `yMin`/`yMax` on the Y axis. A 5→12 spike now fills most of the chart.
+  - **"All" view:** Each metric is normalized to its own **visible data range** (`(value - dataMin) / (dataMax - dataMin) * 100%`) instead of the hardcoded max. All four metrics now use the full 0-100% range regardless of absolute scale. Tooltip still shows real values.
+- **Files:** `frontend/src/components/DeviceDetailPanel.js` — `useChartConfig()`
+
+#### Fix T2-7: Stale Detection Status Auto-Clear (frontend)
+- **Problem:** If a WebSocket message set a device to "vape"/"suspected"/etc. and then no subsequent message arrived to clear it (WS drop, COOLDOWN silence, network issue), the dashboard showed the stale detection status indefinitely until hard refresh.
+- **Fix:** When a device enters a non-normal detection state via WebSocket, a 90-second timer starts. If no new WS message clears the status before the timer fires, the device is automatically reset to `{status: 'online', predictedClass: 'normal', confidence: 0}`. Timer is cancelled when a "normal" message arrives.
+- **Files:** `frontend/src/pages/Devices.js`, `frontend/src/pages/MobileDashboard.js` — `staleClearTimersRef` + logic in `handleWebSocketMessage`
+
+---
+
+### v9 Files Changed
+
+**Not yet committed. All changes are local.**
+
+| File | Changes |
+|---|---|
+| `backend/app/detector.py` | T1-2: zero-PM rejection in startup/sniff. T1-3: sanity checks in `_v3_make_decision()` and `_make_decision()` (filter zeros, skip ML if <3 valid or d_pm25_peak<=0) |
+| `esp32_vape_sensor_v3/esp32_vape_sensor_v3.ino` | T1-1: BMV080 warmup 500ms→3s + SNIFF warmup 2s→3s. T1-2: `readAllSensors()` keeps previous on PM25=0, `burstReadBMV080()` excludes zeros, `updateLocalBaseline()` skips on zero. T1-4: COOLDOWN heartbeat. Version 3.6.0→3.7.0 |
+| `frontend/src/hooks/useSharedWebSocket.js` | NEW — shared WS context provider + `useSharedWebSocket()` hook |
+| `frontend/src/App.js` | T2-5: import + wrap AppContent in `<SharedWebSocketProvider>` |
+| `frontend/src/components/NotificationController.js` | T2-5: switched from `useWebSocket` to `useSharedWebSocket`, removed token/auth management |
+| `frontend/src/pages/Devices.js` | T2-5: switched to `useSharedWebSocket`, removed token. T2-7: stale auto-clear timers |
+| `frontend/src/pages/MobileDashboard.js` | T2-5: switched to `useSharedWebSocket`, removed token. T2-7: stale auto-clear timers |
+| `frontend/src/components/DeviceDetailPanel.js` | T2-6: auto-scaling Y axis for single-metric + min-max normalization for "All" view |
+
+### v9 Detection Flow After Fixes
+
+```
+Sensor reads PM2.5 spike (delta > 3.0 from baseline)
+  → isLocalSpike() confirms (rejects PM2.5<=0, requires delta>1.0 for gas-only)
+  → Firmware enters DEEP_SENSE (30s of 1Hz sampling)
+  → wakeHeavySensors() waits 3s (was 0.5s) for BMV080 to stabilize
+  → readAllSensors() rejects PM25=0, keeps previous valid values
+  → Backend receives samples, filters out zero-PM readings
+  → Broadcasts sensor_reading with prediction.type="suspected"
+  → Dashboard shows yellow "Suspected Event" (via shared single WS connection)
+  → deep_sense_complete arrives → backend runs sanity checks:
+      → If <3 valid samples or d_pm25_peak<=0 → skip ML → "normal" at 100%
+      → Otherwise → run ML ensemble on cleaned feature vector
+  → If confidence >= 40%:
+      → Dashboard shows RED alarm, notification fires
+  → If confidence < 40%:
+      → Dashboard shows ORANGE "Uncertain", NO notification
+  → Firmware enters COOLDOWN → immediately sends one heartbeat (T1-4)
+  → Dashboard clears detection status within 1-2 seconds
+  → If WS drops and no heartbeat arrives: auto-clear after 90s (T2-7)
+  → Chart shows spikes at actual data scale, not lost in 0-200 range (T2-6)
+```
+
+### v9 Dashboard Bug Status Update (from Section 7)
+
+| Bug | Status |
+|---|---|
+| B1 (double broadcast) | Already fixed in v8 — `broadcast_event("event_update", ...)` for events, `broadcast_sensor_reading(...)` for live data |
+| F1 (stale closure) | **FIXED v8** — `devicesRef` pattern already in Devices.js |
+| F2 (fmtTime) | **FIXED v8** — year validation already in DeviceDetailPanel.js |
+| F3 (confidence undefined%) | **FIXED v8** — `(h.confidence ?? 0).toFixed(1)` already in RecentEvents |
+| F4 (selectedDevice stale) | **FIXED v8** — useEffect re-sync already in Devices.js |
+| F5 (duplicate WS) | **FIXED v9** — shared WebSocket context (T2-5) |
+| F6 (redundant poll) | **FIXED v9** — NotificationController no longer has its own polling; removed in T2-5 refactor |
+
+---
+
+### TIER 3: Retraining (NOT YET DONE — requires Tier 1 deployment first)
+
+#### Why Existing Training Data Is Invalid
+
+The current models (trained 2026-06-05) were trained on data collected through the same broken pipeline that Tier 1 fixes address:
+- BMV080 warmup was too short → training vape events contain mostly zero/stale PM2.5 readings
+- Zero readings were not filtered → models learned that "zeros + negative deltas = vape" instead of "elevated PM2.5 + humidity spike + gas drop = vape"
+- 100% training accuracy with only 10 vape events and 2 clean_air windows → overfitting on garbage patterns
+- No negative examples (vibration, gas drift, environmental changes) → model can't distinguish real events from noise
+- Only 2 classes (vape, clean_air) → no cologne/hairspray/cleaning discrimination
+
+**The models must be retrained from scratch after Tier 1 is deployed.**
+
+#### Retraining Plan
+
+**Step 1 — Deploy Tier 1 + Tier 2 fixes**
+- Push backend changes to Railway (detector.py sanity checks + zero rejection)
+- Push frontend changes to Vercel (shared WS, auto-scale charts, stale clear)
+- Flash firmware v3.7.0 (BMV080 warmup, zero rejection, cooldown heartbeat)
+
+**Step 2 — Verify clean data pipeline**
+- Vape directly at the sensor, watch serial output
+- Confirm: DEEP_SENSE samples show non-zero PM2.5 (e.g., 8-20 μg/m³, not 0)
+- Confirm: `d_pm25_peak` is positive in the backend logs
+- Confirm: baseline doesn't drift toward zero between events
+- If PM2.5 still reads 0 during DEEP_SENSE, increase warmup further or investigate BMV080 hardware
+
+**Step 3 — Collect fresh training data**
+- **Vape events (20+ events recommended):**
+  - Vape directly at sensor from ~6 inches away
+  - Wait 2-3 minutes between events (let sensor return to baseline)
+  - Vary vape duration and intensity (short puffs vs long draws)
+  - Label each event in a new labels JSON file with start/end timestamps from serial output
+- **Clean air (2-3 windows of 30+ minutes each):**
+  - Sensor sitting idle in normal room conditions
+  - Label as `clean_air` with start/end timestamps
+- **Negative examples (important for false positive reduction):**
+  - Physical bumps/vibration: bump the desk, shake the sensor (label as `clean_air` or new `vibration` class)
+  - Environmental changes: open a window, turn on a fan, turn on HVAC (label as `clean_air`)
+  - Gas drift: let the BME680 warm up from cold start, capture the natural 15-20min drift period (label as `clean_air`)
+- **Other substances (if available):**
+  - Cologne, hair spray, cleaning products (label as their respective classes)
+
+**Step 4 — Train new models**
+```bash
+python backend/train_with_feature_engine.py \
+  --labels-file backend/training/bmv080_v2_labels.json \
+  --mongo-uri "mongodb+srv://allai:<pw>@vape-alert.xntahp3.mongodb.net/?appName=vape-alert" \
+  --db-name vape-alert \
+  --models-dir backend/models \
+  --drop-first-n-vape 0 \
+  --allowed-types "vape,clean_air"
+```
+If using multiple classes: `--allowed-types "vape,clean_air,cologne,hair_spray"`
+
+**Step 5 — Validate**
+- Check training accuracy per class (should be >85% on test set, not 100% which suggests overfitting)
+- Verify feature importance — `d_pm25_peak`, `pm25_auc_above_base`, `pm25_rise_slope` should be top features for vape detection
+- Deploy new models to Railway
+- Test end-to-end: vape at sensor → DEEP_SENSE → ML prediction → dashboard shows >=40% confidence vape alert
+
+#### Feature Order Note
+
+`class_config.py:FEATURE_ORDER` currently has **35 features** (29 original + 6 new: `pressure_start`, `temp_humidity_ratio`, `gas_temp_interaction`, `pm25_decay_rate`, `gas_recovery_slope`, `pm_ratio_peak`). The current models were trained with the old 29-feature order; the ensemble predictor truncates to match (`X_input = X[:, :n_expected]`). When retraining, the new models will automatically use all 35 features since `train_with_feature_engine.py` uses the same `FeatureEngine.compute_features()` that produces 35 features. The 6 new features (decay dynamics, cross-sensor interactions) should improve discrimination between vape (fast PM decay, high PM ratio) and fire/cooking (slow decay, low PM ratio).
 
 ## 2c. What Was Fixed (v7 — 2026-06-05)
 
@@ -392,11 +587,11 @@ ORG char:   6E400004-...  WRITE | WRITE_NR
 ### Frontend Not Yet Deployed
 - `NotificationController.js` tamper fix is local only — needs push to `main` for Vercel auto-deploy.
 
-## 5. Current Firmware State (v3.6.0, needs reflash)
+## 5. Current Firmware State (v3.7.0, needs reflash)
 
 ### Key Config
 ```
-FIRMWARE_VERSION = "3.6.0"
+FIRMWARE_VERSION = "3.7.0"
 WARMUP_SEC = 45, CALIBRATION_SEC = 15 (60s total STARTUP)
 sniffIntervalMs = 60000 (60s between sniffs)
 heartbeatInterval = 1 (POST every sniff)
@@ -408,6 +603,9 @@ POST_DEAD_MS = 300000 (5 min)
 HEAP_MIN_BYTES = 30000
 BATT_PIN = 1 (A1, voltage divider 2:1)
 WiFi NVS override: sweethome (CHANGE BEFORE SCHOOL DEPLOY)
+BMV080 warmup: 3000ms in wakeHeavySensors() + 3000ms SNIFF delay (was 500ms + 2000ms)
+Zero-read rejection: readAllSensors(), burstReadBMV080(), updateLocalBaseline() all skip PM25<=0
+Cooldown heartbeat: one POST at COOLDOWN start to clear dashboard immediately
 ```
 
 ### Architecture
@@ -557,13 +755,15 @@ Deep analysis of all dashboard issues was completed. The following bugs were ide
 
 ## 8. Recommended Next Steps
 
-1. **Collect more training data** — Especially other substance classes (cologne, hair spray, cleaning products) to reduce false positives. Also investigate why June 5-6 vape events (bmv_011-022) had 0 windows in MongoDB.
-2. **Verify battery voltage reading** — Check serial output for `Batt=X.XXV`. If reading 0.00V, pin A1 may be wrong for this board revision.
-3. **Set up schedule via backend API** — Configure school hours (e.g. 7AM-4PM Mon-Fri) to activate the power scheduling already in firmware.
-4. **Change WiFi back to school** — Before deploying: update NVS override in setup() from `sweethome` to school SSID/password, reflash.
-5. **Test OTA end-to-end** — Upload v3.5.0 .bin to backend, reboot device, confirm it OTA updates. Would eliminate need for USB flashing.
-6. **Fix dashboard bugs** — B1 (double broadcast) then F1-F4 in priority order (Section 7).
-7. **Long-duration battery test** — Let device run on battery for days, monitor `battery_voltage` in MongoDB to get real-world power draw curve.
+1. **Deploy v9 changes** — Push to main: backend (detector.py sanity checks) auto-deploys to Railway, frontend auto-deploys to Vercel. Then flash firmware v3.7.0.
+2. **Verify clean data pipeline** — Vape at sensor, confirm serial shows non-zero PM2.5 during DEEP_SENSE and backend logs show positive `d_pm25_peak`. If PM2.5 still reads 0, investigate BMV080 hardware.
+3. **Collect fresh training data** — See Tier 3 plan in Section 2e. Minimum 20 vape events + negative examples (bumps, fan, gas drift). All previous training data is invalid.
+4. **Retrain models** — Using `train_with_feature_engine.py` with new labels. Models will now use all 35 features including decay dynamics.
+5. **Verify battery voltage reading** — Check serial output for `Batt=X.XXV`. If reading 0.00V, pin A1 may be wrong for this board revision.
+6. **Set up schedule via backend API** — Configure school hours (e.g. 7AM-4PM Mon-Fri) to activate the power scheduling already in firmware.
+7. **Change WiFi back to school** — Before deploying: update NVS override in setup() from `sweethome` to school SSID/password, reflash.
+8. **Test OTA end-to-end** — Upload v3.7.0 .bin to backend, reboot device, confirm it OTA updates. Would eliminate need for USB flashing.
+9. **Long-duration battery test** — Let device run on battery for days, monitor `battery_voltage` in MongoDB to get real-world power draw curve.
 
 ## 8. Context Notes
 
@@ -582,5 +782,6 @@ Deep analysis of all dashboard issues was completed. The following bugs were ide
 - **COM port**: COM3 (was COM4, changed after replug — always check)
 - **arduino-cli (actual location)**: `C:\Users\mrjra\dev\Vape Project\arduino-cli.exe`
 - **OTA firmware v3.4.3 uploaded** to backend MongoDB `firmware` collection (active) — v3.5.0 not yet uploaded for OTA
-- **ML models**: Retrained 2026-06-05 with BMV080 data. Labels: `backend/training/bmv080_labels.json`. 22 vape + 2 clean_air events. RF/XGB 100%, KNN 88.6%.
+- **ML models**: Retrained 2026-06-05 with BMV080 data. Labels: `backend/training/bmv080_labels.json`. 22 vape + 2 clean_air events. RF/XGB 100%, KNN 88.6%. **MODELS ARE INVALID** — trained on garbage data (zero PM2.5 readings). Must retrain after Tier 1 deployment. See Tier 3 plan in Section 2e.
 - **OTA fix landed in v3.4.3**: `checkForOTA()` now uses a local `WiFiClientSecure checkClient` instead of reusing the global `secClient` — fixes the -1 connection refused bug caused by stale TLS state after `fetchSchedule()`
+- **v9 changes (2026-06-06)**: Tier 1 (firmware BMV080 warmup, zero-read rejection, backend sanity checks, cooldown heartbeat) + Tier 2 (shared WS context, auto-scale charts, stale auto-clear). Not yet committed/pushed. See Section 2e for full details.

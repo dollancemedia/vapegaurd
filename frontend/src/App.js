@@ -7,6 +7,7 @@ import Analytics from './pages/Analytics';
 import TrainAI from './pages/TrainAI';
 import NotificationController from './components/NotificationController';
 import ErrorBoundary from './components/ErrorBoundary';
+import { SharedWebSocketProvider } from './hooks/useSharedWebSocket';
 import { LayoutDashboard, BarChart2, Settings as SettingsIcon, Brain } from 'lucide-react';
 import './App.css';
 
@@ -104,7 +105,9 @@ function App() {
         <Router>
           <div className="App">
             <SignedIn>
-              <AppContent />
+              <SharedWebSocketProvider>
+                <AppContent />
+              </SharedWebSocketProvider>
             </SignedIn>
 
             <SignedOut>

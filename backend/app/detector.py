@@ -100,7 +100,8 @@ class Detector:
 
         if duty_state == "startup":
             # Sensor is warming up and calibrating — update backend baselines
-            if pm25 is not None:
+            # Skip zero PM2.5 readings (sensor not ready during warmup)
+            if pm25 is not None and pm25 > 0:
                 prev_ewma = state.get('ewma_pm25')
                 new_ewma = FeatureEngine.update_ewma(pm25, prev_ewma, settings.EWMA_ALPHA_CALIBRATION)
                 state_manager.update_state(device_id, {
@@ -116,7 +117,8 @@ class Detector:
 
         elif duty_state == "sniff":
             # Normal heartbeat — update baselines with slow drift
-            if pm25 is not None:
+            # Skip zero PM2.5 readings entirely (failed sensor reads)
+            if pm25 is not None and pm25 > 0:
                 prev_ewma = state.get('baseline_pm25') or state.get('ewma_pm25')
                 if prev_ewma is None:
                     prev_ewma = pm25
@@ -125,8 +127,7 @@ class Detector:
 
                 # Server-side spike detection: if firmware missed the spike,
                 # flag it and tell the device to enter DEEP_SENSE via response
-                # Skip when PM2.5 is 0 — that's a failed sensor read, not a real spike
-                if pm25 > 0 and d_pm25 >= settings.D_PM25_SUS and state.get("status") != "CONFIRMING":
+                if d_pm25 >= settings.D_PM25_SUS and state.get("status") != "CONFIRMING":
                     event_id = str(uuid.uuid4())
                     state_manager.update_state(device_id, {
                         "status": "CONFIRMING",
@@ -248,18 +249,67 @@ class Detector:
         baseline_samples = [s for s in all_samples if s['timestamp'] <= t0]
         event_samples = [s for s in all_samples if s['timestamp'] > t0]
 
-        print(f"[Detector] ML DECISION | Dev: {device_id} | baseline={len(baseline_samples)} event={len(event_samples)} samples")
+        # Filter out zero PM2.5 readings (failed BMV080 sensor reads)
+        event_samples_clean = [s for s in event_samples if s.get('pm25') and s['pm25'] > 0]
+        baseline_samples_clean = [s for s in baseline_samples if s.get('pm25') and s['pm25'] > 0]
 
-        # Compute features and predict
-        features = FeatureEngine.compute_features(baseline_samples, event_samples)
-        prediction = ensemble.predict(features)
+        print(f"[Detector] ML DECISION | Dev: {device_id} | baseline={len(baseline_samples)}({len(baseline_samples_clean)} valid) event={len(event_samples)}({len(event_samples_clean)} valid) samples")
 
-        # Transition to IDLE (sensor handles its own cooldown)
+        # Transition to COOLDOWN regardless of outcome
         cooldown_until = decision_time + timedelta(seconds=settings.COOLDOWN_SEC)
         state_manager.update_state(device_id, {
             "status": "COOLDOWN",
             "cooldown_until": cooldown_until
         })
+
+        # Sanity check: if fewer than 3 valid event samples, data is garbage
+        if len(event_samples_clean) < 3:
+            print(f"[Detector] SKIP ML — only {len(event_samples_clean)} valid event samples (need 3+)")
+            event_doc = {
+                "event_id": event_id,
+                "device_id": device_id,
+                "t_start": t0,
+                "t_decision": decision_time,
+                "timestamp": self._iso_utc(decision_time),
+                "status": "confirmed",
+                "top_class": "normal",
+                "probs": {"normal": 1.0},
+                "top_prob": 1.0,
+                "margin": 1.0,
+                "event_features": {"skipped": "insufficient_valid_samples", "valid_count": len(event_samples_clean)},
+                "ensemble_detail": {},
+                "created_at": self._get_now()
+            }
+            return event_doc, "confirmed"
+
+        # Compute features using cleaned samples
+        features = FeatureEngine.compute_features(
+            baseline_samples_clean if baseline_samples_clean else baseline_samples,
+            event_samples_clean
+        )
+
+        # Sanity check: if PM2.5 peak is at or below baseline, it's not vape
+        d_pm25_peak = features.get('d_pm25_peak')
+        if d_pm25_peak is not None and d_pm25_peak <= 0:
+            print(f"[Detector] SKIP ML — d_pm25_peak={d_pm25_peak:.2f} (negative delta = not vape)")
+            event_doc = {
+                "event_id": event_id,
+                "device_id": device_id,
+                "t_start": t0,
+                "t_decision": decision_time,
+                "timestamp": self._iso_utc(decision_time),
+                "status": "confirmed",
+                "top_class": "normal",
+                "probs": {"normal": 1.0},
+                "top_prob": 1.0,
+                "margin": 1.0,
+                "event_features": features,
+                "ensemble_detail": {"skipped": "negative_pm25_delta"},
+                "created_at": self._get_now()
+            }
+            return event_doc, "confirmed"
+
+        prediction = ensemble.predict(features)
 
         event_doc = {
             "event_id": event_id,
@@ -508,14 +558,61 @@ class Detector:
         baseline_samples = [s for s in all_samples if s['timestamp'] <= t0]
         event_samples = [s for s in all_samples if s['timestamp'] > t0]
 
-        features = FeatureEngine.compute_features(baseline_samples, event_samples)
-        prediction = ensemble.predict(features)
+        # Filter out zero PM2.5 readings (failed sensor reads)
+        event_samples_clean = [s for s in event_samples if s.get('pm25') and s['pm25'] > 0]
+        baseline_samples_clean = [s for s in baseline_samples if s.get('pm25') and s['pm25'] > 0]
 
         cooldown_until = decision_time + timedelta(seconds=settings.COOLDOWN_SEC)
         state_manager.update_state(device_id, {
             "status": "COOLDOWN",
             "cooldown_until": cooldown_until
         })
+
+        if len(event_samples_clean) < 3:
+            print(f"[Detector] SKIP ML (legacy) — only {len(event_samples_clean)} valid event samples")
+            event_doc = {
+                "event_id": event_id,
+                "device_id": device_id,
+                "t_start": t0,
+                "t_decision": decision_time,
+                "timestamp": self._iso_utc(decision_time),
+                "status": "confirmed",
+                "top_class": "normal",
+                "probs": {"normal": 1.0},
+                "top_prob": 1.0,
+                "margin": 1.0,
+                "event_features": {"skipped": "insufficient_valid_samples", "valid_count": len(event_samples_clean)},
+                "ensemble_detail": {},
+                "created_at": self._get_now()
+            }
+            return event_doc, "confirmed"
+
+        features = FeatureEngine.compute_features(
+            baseline_samples_clean if baseline_samples_clean else baseline_samples,
+            event_samples_clean
+        )
+
+        d_pm25_peak = features.get('d_pm25_peak')
+        if d_pm25_peak is not None and d_pm25_peak <= 0:
+            print(f"[Detector] SKIP ML (legacy) — d_pm25_peak={d_pm25_peak:.2f} (negative delta)")
+            event_doc = {
+                "event_id": event_id,
+                "device_id": device_id,
+                "t_start": t0,
+                "t_decision": decision_time,
+                "timestamp": self._iso_utc(decision_time),
+                "status": "confirmed",
+                "top_class": "normal",
+                "probs": {"normal": 1.0},
+                "top_prob": 1.0,
+                "margin": 1.0,
+                "event_features": features,
+                "ensemble_detail": {"skipped": "negative_pm25_delta"},
+                "created_at": self._get_now()
+            }
+            return event_doc, "confirmed"
+
+        prediction = ensemble.predict(features)
 
         event_doc = {
             "event_id": event_id,

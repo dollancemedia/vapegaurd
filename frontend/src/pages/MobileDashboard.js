@@ -1,12 +1,12 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import DeviceMap from '../components/DeviceMap';
 import DeviceList from '../components/DeviceList';
 import { MobileDeviceDetail } from '../components/DeviceDetailPanel';
 import AddDeviceModal from '../components/AddDeviceModal';
 import { useDevices } from '../hooks/useDevices';
-import { useWebSocket } from '../hooks/useWebSocket';
+import { useSharedWebSocket } from '../hooks/useSharedWebSocket';
 import api from '../services/api';
-import { useAuth, useOrganization } from '@clerk/clerk-react';
+import { useOrganization } from '@clerk/clerk-react';
 import { Edit2 } from 'lucide-react';
 
 const pickDefined = (obj = {}) =>
@@ -30,6 +30,7 @@ const MobileDashboard = () => {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isMapEditing, setIsMapEditing] = useState(false);
   const [deviceHistory, setDeviceHistory] = useState({});
+  const staleClearTimersRef = useRef({});
 
   const { organization } = useOrganization();
 
@@ -37,22 +38,7 @@ const MobileDashboard = () => {
     ? 'admin'
     : organization?.id;
 
-  const { getToken } = useAuth();
-  const [token, setToken] = useState(null);
-
-  const { devices, refreshDevices, pingDevice, updateDeviceStatus, deleteDevice } = useDevices(school, token);
-
-  useEffect(() => {
-    const fetchToken = async () => {
-      try {
-        const t = await getToken();
-        setToken(t);
-      } catch (error) {
-        console.error("Error fetching Clerk token:", error);
-      }
-    };
-    fetchToken();
-  }, [getToken]);
+  const { devices, refreshDevices, pingDevice, updateDeviceStatus, deleteDevice } = useDevices(school);
 
   useEffect(() => {
     const pollInterval = setInterval(() => {
@@ -151,6 +137,26 @@ const MobileDashboard = () => {
         status: derivedStatus
       });
 
+      // Auto-clear detection status after 90s if no new message arrives
+      const predictedClass = reading.predicted_class ?? (reading.prediction ? reading.prediction.type : 'normal');
+      if (predictedClass && predictedClass !== 'normal' && predictedClass !== 'cooldown') {
+        clearTimeout(staleClearTimersRef.current[deviceId]);
+        staleClearTimersRef.current[deviceId] = setTimeout(() => {
+          updateDeviceStatus(deviceId, {
+            status: 'online',
+            sensorData: { predictedClass: 'normal', confidence: 0 },
+          });
+          setSelectedDevice(prev => {
+            if (prev?.id === deviceId) {
+              return { ...prev, status: 'online', sensorData: { ...prev.sensorData, predictedClass: 'normal', confidence: 0 } };
+            }
+            return prev;
+          });
+        }, 90000);
+      } else if (predictedClass === 'normal') {
+        clearTimeout(staleClearTimersRef.current[deviceId]);
+      }
+
       setDeviceHistory(prev => {
         const currentHistory = prev[deviceId] || [];
         const latestKnown = currentHistory[0] || {};
@@ -205,11 +211,7 @@ const MobileDashboard = () => {
     }
   }, [updateDeviceStatus]);
 
-  useWebSocket('/ws/events', {
-    onMessage: handleWebSocketMessage,
-    queryParams: { token },
-    enabled: !!token
-  });
+  useSharedWebSocket(handleWebSocketMessage);
 
   const handleDeviceSelect = (device) => {
     setSelectedDevice(device);

@@ -4,10 +4,10 @@ import DeviceList from '../components/DeviceList';
 import DeviceDetailPanel from '../components/DeviceDetailPanel';
 import AddDeviceModal from '../components/AddDeviceModal';
 import { useDevices } from '../hooks/useDevices';
-import { useWebSocket } from '../hooks/useWebSocket';
+import { useSharedWebSocket } from '../hooks/useSharedWebSocket';
 import api from '../services/api';
 import deviceService from '../services/deviceService';
-import { useAuth, useOrganization } from '@clerk/clerk-react';
+import { useOrganization } from '@clerk/clerk-react';
 import MobileDashboard from './MobileDashboard';
 import { useMediaQuery } from 'react-responsive';
 
@@ -215,8 +215,9 @@ const Devices = () => {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isCalibratingAll, setIsCalibratingAll] = useState(false);
   const [mapEditAfterAdd, setMapEditAfterAdd] = useState(false);
-  const [deviceHistory, setDeviceHistory] = useState({}); // Map of deviceId -> array of readings
+  const [deviceHistory, setDeviceHistory] = useState({});
   const lastHistoryUpdateRef = useRef({});
+  const staleClearTimersRef = useRef({});
   const { organization } = useOrganization();
   // Use organization ID for specific sites to match registration data
   // If org name is Admin, pass 'admin' to see all devices
@@ -237,21 +238,7 @@ const Devices = () => {
     if (updated) setSelectedDevice(prev => ({ ...prev, ...updated }));
   }, [devices]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Get Clerk token
-  const { getToken } = useAuth();
-  const [token, setToken] = useState(null);
-
-  useEffect(() => {
-    const fetchToken = async () => {
-      try {
-        const t = await getToken();
-        setToken(t);
-      } catch (error) {
-        console.error("Error fetching Clerk token:", error);
-      }
-    };
-    fetchToken();
-  }, [getToken]);
+  // Token no longer needed here — SharedWebSocketProvider handles auth
 
   // Setup silent polling
   useEffect(() => {
@@ -381,6 +368,26 @@ const Devices = () => {
 
         updateDeviceStatus(deviceId, updates);
 
+        // Auto-clear detection status after 90s if no new message arrives
+        const predictedClass = sensorDataUpdate.predictedClass;
+        if (predictedClass && predictedClass !== 'normal' && predictedClass !== 'cooldown') {
+          clearTimeout(staleClearTimersRef.current[deviceId]);
+          staleClearTimersRef.current[deviceId] = setTimeout(() => {
+            updateDeviceStatus(deviceId, {
+              status: 'online',
+              sensorData: { predictedClass: 'normal', confidence: 0 },
+            });
+            setSelectedDevice(prev => {
+              if (prev?.id === deviceId) {
+                return { ...prev, status: 'online', sensorData: { ...prev.sensorData, predictedClass: 'normal', confidence: 0 } };
+              }
+              return prev;
+            });
+          }, 90000);
+        } else if (predictedClass === 'normal') {
+          clearTimeout(staleClearTimersRef.current[deviceId]);
+        }
+
         const now = Date.now();
         if (now - (lastHistoryUpdateRef.current[deviceId] || 0) >= 1000) {
           lastHistoryUpdateRef.current[deviceId] = now;
@@ -417,11 +424,7 @@ const Devices = () => {
     }
   }, [updateDeviceStatus]);
 
-  useWebSocket('/ws/events', {
-    onMessage: handleWebSocketMessage,
-    queryParams: { token },
-    enabled: !!token
-  });
+  useSharedWebSocket(handleWebSocketMessage);
 
   if (isMobile) {
     return <MobileDashboard />;

@@ -63,7 +63,7 @@
 //  CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-const char* FIRMWARE_VERSION = "3.6.0";
+const char* FIRMWARE_VERSION = "3.7.0";
 
 const char* DEFAULT_SSID     = "";  // populated from NVS by loadDeviceIdentity()
 const char* DEFAULT_PASSWORD = "";  // populated from NVS by loadDeviceIdentity()
@@ -606,7 +606,7 @@ void loop() {
 
         // Wake BMV080 laser + BME680
         wakeHeavySensors();
-        delay(2000); // BMV080 laser warmup after init()
+        delay(3000); // additional warmup for reliable PM readings
 
         neoSet(0, 0, 40); // blue pulse
 
@@ -720,8 +720,18 @@ void loop() {
 
     // ── COOLDOWN: 20s, light sleep, tamper still active ─────────────────
     case STATE_COOLDOWN: {
+      // Send one "cooldown" heartbeat at the start so dashboard clears detection status
+      static bool cooldownHeartbeatSent = false;
+      if (elapsed < 2000 && !cooldownHeartbeatSent) {
+        cooldownHeartbeatSent = true;
+        Serial.println("Cooldown heartbeat — clearing dashboard status");
+        if (WiFi.status() == WL_CONNECTED) {
+          postSensorData();
+        }
+      }
       if (elapsed >= cooldownSec * 1000) {
         Serial.println("Cooldown complete — back to SNIFF");
+        cooldownHeartbeatSent = false;
         neoOff();
         enterState(STATE_SNIFF);
       } else {
@@ -770,7 +780,7 @@ void wakeHeavySensors() {
   if (bmv080Available) {
     bmv.setMode(SF_BMV080_MODE_CONTINUOUS);
     Serial.println("BMV080 -> continuous");
-    delay(500);  // brief warmup for stable readings
+    delay(3000);  // BMV080 needs ~3s to stabilize after mode switch
   }
   heavySensorsOn = true;
 }
@@ -789,11 +799,18 @@ void burstReadBMV080() {
 
   for (int i = 0; i < BURST_TOTAL_READS; i++) {
     if (bmv.readSensor()) {
-      pm25Buf[i] = bmv.PM25();
-      pm10Buf[i] = bmv.PM10();
-      pm1Buf[i]  = bmv.PM1();
+      float val = bmv.PM25();
+      if (val > 0) {
+        pm25Buf[i] = val;
+        pm10Buf[i] = bmv.PM10();
+        pm1Buf[i]  = bmv.PM1();
+        if (i >= BURST_DISCARD) validCount++;
+      } else {
+        pm25Buf[i] = -1;
+        pm10Buf[i] = -1;
+        pm1Buf[i]  = -1;
+      }
       if (bmv.isObstructed()) obstructed = true;
-      if (i >= BURST_DISCARD) validCount++;
     } else {
       pm25Buf[i] = -1;
       pm10Buf[i] = -1;
@@ -806,7 +823,7 @@ void burstReadBMV080() {
     float sumPM25 = 0, sumPM10 = 0, sumPM1 = 0;
     int count = 0;
     for (int i = BURST_DISCARD; i < BURST_TOTAL_READS; i++) {
-      if (pm25Buf[i] >= 0) {
+      if (pm25Buf[i] > 0) {
         sumPM25 += pm25Buf[i];
         sumPM10 += pm10Buf[i];
         sumPM1  += pm1Buf[i];
@@ -818,6 +835,7 @@ void burstReadBMV080() {
       lastPM10 = sumPM10 / count;
       lastPM1  = sumPM1 / count;
     }
+    // If no valid reads in burst, previous values are preserved
   }
 
   lastBmvObstructed = obstructed;
@@ -827,6 +845,9 @@ void burstReadBMV080() {
 //  LOCAL BASELINE + SPIKE DETECTION
 // =============================================================================
 void updateLocalBaseline(bool fastAlpha) {
+  // Never update PM baselines with zero/invalid readings
+  if (lastPM25 <= 0) return;
+
   float alpha = fastAlpha ? LOCAL_EWMA_ALPHA_CAL : LOCAL_EWMA_ALPHA;
 
   if (calibSamples == 0 && fastAlpha) {
@@ -1028,9 +1049,14 @@ void readAllSensors() {
 
   if (bmv080Available) {
     if (bmv.readSensor()) {
-      lastPM1  = bmv.PM1();
-      lastPM25 = bmv.PM25();
-      lastPM10 = bmv.PM10();
+      float newPM25 = bmv.PM25();
+      if (newPM25 > 0) {
+        lastPM1  = bmv.PM1();
+        lastPM25 = newPM25;
+        lastPM10 = bmv.PM10();
+      } else {
+        Serial.println("BMV080: readSensor() returned 0 — keeping previous values");
+      }
       lastBmvObstructed = bmv.isObstructed();
     } else {
       Serial.println("BMV080: readSensor() returned false (no new data)");

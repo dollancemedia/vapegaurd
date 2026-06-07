@@ -149,6 +149,20 @@ const useChartConfig = (history, metric) => {
   const active = METRICS.find(m => m.key === metric);
   const sliced = history.slice(0, 20).reverse();
 
+  // Compute actual data range for single-metric auto-scaling
+  let yMin, yMax;
+  if (active && !isAll) {
+    const vals = sliced.map(h => { const v = h[active.key]; return active.fn ? active.fn(v) : v; }).filter(v => v != null);
+    if (vals.length > 0) {
+      const dataMin = Math.min(...vals);
+      const dataMax = Math.max(...vals);
+      const range = dataMax - dataMin;
+      const padding = Math.max(range * 0.3, 1);
+      yMin = Math.max(0, Math.floor(dataMin - padding));
+      yMax = Math.ceil(dataMax + padding);
+    }
+  }
+
   const singleDatasets = active ? [{
     label: `${active.label} (${active.unit})`,
     data:  sliced.map(h => { const v = h[active.key]; return active.fn ? active.fn(v) : v; }),
@@ -168,18 +182,27 @@ const useChartConfig = (history, metric) => {
     pointBorderWidth: 1.5, pointHoverRadius: 5,
   }] : [];
 
-  const allDatasets = METRICS.map(m => ({
-    label: m.label,
-    data: sliced.map(h => {
-      const v   = h[m.key];
-      const raw = m.fn ? m.fn(v) : (v != null ? Number(v) : null);
-      return raw != null ? Math.min(+(raw / m.max * 100).toFixed(1), 100) : null;
-    }),
-    borderColor: m.color, backgroundColor: 'transparent',
-    fill: false, tension: 0.42, borderWidth: 1.5,
-    pointRadius: 2, pointBackgroundColor: m.color,
-    pointBorderColor: '#fff', pointBorderWidth: 1, pointHoverRadius: 4,
-  }));
+  // "All" view: normalize each metric to its own min-max range in the visible data
+  const allDatasets = METRICS.map(m => {
+    const rawVals = sliced.map(h => {
+      const v = h[m.key];
+      return m.fn ? m.fn(v) : (v != null ? Number(v) : null);
+    });
+    const validVals = rawVals.filter(v => v != null);
+    const localMin = validVals.length > 0 ? Math.min(...validVals) : 0;
+    const localMax = validVals.length > 0 ? Math.max(...validVals) : 1;
+    const localRange = localMax - localMin || 1;
+
+    return {
+      label: m.label,
+      data: rawVals.map(v => v != null ? +((v - localMin) / localRange * 100).toFixed(1) : null),
+      borderColor: m.color, backgroundColor: 'transparent',
+      fill: false, tension: 0.42, borderWidth: 1.5,
+      pointRadius: 2, pointBackgroundColor: m.color,
+      pointBorderColor: '#fff', pointBorderWidth: 1, pointHoverRadius: 4,
+      _localMin: localMin, _localMax: localMax,
+    };
+  });
 
   const chartData = {
     labels: sliced.map(h => fmtTime(h.timestamp)),
@@ -217,9 +240,13 @@ const useChartConfig = (history, metric) => {
     },
     scales: {
       x: { grid: { display: false }, ticks: { font: { size: 9 }, color: '#9ca3af', maxTicksLimit: 6, maxRotation: 0 }, border: { display: false } },
-      y: { ...(isAll ? { min: 0, max: 100 } : {}), grid: { color: 'rgba(0,0,0,0.045)' },
+      y: {
+        ...(isAll ? { min: 0, max: 100 } : {}),
+        ...(yMin !== undefined ? { min: yMin, max: yMax, suggestedMin: yMin, suggestedMax: yMax } : {}),
+        grid: { color: 'rgba(0,0,0,0.045)' },
         ticks: { font: { size: 9 }, color: '#9ca3af', maxTicksLimit: 4, ...(isAll ? { callback: (v) => v + '%' } : {}) },
-        border: { display: false } },
+        border: { display: false },
+      },
     },
   };
 
