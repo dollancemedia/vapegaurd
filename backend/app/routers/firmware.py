@@ -83,7 +83,13 @@ async def check_latest(
         return {"update_available": False, "version": current_version}
 
     latest_version = active["version"]
-    update_available = latest_version != current_version
+    # Proper semver comparison — only update if server version is newer
+    def parse_ver(v):
+        try:
+            return tuple(int(x) for x in v.split("."))
+        except (ValueError, AttributeError):
+            return (0, 0, 0)
+    update_available = parse_ver(latest_version) > parse_ver(current_version)
 
     # Track that this device checked in
     if device_id:
