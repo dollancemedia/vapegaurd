@@ -713,7 +713,8 @@ void loop() {
         neoOff();
         enterState(STATE_COOLDOWN);
       } else {
-        delay(deepSenseRateMs);
+        // HTTP POST takes ~1s; only add small delay to hit ~1Hz total
+        delay(100);
       }
       break;
     }
@@ -791,6 +792,10 @@ void wakeHeavySensors() {
 void burstReadBMV080() {
   if (!bmv080Available) return;
 
+  // Drain any stale FIFO data accumulated while sensor was in duty cycle
+  int drained = 0;
+  while (bmv.readSensor() && drained < 60) drained++;
+
   float pm25Buf[BURST_TOTAL_READS];
   float pm10Buf[BURST_TOTAL_READS];
   float pm1Buf[BURST_TOTAL_READS];
@@ -798,8 +803,8 @@ void burstReadBMV080() {
   bool  obstructed = false;
 
   for (int i = 0; i < BURST_TOTAL_READS; i++) {
+    delay(BURST_DELAY_MS);  // wait for fresh reading
     if (bmv.readSensor()) {
-      // PM2.5 = 0 is valid (clean air); use -1 sentinel only for failed reads
       pm25Buf[i] = bmv.PM25();
       pm10Buf[i] = bmv.PM10();
       pm1Buf[i]  = bmv.PM1();
@@ -810,7 +815,6 @@ void burstReadBMV080() {
       pm10Buf[i] = -1;
       pm1Buf[i]  = -1;
     }
-    delay(BURST_DELAY_MS);
   }
 
   if (validCount > 0) {
@@ -1041,15 +1045,19 @@ void readAllSensors() {
   }
 
   if (bmv080Available) {
-    if (bmv.readSensor()) {
-      float newPM25 = bmv.PM25();
-      // PM2.5 = 0 is valid (clean air). Only readSensor()=false means no data.
+    // Drain all buffered readings — serve_interrupt accumulates 1/sec in the FIFO.
+    // If we poll slower than 1Hz (e.g. HTTP POST takes 1s), stale data piles up.
+    int drainCount = 0;
+    while (bmv.readSensor()) {
       lastPM1  = bmv.PM1();
-      lastPM25 = newPM25;
+      lastPM25 = bmv.PM25();
       lastPM10 = bmv.PM10();
       lastBmvObstructed = bmv.isObstructed();
-    } else {
-      Serial.println("BMV080: readSensor() returned false (no new data)");
+      drainCount++;
+      if (drainCount > 10) break;  // safety cap
+    }
+    if (drainCount == 0) {
+      Serial.println("BMV080: no data available");
     }
   }
 
