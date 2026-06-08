@@ -100,8 +100,8 @@ class Detector:
 
         if duty_state == "startup":
             # Sensor is warming up and calibrating — update backend baselines
-            # Skip zero PM2.5 readings (sensor not ready during warmup)
-            if pm25 is not None and pm25 > 0:
+            # PM2.5 = 0 is valid (clean air); only skip if None
+            if pm25 is not None and pm25 >= 0:
                 prev_ewma = state.get('ewma_pm25')
                 new_ewma = FeatureEngine.update_ewma(pm25, prev_ewma, settings.EWMA_ALPHA_CALIBRATION)
                 state_manager.update_state(device_id, {
@@ -117,8 +117,8 @@ class Detector:
 
         elif duty_state == "sniff":
             # Normal heartbeat — update baselines with slow drift
-            # Skip zero PM2.5 readings entirely (failed sensor reads)
-            if pm25 is not None and pm25 > 0:
+            # PM2.5 = 0 is valid (clean air); only skip if None
+            if pm25 is not None and pm25 >= 0:
                 prev_ewma = state.get('baseline_pm25') or state.get('ewma_pm25')
                 if prev_ewma is None:
                     prev_ewma = pm25
@@ -249,9 +249,10 @@ class Detector:
         baseline_samples = [s for s in all_samples if s['timestamp'] <= t0]
         event_samples = [s for s in all_samples if s['timestamp'] > t0]
 
-        # Filter out zero PM2.5 readings (failed BMV080 sensor reads)
-        event_samples_clean = [s for s in event_samples if s.get('pm25') and s['pm25'] > 0]
-        baseline_samples_clean = [s for s in baseline_samples if s.get('pm25') and s['pm25'] > 0]
+        # During DEEP_SENSE, PM2.5=0 likely means failed read (someone IS vaping)
+        # But baseline PM2.5=0 is valid (clean air)
+        event_samples_clean = [s for s in event_samples if s.get('pm25') is not None and s['pm25'] > 0]
+        baseline_samples_clean = [s for s in baseline_samples if s.get('pm25') is not None and s['pm25'] >= 0]
 
         print(f"[Detector] ML DECISION | Dev: {device_id} | baseline={len(baseline_samples)}({len(baseline_samples_clean)} valid) event={len(event_samples)}({len(event_samples_clean)} valid) samples")
 
@@ -558,9 +559,9 @@ class Detector:
         baseline_samples = [s for s in all_samples if s['timestamp'] <= t0]
         event_samples = [s for s in all_samples if s['timestamp'] > t0]
 
-        # Filter out zero PM2.5 readings (failed sensor reads)
-        event_samples_clean = [s for s in event_samples if s.get('pm25') and s['pm25'] > 0]
-        baseline_samples_clean = [s for s in baseline_samples if s.get('pm25') and s['pm25'] > 0]
+        # During DEEP_SENSE, PM2.5=0 = failed read. Baseline PM2.5=0 = clean air (valid).
+        event_samples_clean = [s for s in event_samples if s.get('pm25') is not None and s['pm25'] > 0]
+        baseline_samples_clean = [s for s in baseline_samples if s.get('pm25') is not None and s['pm25'] >= 0]
 
         cooldown_until = decision_time + timedelta(seconds=settings.COOLDOWN_SEC)
         state_manager.update_state(device_id, {

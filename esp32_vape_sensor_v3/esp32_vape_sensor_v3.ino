@@ -799,17 +799,11 @@ void burstReadBMV080() {
 
   for (int i = 0; i < BURST_TOTAL_READS; i++) {
     if (bmv.readSensor()) {
-      float val = bmv.PM25();
-      if (val > 0) {
-        pm25Buf[i] = val;
-        pm10Buf[i] = bmv.PM10();
-        pm1Buf[i]  = bmv.PM1();
-        if (i >= BURST_DISCARD) validCount++;
-      } else {
-        pm25Buf[i] = -1;
-        pm10Buf[i] = -1;
-        pm1Buf[i]  = -1;
-      }
+      // PM2.5 = 0 is valid (clean air); use -1 sentinel only for failed reads
+      pm25Buf[i] = bmv.PM25();
+      pm10Buf[i] = bmv.PM10();
+      pm1Buf[i]  = bmv.PM1();
+      if (i >= BURST_DISCARD) validCount++;
       if (bmv.isObstructed()) obstructed = true;
     } else {
       pm25Buf[i] = -1;
@@ -823,7 +817,7 @@ void burstReadBMV080() {
     float sumPM25 = 0, sumPM10 = 0, sumPM1 = 0;
     int count = 0;
     for (int i = BURST_DISCARD; i < BURST_TOTAL_READS; i++) {
-      if (pm25Buf[i] > 0) {
+      if (pm25Buf[i] >= 0) {
         sumPM25 += pm25Buf[i];
         sumPM10 += pm10Buf[i];
         sumPM1  += pm1Buf[i];
@@ -835,7 +829,6 @@ void burstReadBMV080() {
       lastPM10 = sumPM10 / count;
       lastPM1  = sumPM1 / count;
     }
-    // If no valid reads in burst, previous values are preserved
   }
 
   lastBmvObstructed = obstructed;
@@ -845,8 +838,8 @@ void burstReadBMV080() {
 //  LOCAL BASELINE + SPIKE DETECTION
 // =============================================================================
 void updateLocalBaseline(bool fastAlpha) {
-  // Never update PM baselines with zero/invalid readings
-  if (lastPM25 <= 0) return;
+  // lastPM25 >= 0 is valid (clean air reads 0). Only skip if negative (impossible).
+  if (lastPM25 < 0) return;
 
   float alpha = fastAlpha ? LOCAL_EWMA_ALPHA_CAL : LOCAL_EWMA_ALPHA;
 
@@ -864,8 +857,8 @@ void updateLocalBaseline(bool fastAlpha) {
 }
 
 bool isLocalSpike() {
-  // Ignore readings where BMV080 returned 0 — sensor wasn't ready
-  if (lastPM25 <= 0) return false;
+  // Only skip if negative (impossible value — sensor error)
+  if (lastPM25 < 0) return false;
 
   float deltaPM25 = lastPM25 - baselinePM25;
   if (deltaPM25 >= LOCAL_SPIKE_THRESHOLD) {
@@ -1050,13 +1043,10 @@ void readAllSensors() {
   if (bmv080Available) {
     if (bmv.readSensor()) {
       float newPM25 = bmv.PM25();
-      if (newPM25 > 0) {
-        lastPM1  = bmv.PM1();
-        lastPM25 = newPM25;
-        lastPM10 = bmv.PM10();
-      } else {
-        Serial.println("BMV080: readSensor() returned 0 — keeping previous values");
-      }
+      // PM2.5 = 0 is valid (clean air). Only readSensor()=false means no data.
+      lastPM1  = bmv.PM1();
+      lastPM25 = newPM25;
+      lastPM10 = bmv.PM10();
       lastBmvObstructed = bmv.isObstructed();
     } else {
       Serial.println("BMV080: readSensor() returned false (no new data)");
@@ -1635,6 +1625,17 @@ void checkForOTA() {
 
     if (!updateAvailable || binUrl.length() == 0) {
       Serial.printf("[OTA] Up to date (latest: %s)\n", newVersion.c_str());
+      return;
+    }
+
+    // Client-side semver guard: never downgrade
+    int curMaj=0, curMin=0, curPat=0, newMaj=0, newMin=0, newPat=0;
+    sscanf(FIRMWARE_VERSION, "%d.%d.%d", &curMaj, &curMin, &curPat);
+    sscanf(newVersion.c_str(), "%d.%d.%d", &newMaj, &newMin, &newPat);
+    long curVer = curMaj*10000L + curMin*100L + curPat;
+    long newVer = newMaj*10000L + newMin*100L + newPat;
+    if (newVer <= curVer) {
+      Serial.printf("[OTA] Skipping downgrade: %s -> %s\n", FIRMWARE_VERSION, newVersion.c_str());
       return;
     }
 
