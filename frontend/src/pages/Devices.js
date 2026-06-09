@@ -179,13 +179,13 @@ const getAQIInfo = (aqi) => {
 // ── Status classifier (mirrors DeviceList's getStatusClass) ──────────────────
 const getDevStatusClass = (device) => {
   const { status, sensorData, isOnline } = device;
+  if (status === 'offline' || isOnline === false) return 'offline';
   const conf = sensorData?.confidence ?? 0;
   if ((sensorData?.predictedClass === 'vape' || status === 'alarm') && conf >= 40) return 'alarm';
   if (sensorData?.predictedClass === 'vape' && conf > 0 && conf < 40) return 'warning';
   if (status === 'CONFIRMING' || sensorData?.predictedClass === 'suspected') return 'warning';
   if (status === 'WARMUP' || status === 'CALIBRATING') return 'warning';
   if (status === 'COOLDOWN') return 'cooldown';
-  if (status === 'offline' || isOnline === false) return 'offline';
   return 'online';
 };
 
