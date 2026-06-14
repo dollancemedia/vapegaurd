@@ -87,5 +87,17 @@ backend/.env
 # Trae IDE
 .trae/
 
+# Claude Code
+.claude/
+
+# Worktree backup files
+*-Rahuls-Scar-15*
+
+# Build artifacts
+ota_build/
+
+# Temporary files
+my_fixes.patch
+
 # Allow src/lib directories (required for frontend projects)
 !**/src/lib/

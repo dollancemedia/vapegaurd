@@ -65,6 +65,11 @@
 
 const char* FIRMWARE_VERSION = "3.7.0";
 
+// ─── Training mode ─────────────────────────────────────────────────────────
+// Set to 1 for data collection: permanent 1Hz reads, no WiFi, no state machine.
+// Reflash with 0 to return to normal operation.
+#define TRAINING_MODE 1
+
 const char* DEFAULT_SSID     = "";  // populated from NVS by loadDeviceIdentity()
 const char* DEFAULT_PASSWORD = "";  // populated from NVS by loadDeviceIdentity()
 
@@ -403,6 +408,11 @@ void setup() {
   powerOnSensors();
   initSensors();
 
+#if TRAINING_MODE
+  Serial.println("=== TRAINING MODE — no WiFi, continuous 1Hz reads ===");
+  wifiOn = false;
+  neoSet(0, 255, 0);
+#else
   // BLE provisioning — always start advertising on boot.
   // If NVS creds exist (prior BLE provisioning), WiFi connects immediately and BLE shuts down.
   // If no NVS creds, device blocks here until a phone app writes SSID/PASS/ORG via BLE.
@@ -457,6 +467,7 @@ void setup() {
   // Init reusable TLS client (avoids heap fragmentation from repeated alloc/free)
   secClient.setInsecure();
   secClient.setTimeout(HTTP_TIMEOUT_MS / 1000);
+#endif
 
   // Set I2C timeout so bus lockup can't hang forever (ms)
   Wire.setTimeout(100);
@@ -482,6 +493,31 @@ void setup() {
 void loop() {
 
   esp_task_wdt_reset();  // feed watchdog every loop iteration
+
+#if TRAINING_MODE
+  {
+    static unsigned long lastTrainingRead = 0;
+    static int trainingSampleCount = 0;
+    unsigned long now = millis();
+
+    if (now - lastTrainingRead >= 1000) {
+      lastTrainingRead = now;
+      readAllSensors();
+      trainingSampleCount++;
+
+      if (trainingSampleCount <= 45) {
+        Serial.printf("WARMUP: %d/45\n", trainingSampleCount);
+        neoFlash(255, 165, 0, 100);  // orange flash during warmup
+      } else if (trainingSampleCount == 46) {
+        Serial.println("READY: Sensor warmed up — start labeling events");
+        neoSet(0, 255, 0);
+      }
+    }
+    keepalivePulse();
+    delay(50);
+    return;
+  }
+#endif
 
   unsigned long now = millis();
   unsigned long elapsed = now - stateEnteredAt;
@@ -630,6 +666,13 @@ void loop() {
         // Sleep BMV080 laser immediately after reading
         sleepHeavySensors();
 
+        // Always print sensor values so serial_plot.py can graph them
+        Serial.printf("Sniff #%d: PM2.5=%.1f (base=%.1f, d=%.1f) Gas=%.1f Batt=%.2fV Heap=%u\n",
+          sniffCount, lastPM25, baselinePM25, lastPM25 - baselinePM25,
+          lastGas, readBatteryVoltage(), ESP.getFreeHeap());
+        Serial.printf("SENSOR: T=%.1f H=%.1f P=%.1f G=%.1f PM1=%.2f PM25=%.2f PM10=%.2f\n",
+          lastTemp, lastHumidity, lastPressure, lastGas, lastPM1, lastPM25, lastPM10);
+
         // Check for spike
         if (baselineReady && isLocalSpike()) {
           Serial.println("!! LOCAL SPIKE — entering DEEP_SENSE !!");
@@ -658,10 +701,6 @@ void loop() {
           }
           // If server forced DEEP_SENSE, postSensorData changed state — skip sleep
           if (currentState != STATE_SNIFF) break;
-        } else {
-          Serial.printf("Sniff #%d: PM2.5=%.1f (base=%.1f, d=%.1f) Gas=%.1f Batt=%.2fV Heap=%u\n",
-            sniffCount, lastPM25, baselinePM25, lastPM25 - baselinePM25,
-            lastGas, readBatteryVoltage(), ESP.getFreeHeap());
         }
       }
 
@@ -1061,9 +1100,8 @@ void readAllSensors() {
     }
   }
 
-  Serial.printf("READ: T=%.1f H=%.1f G=%.1f PM2.5=%.1f [BME=%d BMV=%d]\n",
-    lastTemp, lastHumidity, lastGas, lastPM25,
-    bme680Available, bmv080Available);
+  Serial.printf("SENSOR: T=%.1f H=%.1f P=%.1f G=%.1f PM1=%.2f PM25=%.2f PM10=%.2f\n",
+    lastTemp, lastHumidity, lastPressure, lastGas, lastPM1, lastPM25, lastPM10);
 }
 
 // =============================================================================

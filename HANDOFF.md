@@ -1,4 +1,4 @@
-# HANDOFF.md — Mistio / VapeGuard Session Transfer (v9)
+# HANDOFF.md — Mistio / VapeGuard Session Transfer (v10)
 
 ## 1. Project Overview
 
@@ -248,7 +248,7 @@ All fixes organized into three tiers. Tiers 1 and 2 implemented this session. Ti
 
 ### v9 Files Changed
 
-**Not yet committed. All changes are local.**
+**Committed and pushed in v9 session (commit `edd703f`).**
 
 | File | Changes |
 |---|---|
@@ -299,7 +299,101 @@ Sensor reads PM2.5 spike (delta > 3.0 from baseline)
 
 ---
 
-### TIER 3: Retraining (NOT YET DONE — requires Tier 1 deployment first)
+## 2f. What Was Fixed (v10 — 2026-06-07)
+
+### Session Summary
+
+Deployed all v9 changes (Tier 1 + Tier 2), flashed firmware, and discovered three critical issues that were preventing the detection pipeline from working end-to-end. All three fixed and verified with a live vape test showing real PM2.5 decay curve (53→47→23→20→17→16→15→14→11→10→7→5 μg/m³).
+
+---
+
+### Fix V10-1: OTA Downgrade Loop — FIXED
+
+- **Problem:** After flashing v3.7.0, the device immediately OTA "updated" back to v3.4.4 (then v3.4.2 after we changed active). The `/firmware/latest` endpoint used `latest_version != current_version` to determine if an update was available — any version difference triggered OTA, including downgrades.
+- **Fix (backend `firmware.py`):** Replaced `!=` with proper semver tuple comparison: `parse_ver(latest) > parse_ver(current)`. Only offers OTA when the server version is strictly newer.
+- **Fix (firmware `esp32_vape_sensor_v3.ino`):** Added client-side semver guard in `checkForOTA()`. Parses both versions with `sscanf`, compares as `major*10000 + minor*100 + patch`. If server version <= current, logs `"[OTA] Skipping downgrade"` and returns.
+- **Fix (server state):** Uploaded v3.7.0 binary to backend as active firmware via `/api/firmware/upload`. OTA now correctly returns `update_available: false` for devices already on v3.7.0.
+- **Files:** `backend/app/routers/firmware.py`, `esp32_vape_sensor_v3/esp32_vape_sensor_v3.ino`
+- **Commits:** `af795f0` (backend semver fix), `28fb220` (firmware guard + PM2.5 fix)
+
+### Fix V10-2: PM2.5 = 0 Rejected as Invalid — FIXED
+
+- **Problem:** The BMV080 correctly reports PM2.5 = 0.0 μg/m³ in clean indoor air. But ALL code treated 0 as "sensor not ready" and rejected it:
+  - `readAllSensors()`: `if (newPM25 > 0)` — rejected 0, kept stale previous value
+  - `burstReadBMV080()`: `if (val > 0)` — excluded 0 from burst averaging
+  - `updateLocalBaseline()`: `if (lastPM25 <= 0) return` — never updated baseline
+  - `isLocalSpike()`: `if (lastPM25 <= 0) return false` — never detected spikes
+  - Backend `detector.py`: `if pm25 > 0` in startup/sniff handlers — never calibrated backend baselines
+- **Impact:** Baseline never froze during STARTUP (0 calibration samples), device appeared offline, no detection possible.
+- **Fix (firmware):** Changed all `> 0` guards to `>= 0` (or removed entirely). PM2.5 = 0 is now accepted as valid clean-air reading. Only `readSensor() == false` (no data available from sensor) is treated as invalid.
+- **Fix (backend `detector.py`):** Changed startup/sniff handlers from `pm25 > 0` to `pm25 >= 0`. Event sample filtering during DEEP_SENSE still uses `> 0` (during active vape, 0 = likely failed read). Baseline samples accept `>= 0`.
+- **Files:** `esp32_vape_sensor_v3/esp32_vape_sensor_v3.ino` (4 functions), `backend/app/detector.py` (4 locations)
+- **Commit:** `28fb220`
+
+### Fix V10-3: BMV080 FIFO Stale Data — FIXED
+
+- **Problem:** During DEEP_SENSE, PM2.5 stayed frozen at exactly 131.0 μg/m³ for all 14 reads while gas/temp/humidity changed normally. The vape cloud should show a decay curve.
+- **Root cause:** The BMV080 accumulates 1 reading/sec in its internal FIFO. `readSensor()` calls `bmv080_serve_interrupt()` once, which dequeues ONE buffered reading. But the DEEP_SENSE loop took ~2s per iteration (1s HTTP POST + 1s delay), so it only called `readSensor()` every 2 seconds. This meant:
+  - FIFO accumulated 2 readings per loop iteration
+  - Each `readSensor()` call returned the OLDER buffered reading
+  - The second (newer) reading stayed in the FIFO until next iteration
+  - Result: always reading data that was 1-2 seconds stale, PM2.5 never updated
+- **Fix (`readAllSensors()`):** Instead of calling `readSensor()` once, drain the entire FIFO in a `while` loop (capped at 10 iterations). The last value drained is the freshest reading.
+- **Fix (`burstReadBMV080()`):** Added FIFO drain at the start (up to 60 stale readings from duty-cycle mode). Then moved `delay(BURST_DELAY_MS)` before each read instead of after, ensuring fresh data for each burst sample.
+- **Fix (DEEP_SENSE timing):** Reduced `delay()` from 1000ms to 100ms since the HTTP POST already takes ~1s, giving ~1.1s total loop time matching the sensor's 1 reading/sec output rate.
+- **Result:** PM2.5 now shows real decay curve: 53→47→23→26→20→17→16→16→19→21→15→14→11→13→15→14→12→11→10→7→7→6→5 μg/m³ over 23 reads. Previously: 131→131→131→...→131 for 14 reads.
+- **Files:** `esp32_vape_sensor_v3/esp32_vape_sensor_v3.ino` — `readAllSensors()`, `burstReadBMV080()`, STATE_DEEP_SENSE case
+- **Commit:** `a5d339f`
+
+### V10 Serial Monitor Plot Script — ADDED
+
+- Created `serial_plot.py` — real-time matplotlib graph of PM2.5 + gas resistance from serial output. Parses Sniff and READ debug lines. Usage: `python serial_plot.py`
+- **File:** `serial_plot.py` (project root)
+
+### v10 Commits Pushed to `main` (2026-06-07)
+
+| Commit | Files | What |
+|---|---|---|
+| `edd703f` | 9 files (backend/detector.py, firmware, frontend×6, HANDOFF.md) | v9 Tier 1+2: BMV080 warmup, zero rejection, sanity checks, shared WS, auto-scale charts, stale clear |
+| `af795f0` | `backend/app/routers/firmware.py` | OTA semver comparison fix (backend) |
+| `28fb220` | `esp32_vape_sensor_v3.ino`, `backend/app/detector.py` | PM2.5=0 acceptance + OTA client-side downgrade guard |
+| `a5d339f` | `esp32_vape_sensor_v3.ino` | BMV080 FIFO drain fix — real-time PM2.5 readings during DEEP_SENSE |
+
+### v10 Detection Flow (Verified Working)
+
+```
+Sensor in SNIFF (60s intervals, duty-cycle mode)
+  → burstReadBMV080() drains stale FIFO, reads fresh burst
+  → PM2.5 = 0 in clean air (valid, accepted for baseline)
+  → Baseline tracks at ~0 μg/m³ in clean indoor air
+  → Vape exhaled at sensor → PM2.5 spikes to 28-131 μg/m³
+  → isLocalSpike() detects delta > 3.0 threshold
+  → Firmware enters DEEP_SENSE
+  → readAllSensors() drains FIFO each iteration → gets freshest PM2.5
+  → 23 reads over 30s showing real decay curve (53→47→23→...→5)
+  → deep_sense_complete → backend runs sanity checks + ML
+  → ML outputs classification (currently 18% "uncertain" — models need retraining)
+  → Cooldown heartbeat clears dashboard status
+  → Back to SNIFF
+```
+
+### v10 Pipeline Status
+
+| Component | Status |
+|---|---|
+| BMV080 sensor reads | **WORKING** — real-time PM2.5 values, 0 accepted as clean air |
+| FIFO drain | **WORKING** — no more stale/frozen readings |
+| Baseline calibration | **WORKING** — freezes at ~0 μg/m³ in clean air |
+| Spike detection | **WORKING** — triggers DEEP_SENSE on delta > 3.0 |
+| DEEP_SENSE data capture | **WORKING** — 23 reads with real decay curve |
+| Backend sanity checks | **WORKING** — skips ML on garbage data |
+| OTA updates | **WORKING** — semver comparison, v3.7.0 uploaded as active |
+| ML model accuracy | **BROKEN** — 18% confidence, models trained on garbage data. **Tier 3 retraining is next.** |
+| Dashboard display | **PARTIALLY WORKING** — data flows but shows "uncertain" due to bad models |
+
+---
+
+### TIER 3: Retraining (NOT YET DONE — pipeline now verified clean)
 
 #### Why Existing Training Data Is Invalid
 
@@ -584,10 +678,10 @@ ORG char:   6E400004-...  WRITE | WRITE_NR
 ### MSA311 Frozen Values — MITIGATED
 - Raw I2C reads + auto re-init after 10 frozen reads. May still occur but now recovers automatically instead of staying stuck.
 
-### Frontend Not Yet Deployed
-- `NotificationController.js` tamper fix is local only — needs push to `main` for Vercel auto-deploy.
+### ~~Frontend Not Yet Deployed~~ — DEPLOYED (v10)
+- All frontend changes (shared WS, auto-scale charts, stale clear, confidence gates) pushed to `main` and auto-deployed to Vercel.
 
-## 5. Current Firmware State (v3.7.0, needs reflash)
+## 5. Current Firmware State (v3.7.0, FLASHED AND RUNNING)
 
 ### Key Config
 ```
@@ -603,8 +697,12 @@ POST_DEAD_MS = 300000 (5 min)
 HEAP_MIN_BYTES = 30000
 BATT_PIN = 1 (A1, voltage divider 2:1)
 WiFi NVS override: sweethome (CHANGE BEFORE SCHOOL DEPLOY)
-BMV080 warmup: 3000ms in wakeHeavySensors() + 3000ms SNIFF delay (was 500ms + 2000ms)
-Zero-read rejection: readAllSensors(), burstReadBMV080(), updateLocalBaseline() all skip PM25<=0
+BMV080 warmup: 3000ms in wakeHeavySensors() + 3000ms SNIFF delay
+PM2.5 = 0 accepted: valid clean-air reading (was rejected as "sensor not ready")
+BMV080 FIFO drain: readAllSensors() drains all buffered readings, uses freshest
+DEEP_SENSE delay: 100ms (was 1000ms; HTTP POST already takes ~1s)
+burstReadBMV080(): drains stale FIFO before burst, delay before each read
+OTA semver guard: client-side check prevents downgrade to older firmware
 Cooldown heartbeat: one POST at COOLDOWN start to clear dashboard immediately
 ```
 
@@ -753,19 +851,199 @@ Deep analysis of all dashboard issues was completed. The following bugs were ide
 5. **F3** (confidence) — cosmetic
 6. **F5+F6** (duplicate WS + redundant poll) — cleanup, reduces server load
 
+## 2g. What Was Done (v11 — 2026-06-09)
+
+### Session Summary
+
+Tier 3 training attempt. Built training tools, discovered most training data was wasted (8/12 events produced 0 windows), partially retrained on 4 good events, fixed offline device status bug.
+
+---
+
+### Fix V11-1: Offline Devices Showing Stale Vape Alert — FIXED
+
+- **Problem:** When a device showed "vape" status and then went offline (turned off), the dashboard still displayed it with a red "Alert" indicator. The `getStatusClass()` function checked for vape/alarm BEFORE checking offline status, so stale `predictedClass: 'vape'` in frontend state took priority over the device being offline.
+- **Fix:** Moved the offline check (`status === 'offline' || isOnline === false`) to the top of both `getStatusClass()` in `DeviceList.js` and `getDevStatusClass()` in `Devices.js`, before any alarm/vape checks.
+- **Files:** `frontend/src/components/DeviceList.js`, `frontend/src/pages/Devices.js`
+- **Commit:** `4fd5e7b` — pushed to main, auto-deployed to Vercel.
+
+### Fix V11-2: Sniff Debug Line Never Printing — FIXED (firmware)
+
+- **Problem:** With `heartbeatInterval = 1`, the condition `sniffCount % 1 == 0` is always true, so every sniff took the heartbeat POST path. The `Sniff #N: PM2.5=X.X (base=Y.Y, d=Z.Z)` debug line was in the `else` branch and NEVER executed. Serial monitor and `serial_plot.py` couldn't see PM2.5 values during SNIFF — only gas resistance data from STARTUP was visible.
+- **Fix:** Moved the Sniff debug print to always execute after the burst read, before the heartbeat/spike check. Now every sniff prints sensor values to serial regardless of heartbeat interval.
+- **Files:** `esp32_vape_sensor_v3/esp32_vape_sensor_v3.ino` — STATE_SNIFF case
+- **Flashed** to device on 2026-06-09.
+
+### Tier 3 Training Attempt — PARTIAL (4/12 events captured)
+
+- **Labels file:** `backend/training/bmv080_v2_labels.json` — 12 vape events + 1 clean air window from 2026-06-09 training session.
+- **Result:** Only 4 of 12 vape events produced training windows. Events 006-012 (midnight onward) all produced 0 windows — sensor was likely offline/disconnected during that period.
+- **Models trained on 4 events:** 68 total windows (61 vape + 7 clean_air). RF: 92.9%, XGB: 92.9%, LR: 100%. Models saved to `backend/models/`. Better than the old garbage models but need more data.
+- **Key insight:** With 60-second sniff intervals, vape clouds (~25s duration) are missed ~50% of the time if the user doesn't time it with the sniff cycle. Training must be done by watching for DEEP_SENSE trigger confirmation before labeling an event.
+
+### Training Monitor Tool — CREATED
+
+- **File:** `training_monitor.py` — Tkinter GUI that connects to COM3 serial, shows sensor state with visual indicators, auto-records timestamps when DEEP_SENSE triggers, and saves labels JSON on quit.
+- **Features:**
+  - Big colored circle: grey=waiting, green=sniffing, red=DEEP_SENSE, orange=cooldown
+  - Countdown timer to next sniff (so user knows when to vape)
+  - "VAPE NOW!" prompt when ~20s before next sniff
+  - Auto-logs event timestamps when DEEP_SENSE triggers
+  - Saves `backend/training/bmv080_v2_labels.json` on quit with clean air windows
+- **Usage:** `python training_monitor.py` — vape when it says "VAPE NOW!", wait for red circle confirmation, Ctrl+C or Save button when done.
+
+### v11 Files Changed
+
+| File | Changes |
+|---|---|
+| `frontend/src/components/DeviceList.js` | Offline check moved before alarm check |
+| `frontend/src/pages/Devices.js` | Same offline-first fix in `getDevStatusClass()` |
+| `esp32_vape_sensor_v3/esp32_vape_sensor_v3.ino` | Sniff debug print always executes (moved before heartbeat check) |
+| `training_monitor.py` | NEW — Tkinter training GUI with countdown + auto-labeling |
+| `backend/training/bmv080_v2_labels.json` | Updated with v2 training session labels |
+
+### v11 Training Workflow
+
+```
+1. Run: python training_monitor.py
+2. Wait for green "SNIFFING" state
+3. Watch countdown — when "VAPE NOW!" appears, exhale at sensor
+4. If circle turns RED → event captured (auto-logged)
+5. If nothing happens → sniff missed it, try again next cycle
+6. Repeat until 15-20+ confirmed events
+7. Save & Quit → labels JSON saved automatically
+8. Leave sensor idle 30 min (clean air window)
+9. Run training: python backend/train_with_feature_engine.py \
+     --labels-file backend/training/bmv080_v2_labels.json \
+     --mongo-uri "..." --db-name vape-alert \
+     --models-dir backend/models \
+     --drop-first-n-vape 0 --allowed-types "vape,clean_air"
+```
+
+### Current Model Status
+
+- **Models in `backend/models/`:** Trained 2026-06-09 on 4 clean vape events (68 windows). RF/XGB 92.9%, LR 100%.
+- **Improvement over v10:** Models now trained on real PM2.5 data (not zeros/stale readings). But only 4 events — need 15-20+ for robustness.
+- **Not yet deployed to Railway** — deploy after collecting more training data.
+- **IMMEDIATE NEXT STEP:** Run another training session using `training_monitor.py`, collect 15-20 confirmed DEEP_SENSE events, retrain, then deploy.
+
+---
+
+## 2h. What Was Done (v12 — 2026-06-13)
+
+### Session Summary
+
+Fundamentally redesigned the training data collection approach. The old workflow relied on the firmware's spike detection to gate data capture — a chicken-and-egg problem where you needed a working detector to collect data to train the detector. New approach: firmware runs in permanent 1Hz mode, user manually labels events via GUI.
+
+---
+
+### Training Mode Firmware — ADDED
+
+- **Problem:** With 60s SNIFF polling, vape clouds (~25s duration) were missed ~50% of the time. The training monitor relied on the firmware entering DEEP_SENSE to capture events, but the spike detector missed most vapes. Months of training attempts failed because of this circular dependency.
+- **Solution:** Added `#define TRAINING_MODE 0` compile flag to firmware. When set to `1`:
+  - Skips WiFi/BLE entirely (no network needed)
+  - Runs permanent 1Hz sensor reads via `readAllSensors()`
+  - Prints `SENSOR: T=x H=x P=x G=x PM1=x PM25=x PM10=x` every second
+  - Prints `WARMUP: N/45` during first 45 seconds, then `READY:` message
+  - LED: orange flash during warmup, solid green when ready
+  - No state machine, no spike detection, no sleep
+  - Watchdog still fed, keepalive pulse still runs (power bank support)
+- **To flash training mode:** Set `TRAINING_MODE` to `1`, compile + upload
+- **To return to production:** Set `TRAINING_MODE` to `0`, compile + upload
+- **Build command (CDC must be enabled for serial):**
+  ```bash
+  ./arduino-cli.exe compile --fqbn "esp32:esp32:adafruit_feather_esp32c6:CDCOnBoot=cdc" esp32_vape_sensor_v3/
+  ./arduino-cli.exe upload --fqbn "esp32:esp32:adafruit_feather_esp32c6:CDCOnBoot=cdc" --port COM3 esp32_vape_sensor_v3/
+  ```
+- **Files:** `esp32_vape_sensor_v3/esp32_vape_sensor_v3.ino` — `TRAINING_MODE` define, `#if` blocks in `setup()` (skip WiFi) and `loop()` (continuous reads)
+
+### Training Collector v3 — CREATED
+
+- **File:** `training_collector.py` — Tkinter GUI for manual-label data collection
+- **Key difference from v2:** User controls labeling (press button when vaping), not the firmware's spike detector
+- **Features:**
+  - Auto-detects COM port or accepts `--port COM5`
+  - Live sensor bar charts (PM2.5, PM1, PM10, Gas, Humidity, Temp)
+  - Big toggle button: MARK VAPE EVENT → STOP (with elapsed timer)
+  - Auto-labels non-event periods as "normal" training data
+  - Event log with duration, peak PM2.5, baseline PM2.5
+  - TRAIN MODELS button — runs `FeatureEngine.compute_features()` (same as runtime), trains RF/XGB/LR, saves to `backend/models/`
+  - SAVE & QUIT — saves raw session to `backend/training/serial_captures/`
+  - Warmup detection from firmware WARMUP:/READY: messages
+- **Training pipeline:**
+  - Vape events: slides 20s windows through each labeled event with 5s step, using 10s before event start as baseline
+  - Clean air: slides 30s windows (10s baseline + 20s event) through non-event gaps
+  - Uses `FeatureEngine.compute_features()` — exact same code as runtime inference
+  - Trains with balanced class weights + sample weighting
+- **Usage:** `python training_collector.py --port COM3`
+
+### Retrain From Sessions Script — CREATED
+
+- **File:** `train_from_session.py` — CLI tool to retrain from saved session JSON files
+- **Usage:** `python train_from_session.py backend/training/serial_captures/session_*.json`
+- **Combines multiple sessions** for a larger dataset without requiring the sensor to be connected
+
+### Training Tips Learned
+
+- **Don't hotbox the sensor** — vape from 1-2 feet away, exhale toward sensor
+- **Space events 3-5 min apart** — let PM2.5 return to baseline (<10) between events
+- **Ventilate between sessions** — if ambient PM2.5 stays elevated, clean air data is contaminated
+- **15-20 events minimum** — with sliding window augmentation, produces ~100+ training windows
+- **Watch for external PM sources** — incense, cooking, dust can spike readings and corrupt clean air labels
+
+### v12 Key Discovery: CDCOnBoot Required
+
+- The Adafruit Feather ESP32-C6 board defaults to `CDCOnBoot=default` (disabled), which means `Serial` output over USB-Serial/JTAG doesn't work
+- Must compile with `CDCOnBoot=cdc` flag for serial output
+- Previous sessions may have had this set via Arduino IDE board settings but not documented
+- **This is now documented in the compile command above**
+
+### v12 Files Changed
+
+| File | Changes |
+|---|---|
+| `esp32_vape_sensor_v3/esp32_vape_sensor_v3.ino` | `TRAINING_MODE` define + `#if` blocks in setup()/loop() for continuous 1Hz mode. Currently set to `1` (training mode). |
+| `training_collector.py` | NEW — Manual-label training collector GUI |
+| `train_from_session.py` | NEW — Retrain models from saved session JSON files |
+
+### v12 Current State
+
+- **Firmware:** Flashed with `TRAINING_MODE 1` — sensor running permanent 1Hz, no WiFi
+- **Training data collected:** 0 events (session lost to process kill, restarted fresh)
+- **IMMEDIATE NEXT STEP:** Collect 15-20 vape events using `training_collector.py`, train models, flash back to production (`TRAINING_MODE 0`), deploy models to Railway
+
+### v12 Training Workflow
+
+```
+1. Firmware already flashed with TRAINING_MODE=1
+2. python training_collector.py --port COM3
+3. Wait 45s for warmup (orange → green)
+4. Vape from 1-2 feet away → click MARK VAPE EVENT → wait 25-30s → click STOP
+5. Wait 3-5 min between events (let PM2.5 drop below 10)
+6. Repeat for 15-20 events
+7. Click TRAIN MODELS
+8. Set TRAINING_MODE back to 0 in firmware, reflash:
+   ./arduino-cli.exe compile --fqbn "esp32:esp32:adafruit_feather_esp32c6:CDCOnBoot=cdc" esp32_vape_sensor_v3/
+   ./arduino-cli.exe upload --fqbn "esp32:esp32:adafruit_feather_esp32c6:CDCOnBoot=cdc" --port COM3 esp32_vape_sensor_v3/
+9. Upload models to Railway
+10. Test end-to-end
+```
+
+---
+
 ## 8. Recommended Next Steps
 
-1. **Deploy v9 changes** — Push to main: backend (detector.py sanity checks) auto-deploys to Railway, frontend auto-deploys to Vercel. Then flash firmware v3.7.0.
-2. **Verify clean data pipeline** — Vape at sensor, confirm serial shows non-zero PM2.5 during DEEP_SENSE and backend logs show positive `d_pm25_peak`. If PM2.5 still reads 0, investigate BMV080 hardware.
-3. **Collect fresh training data** — See Tier 3 plan in Section 2e. Minimum 20 vape events + negative examples (bumps, fan, gas drift). All previous training data is invalid.
-4. **Retrain models** — Using `train_with_feature_engine.py` with new labels. Models will now use all 35 features including decay dynamics.
-5. **Verify battery voltage reading** — Check serial output for `Batt=X.XXV`. If reading 0.00V, pin A1 may be wrong for this board revision.
-6. **Set up schedule via backend API** — Configure school hours (e.g. 7AM-4PM Mon-Fri) to activate the power scheduling already in firmware.
-7. **Change WiFi back to school** — Before deploying: update NVS override in setup() from `sweethome` to school SSID/password, reflash.
-8. **Test OTA end-to-end** — Upload v3.7.0 .bin to backend, reboot device, confirm it OTA updates. Would eliminate need for USB flashing.
-9. **Long-duration battery test** — Let device run on battery for days, monitor `battery_voltage` in MongoDB to get real-world power draw curve.
+1. ~~**Deploy v9 changes**~~ — **DONE v10.**
+2. ~~**Verify clean data pipeline**~~ — **DONE v10.**
+3. **Collect more training data** — Use `training_monitor.py`. Need 15-20 confirmed DEEP_SENSE events. Only vape when countdown says "VAPE NOW!" and only count events where circle turns red. **THIS IS THE IMMEDIATE NEXT STEP.**
+4. **Retrain models** — Using `train_with_feature_engine.py` with new labels. Models will use all 35 features.
+5. **Deploy models to Railway** — After retraining with sufficient data.
+6. **Investigate spike detection reliability** — If sensor consistently misses vape puffs even when timed correctly, may need to lower `LOCAL_SPIKE_THRESHOLD` from 3.0 or increase BMV080 burst sensitivity.
+7. **Verify battery voltage reading** — Serial shows `Batt=0.78-0.96V` which seems low for LiFePO4 (expected 3.0-3.6V). Not blocking.
+8. **Set up schedule via backend API** — Configure school hours.
+9. **Change WiFi back to school** — Before deploying: update NVS override.
+10. **Long-duration battery test** — Let device run on battery for days.
 
-## 8. Context Notes
+## 8b. Context Notes
 
 - **Board**: Adafruit Feather ESP32-C6 with Stemma QT
 - **I2C Power**: GPIO20 must be HIGH to power sensors
@@ -776,12 +1054,13 @@ Deep analysis of all dashboard issues was completed. The following bugs were ide
 - **WiFi**: NVS override in setup() — currently `sweethome`/`rahul2008` for home testing. **Change before school deployment.** BLE provisioning still broken (Section 4).
 - **Backend**: `https://vapegaurd-production.up.railway.app`
 - **Clerk org**: `org_37a7Hu77TeY84J7XMffcNzieT12`
-- **Device MAC**: `58:e6:c5:f5:b9:cc` (shows as B9CC, device_id = `58E6C5F5B9CC`)
+- **Device MAC**: `58:e6:c5:e3:ce:18` (shows as CE18, device_id = `58E6C5E3CE18`). Note: earlier sessions referenced B9CC — this is the correct MAC from esptool/serial.
 - **NEVER run `esptool erase_flash`** — wipes PHY cal, USB-CDC config, NVS, I2C defaults
 - **arduino-cli**: `C:/Users/mrjra/OneDrive - MSFT/Vape Project/arduino-cli.exe`
 - **COM port**: COM3 (was COM4, changed after replug — always check)
 - **arduino-cli (actual location)**: `C:\Users\mrjra\dev\Vape Project\arduino-cli.exe`
-- **OTA firmware v3.4.3 uploaded** to backend MongoDB `firmware` collection (active) — v3.5.0 not yet uploaded for OTA
-- **ML models**: Retrained 2026-06-05 with BMV080 data. Labels: `backend/training/bmv080_labels.json`. 22 vape + 2 clean_air events. RF/XGB 100%, KNN 88.6%. **MODELS ARE INVALID** — trained on garbage data (zero PM2.5 readings). Must retrain after Tier 1 deployment. See Tier 3 plan in Section 2e.
+- **OTA firmware v3.7.0 uploaded** to backend MongoDB `firmware` collection (active). Semver comparison prevents downgrades. Client-side guard as safety net.
+- **ML models**: Retrained 2026-06-05 with BMV080 data. Labels: `backend/training/bmv080_labels.json`. 22 vape + 2 clean_air events. RF/XGB 100%, KNN 88.6%. **MODELS ARE INVALID** — trained on garbage data (zero PM2.5 readings). Must retrain now that pipeline is clean. See Tier 3 plan in Section 2e.
 - **OTA fix landed in v3.4.3**: `checkForOTA()` now uses a local `WiFiClientSecure checkClient` instead of reusing the global `secClient` — fixes the -1 connection refused bug caused by stale TLS state after `fetchSchedule()`
-- **v9 changes (2026-06-06)**: Tier 1 (firmware BMV080 warmup, zero-read rejection, backend sanity checks, cooldown heartbeat) + Tier 2 (shared WS context, auto-scale charts, stale auto-clear). Not yet committed/pushed. See Section 2e for full details.
+- **v9 changes (2026-06-06)**: Tier 1 + Tier 2 — all committed and pushed. See Section 2e.
+- **v10 changes (2026-06-07)**: OTA semver fix, PM2.5=0 acceptance, BMV080 FIFO drain. All committed and pushed. Firmware flashed and verified with live vape test. See Section 2f.
