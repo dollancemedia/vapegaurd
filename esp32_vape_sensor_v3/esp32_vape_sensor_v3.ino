@@ -68,7 +68,7 @@ const char* FIRMWARE_VERSION = "3.7.0";
 // ─── Training mode ─────────────────────────────────────────────────────────
 // Set to 1 for data collection: permanent 1Hz reads, no WiFi, no state machine.
 // Reflash with 0 to return to normal operation.
-#define TRAINING_MODE 1
+#define TRAINING_MODE 0
 
 const char* DEFAULT_SSID     = "";  // populated from NVS by loadDeviceIdentity()
 const char* DEFAULT_PASSWORD = "";  // populated from NVS by loadDeviceIdentity()
