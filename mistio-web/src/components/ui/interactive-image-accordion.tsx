@@ -11,56 +11,58 @@ type AccordionItemData = {
 const accordionItems: AccordionItemData[] = [
   {
     id: 1,
-    title: 'Vaping Is a School-Wide Problem',
+    title: 'False Alarms Kill Trust',
     content: [
-      '~30% of high school students report trying vaping',
-      'Incidents occur daily in unsupervised spaces'
+      'Cologne, cleaning spray, or deodorant triggers an alarm',
+      'Staff responds 3 times, then stops responding altogether',
+      'The detector becomes expensive wall decor'
     ],
     imageUrl:
-      'https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=2064&auto=format&fit=crop', // School hallway/students
+      'https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=2064&auto=format&fit=crop',
   },
   {
     id: 2,
-    title: 'Academic Performance Suffers',
+    title: 'Installation Takes Weeks',
     content: [
-      'Vaping is associated with a ~1.2-point lower GPA',
-      'Disrupted focus, absenteeism, and disengagement rise'
+      'PoE detectors need electricians, ceiling work, and IT tickets',
+      'Bathrooms often lack ethernet, requiring new cable runs',
+      'Weeks of procurement before a single sensor goes live'
     ],
     imageUrl:
-      'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=2070&auto=format&fit=crop', // Library/Study
+      'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=2070&auto=format&fit=crop',
   },
   {
     id: 3,
-    title: 'Classrooms Are Repeatedly Disrupted',
+    title: 'Wi-Fi Drops in Bathrooms',
     content: [
-      'Vape-triggered alarms halt instruction',
-      '~10+ minutes lost per incident',
-      'Tests, lessons, and schedules are interrupted'
+      'Concrete walls and metal stalls block Wi-Fi signal',
+      'Sensors lose connection and miss real incidents',
+      'IT spends hours troubleshooting dead zones'
     ],
     imageUrl:
-      'https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=2070&auto=format&fit=crop', // Classroom
+      'https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=2070&auto=format&fit=crop',
   },
   {
     id: 4,
-    title: 'Emergency Resources Are Wasted',
+    title: 'Hidden Costs Add Up',
     content: [
-      'Fire departments respond to non-emergencies',
-      'Time, fuel, and personnel diverted from real threats',
-      'Repeated false calls strain public resources'
+      'License fees, cloud subscriptions, and maintenance contracts',
+      'Electrician costs for every new sensor location',
+      'IT overhead for network configuration and updates'
     ],
     imageUrl:
-      'https://images.unsplash.com/photo-1555529902-5261145633bf?q=80&w=2070&auto=format&fit=crop', // Fire truck/Emergency
+      'https://images.unsplash.com/photo-1555529902-5261145633bf?q=80&w=2070&auto=format&fit=crop',
   },
   {
     id: 5,
-    title: 'No Visibility Means No Accountability',
+    title: 'Students Still Vape Undetected',
     content: [
-      'Schools don’t know where or when vaping occurs',
-      'Incidents repeat in bathrooms and locker rooms',
-      'Lack of detection enables continued disruption'
+      'After enough false alarms, staff ignores every alert',
+      'Without reliable detection, there is zero accountability',
+      'The vaping problem grows while the sensor sits ignored'
     ],
     imageUrl:
-      'https://images.unsplash.com/photo-1596526131083-e8c633c948d2?q=80&w=1974&auto=format&fit=crop', // Fog/Mist/Hidden
+      'https://images.unsplash.com/photo-1596526131083-e8c633c948d2?q=80&w=1974&auto=format&fit=crop',
   },
 ];
 
@@ -152,10 +154,10 @@ export function LandingAccordionItem() {
         <div className="flex flex-col lg:flex-row items-start justify-between gap-12">
           <div className="w-full lg:w-1/3 text-center lg:text-left pt-8">
             <h1 className="text-4xl md:text-5xl font-bold text-mistio-dark leading-tight tracking-tight mb-6">
-              The Hidden Cost of <span className="text-mistio-teal">Vaping</span> in Schools
+              The Problem With <span className="text-mistio-teal">Current</span> Detection
             </h1>
             <p className="text-lg text-mistio-gray leading-relaxed">
-              Vaping doesn't just affect student health—it disrupts classrooms, strains emergency services, and undermines school operations.
+              Most schools either have no detection at all, or sensors that go off every time someone sprays deodorant. Both leave you blind.
             </p>
             <div className="mt-8">
               <a

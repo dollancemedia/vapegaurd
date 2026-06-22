@@ -48,7 +48,7 @@ function StackedCircularFooter() {
           {/* Copyright */}
           <div className="pt-8 border-t border-slate-800 w-full max-w-4xl">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-                <p>© 2024 Mistio. All rights reserved.</p>
+                <p>© 2025 Mistio. All rights reserved.</p>
                 <div className="flex gap-6">
                     <a href="#" className="hover:text-slate-300">Privacy Policy</a>
                     <a href="#" className="hover:text-slate-300">Terms of Service</a>

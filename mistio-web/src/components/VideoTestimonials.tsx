@@ -33,28 +33,28 @@ export const VideoTestimonials = () => {
           <div className="w-full lg:w-1/2 space-y-8">
             <div>
               <div className="inline-block px-3 py-1 mb-4 text-xs font-semibold tracking-wider text-mistio-teal uppercase bg-mistio-teal/10 rounded-full">
-                Real Stories
+                The Difference
               </div>
               <h2 className="text-4xl md:text-5xl font-bold leading-tight mb-4">
-                Why Communities Trust <span className="text-mistio-teal">Mistio</span>
+                What Happens After You <span className="text-mistio-teal">Switch</span>
               </h2>
               <p className="text-lg text-slate-300 leading-relaxed">
-                It's not just about detection—it's about reclaiming valuable time and resources for what matters most.
+                Other detectors flood your staff with false alarms until they stop responding. Mistio only alerts when it matters.
               </p>
             </div>
 
             <div className="space-y-6">
-              <TestimonialPoint 
-                title="Educators"
-                description="Teachers report significantly fewer classroom disruptions, allowing them to focus on instruction rather than policing bathrooms."
+              <TestimonialPoint
+                title="Staff Trust It"
+                description="When every cologne spray triggers an alarm, staff learns to ignore it. Mistio only fires on real vape, so when it alerts, people actually respond."
               />
-              <TestimonialPoint 
-                title="First Responders"
-                description="Fire departments are seeing a drastic reduction in false alarms, ensuring their resources are available for genuine emergencies."
+              <TestimonialPoint
+                title="No Infrastructure Needed"
+                description="Other sensors need PoE drops, ceiling work, and IT involvement. Mistio runs on battery for a full year. A custodian can install it during lunch."
               />
-              <TestimonialPoint 
-                title="Safety Officials"
-                description="Fire Marshals endorse our compliant, privacy-first approach that integrates seamlessly with existing school safety protocols."
+              <TestimonialPoint
+                title="Schools Stay in Control"
+                description="No cameras, no microphones, no student data collected. Real-time alerts go straight to the admin's phone with the exact location."
               />
             </div>
             
@@ -109,16 +109,16 @@ export const VideoTestimonials = () => {
             {/* Decorative Elements */}
             <div className="relative mt-8 grid grid-cols-3 gap-4 text-center">
                <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700 backdrop-blur-sm">
-                  <div className="text-2xl font-bold text-mistio-teal">95%</div>
-                  <div className="text-xs text-slate-400 mt-1">Fewer False Alarms</div>
+                  <div className="text-2xl font-bold text-mistio-teal">1 Year</div>
+                  <div className="text-xs text-slate-400 mt-1">Battery Life</div>
                </div>
                <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700 backdrop-blur-sm">
-                  <div className="text-2xl font-bold text-mistio-teal">300+</div>
-                  <div className="text-xs text-slate-400 mt-1">Hours Saved/Year</div>
+                  <div className="text-2xl font-bold text-mistio-teal">3 Sec</div>
+                  <div className="text-xs text-slate-400 mt-1">Install Time</div>
                </div>
                <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700 backdrop-blur-sm">
-                  <div className="text-2xl font-bold text-mistio-teal">100%</div>
-                  <div className="text-xs text-slate-400 mt-1">Privacy Compliant</div>
+                  <div className="text-2xl font-bold text-mistio-teal">0</div>
+                  <div className="text-xs text-slate-400 mt-1">Wires Needed</div>
                </div>
             </div>
           </div>

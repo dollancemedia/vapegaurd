@@ -12,11 +12,10 @@ export const ContactSection = () => {
           <div className="space-y-8 flex flex-col items-center text-center lg:items-start lg:text-left">
             <div>
               <h2 className="text-4xl font-bold text-mistio-dark mb-4">
-                Let's Make Your School <span className="text-mistio-teal">Safer</span>
+                See It <span className="text-mistio-teal">For Yourself</span>
               </h2>
               <p className="text-lg text-slate-600 leading-relaxed max-w-lg mx-auto lg:mx-0">
-                Ready to see how Mistio can help you eliminate vaping in your school? 
-                Schedule a demo or reach out to our team directly.
+                We'll send you a sensor. Mount it in a bathroom. No wiring, no IT. See how it performs before you commit.
               </p>
             </div>
 

@@ -1,0 +1,81 @@
+---
+title: "Why Your Vape Detector Keeps Going Off (And How to Fix It)"
+description: "If your school's vape detector triggers on cologne, cleaning spray, or deodorant, here's why it happens and what you can do about it."
+date: "2026-06-05"
+keywords: ["vape detector false alarms", "vape detector going off", "why does vape detector go off", "false alarm vape sensor", "vape detector cologne", "vape detector deodorant", "vape detector keeps triggering"]
+---
+
+Vape detector false alarms are almost always caused by threshold-based detection systems that cannot distinguish vape aerosol from cologne, deodorant, cleaning spray, or hair spray. These products produce particulate matter (PM2.5) spikes that look identical to vape on a basic sensor. The fix is either raising detection thresholds (which misses real vape events) or switching to an AI-based detector trained to tell the difference.
+
+## It Is Not Broken. It Is Poorly Trained.
+
+If your vape detector fires every time a student sprays Axe body spray, it is doing exactly what it was designed to do: reacting to airborne particulates. The problem is that most vape detectors cannot tell the difference between vape aerosol and any other aerosol.
+
+Here is what typically triggers a false alarm:
+
+- **Body spray and cologne** (Axe, Bath & Body Works, perfume)
+- **Deodorant spray** (aerosol cans, not roll-on)
+- **Cleaning products** (Lysol, bleach spray, glass cleaner, disinfectant)
+- **Hair spray and dry shampoo**
+- **Air freshener** (bathroom spray dispensers)
+- **Hand sanitizer mist** (high-alcohol aerosol)
+
+All of these create airborne particles that look, to a basic particulate sensor, a lot like vape aerosol.
+
+## Why Threshold-Based Detection Fails
+
+Most vape detectors on the market use threshold-based detection. They monitor one or more air quality metrics, usually particulate matter (PM2.5), volatile organic compounds (VOCs), or specific gas resistance patterns. When a reading crosses a preset threshold, the sensor fires an alert.
+
+The problem: thresholds do not have context. A PM2.5 spike from a vape pen looks nearly identical to a PM2.5 spike from a can of Axe. A VOC spike from vape juice looks similar to a VOC spike from Lysol. The sensor sees a number cross a line and sounds the alarm.
+
+This is why schools end up in the false alarm cycle:
+
+1. Sensor detects a spike
+2. Alert goes to staff
+3. Staff investigates, finds nothing (or finds a student who just sprayed deodorant)
+4. This repeats 3-5 times
+5. Staff stops responding to alerts
+6. Students figure out no one is coming
+7. The sensor becomes useless
+
+## What Actually Works: AI-Based Classification
+
+The solution is not a more sensitive sensor or a higher threshold. It is a smarter detection model.
+
+AI-based vape detection works differently. Instead of asking "did a number cross a line?", it asks "does this pattern of readings match vape aerosol, or does it match something else?"
+
+This requires training the AI on real-world data:
+
+- What does Axe body spray look like to a particulate sensor over 30 seconds?
+- What does Lysol spray look like?
+- What about hair spray? Perfume? Hand sanitizer?
+- And what does actual vape aerosol look like in comparison?
+
+When you train a model on hundreds of samples of each category, it learns the subtle differences in the pattern, not just the peak value, but the shape of the spike, the rate of rise and fall, the ratio between different sensor readings, and the duration of the event.
+
+## What You Can Do Right Now
+
+If you are stuck with a threshold-based detector and cannot replace it immediately:
+
+1. **Raise the threshold** (if configurable). You will catch fewer vape events, but you will also reduce false alarms. A sensor that staff trusts 80% of the time is better than one they ignore 100% of the time.
+
+2. **Relocate the sensor.** Move it away from areas where cleaning products are used or where air freshener dispensers are mounted. Even a few feet of distance can reduce false triggers.
+
+3. **Coordinate with custodial staff.** If cleaning happens at a predictable time, you can mentally filter those alerts. Some systems let you set "quiet hours."
+
+4. **Document the false alarm pattern.** Track which alerts were real vs. false over 30 days. This data is powerful when making the case for a better solution.
+
+## The Long-Term Fix
+
+Replace threshold-based sensors with AI-trained detectors that have been exposed to the full range of bathroom aerosols. Mistio's AI was trained on real-world samples of cologne, body spray, cleaning products, hair spray, and deodorant. When your janitor mops the bathroom, silence. When a student sprays cologne, silence. When someone vapes, your phone buzzes with the exact location.
+
+That is the difference between a detector that goes off and a detector that works.
+
+---
+
+### Related Reading
+
+- [Vape Detectors: How They Work, Where to Install Them](/blog/what-are-vape-detectors) — Complete technology guide
+- [7 Best Vape Detectors for Schools in 2026](/blog/best-vape-detectors-for-schools) — Comparison with false alarm ratings
+- [How to Choose a Vape Detector for Your School](/blog/how-to-choose-vape-detector) — Buying guide for administrators
+- [Battery-Powered vs Wired Vape Detectors](/blog/battery-vs-wired-vape-detectors) — The real cost breakdown

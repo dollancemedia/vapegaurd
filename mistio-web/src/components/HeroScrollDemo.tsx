@@ -8,9 +8,9 @@ export function HeroScrollDemo() {
         titleComponent={
           <>
             <h1 className="text-4xl font-semibold text-mistio-dark">
-              All with a <br />
+              Every alert, every location. <br />
               <span className="text-4xl md:text-[6rem] font-bold mt-1 leading-none text-mistio-teal">
-                Real-time Dashboard
+                One Dashboard
               </span>
             </h1>
           </>

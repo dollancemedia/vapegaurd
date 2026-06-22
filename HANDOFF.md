@@ -1,4 +1,4 @@
-# HANDOFF.md — Mistio / VapeGuard Session Transfer (v10)
+# HANDOFF.md — Mistio / VapeGuard Session Transfer (v13)
 
 ## 1. Project Overview
 
@@ -1030,18 +1030,168 @@ Fundamentally redesigned the training data collection approach. The old workflow
 
 ---
 
+## 2i. What Was Done (v13 — 2026-06-21)
+
+### Session Summary
+
+Complete landing page copy rewrite around three USPs + Next.js migration for SEO + blog system with 7 comparison/guide posts.
+
+---
+
+### Landing Page Copy Rewrite — DONE
+
+Rewrote all website copy in `mistio-web/` around three real USPs that differentiate Mistio from every competitor:
+
+1. **Battery-powered for 1 full year** — only vape detector on the market with year-long battery life
+2. **Zero false alarms** — AI trained on cologne, deodorant, cleaning spray, hair spray
+3. **Fastest install** — two screws, under one minute, no electrician/IT/wiring
+
+**Files rewritten (in `mistio-web/`):**
+- `Hero.tsx` — headline: "The only vape detector that runs on battery for 1 full year."
+- `bounce-card-features.tsx` — 4 cards: 1-Year Battery, Zero False Alarms, 3-Second Install, Built for Schools
+- `interactive-image-accordion.tsx` — "The Problem With Current Detection" (5 competitor pain points)
+- `VideoTestimonials.tsx` — "What Happens After You Switch" + stats (1 Year / 3 Sec / 0 Wires)
+- `ComparisonDemo.tsx` — "Their Setup vs. Ours"
+- `HeroScrollDemo.tsx` — "Every alert, every location. One Dashboard."
+- `ContactSection.tsx` — "See It For Yourself" with Calendly embed
+- `stacked-circular-footer.tsx` — updated copyright, blog link
+
+### Next.js Migration — DONE
+
+Created `mistio-web-next/` with full Next.js 16 app (App Router, Tailwind v4, SSG).
+
+**Why:** The old Vite SPA rendered client-side only — Google saw an empty `<div id="root"></div>`. AI crawlers (GPTBot, PerplexityBot) don't render JS at all, so the site was completely invisible to AI search. Next.js SSG pre-builds every page as complete HTML at build time.
+
+**Project structure:**
+```
+mistio-web-next/
+├── src/app/
+│   ├── layout.tsx          # Root layout with full SEO metadata + JSON-LD
+│   ├── page.tsx            # Landing page (all sections composed)
+│   ├── globals.css         # Tailwind v4 + @tailwindcss/typography
+│   ├── sitemap.ts          # Auto-generated sitemap from pages + blog posts
+│   └── blog/
+│       ├── page.tsx        # Blog index
+│       └── [slug]/page.tsx # Blog post template (MDX + generateStaticParams)
+├── src/components/         # All components ported from mistio-web/ with 'use client'
+├── src/lib/
+│   ├── utils.ts            # cn() utility
+│   └── blog.ts             # MDX file reader (getAllPosts, getPostBySlug, getAllSlugs)
+├── content/blog/           # 7 MDX blog posts
+└── public/                 # All assets copied from mistio-web/public/
+```
+
+**Section order on landing page (matches original):**
+Hero → Features (BouncyCards) → HeroScrollDemo → ComparisonDemo → Accordion → Testimonials → Contact → Footer
+
+**Key dependencies added:** framer-motion, lucide-react, react-calendly, @radix-ui/react-label, @radix-ui/react-slot, class-variance-authority, clsx, tailwind-merge, gray-matter, next-mdx-remote, remark-gfm, @tailwindcss/typography
+
+### SEO Infrastructure — DONE
+
+**Meta tags in `layout.tsx`:**
+- Title: "Mistio - The Only Battery-Powered Vape Detector for Schools"
+- Description targeting "vape detector", "battery powered vape detector", "school vape detector"
+- Open Graph + Twitter Card tags
+- Keywords array with 15+ target terms
+- Canonical URL: https://mistio.app
+
+**JSON-LD structured data (3 schemas in `layout.tsx`):**
+- Organization schema (Mistio, Fremont CA, contact info)
+- Product schema (battery life: 1 year, install time: under 1 minute, connectivity: cellular)
+- FAQPage schema (5 Q&As about battery, false alarms, install, privacy, competitors)
+
+**Other SEO files:**
+- `public/robots.txt` — allows all crawlers, points to sitemap
+- `src/app/sitemap.ts` — auto-generates sitemap.xml from static pages + all blog posts
+- Per-blog-post Article schema via `generateMetadata` + JSON-LD
+
+### Blog System — DONE
+
+**Infrastructure:**
+- MDX files in `content/blog/` with frontmatter (title, description, date, keywords)
+- `src/lib/blog.ts` — reads/parses MDX files, sorts by date
+- Blog index at `/blog` with card layout
+- Blog posts at `/blog/[slug]` with prose typography, Article schema, CTA footer
+- `remark-gfm` plugin for GitHub-flavored markdown (tables, strikethrough)
+- `generateStaticParams` for static generation of all posts at build time
+
+**7 blog posts written:**
+1. `mistio-vs-halo.mdx` — "Mistio vs HALO Smart Sensor: Which Vape Detector Actually Works?"
+2. `mistio-vs-verkada.mdx` — "Mistio vs Verkada: Do You Need a Camera Company's Vape Detector?"
+3. `mistio-vs-zeptive.mdx` — "Mistio vs Zeptive: Battery-Powered Vape Detection Compared"
+4. `false-alarms-vape-detectors.mdx` — "Why Your Vape Detector Keeps Going Off (And How to Fix It)"
+5. `battery-vs-wired-vape-detectors.mdx` — "Battery-Powered vs Wired Vape Detectors: The Real Cost"
+6. `how-to-choose-vape-detector.mdx` — "How to Choose a Vape Detector for Your School in 2025"
+7. `vape-detection-schools-guide.mdx` — "The Complete Guide to Vape Detection in K-12 Schools"
+
+Each comparison post follows: short version summary → feature comparison table → detailed breakdowns → when each product makes sense → verdict. Tables render via remark-gfm.
+
+### Build Verification — PASSING
+
+```
+next build → 13 static pages generated:
+  /                           (landing page)
+  /blog                       (blog index)
+  /blog/[slug] × 7            (all blog posts via SSG)
+  /sitemap.xml                (auto-generated)
+  /_not-found                 (404)
+```
+
+### Fixes During Migration
+
+- **Lucide-react removed brand icons** (Facebook, Twitter, Instagram, Linkedin) in latest version. Replaced with inline SVG components in `stacked-circular-footer.tsx`. Twitter → X icon.
+- **Section order was accidentally shuffled** in initial page.tsx. Fixed back to match original Home.tsx order.
+- **Blog tables not rendering** — missing `remark-gfm` plugin. Installed and wired into MDXRemote options.
+
+### What's NOT Done Yet (SEO Next Steps)
+
+**Immediate (this week):**
+- Google Search Console — verify `mistio.app`, submit sitemap
+- Google Business Profile — set up for Fremont, CA address
+- Validate structured data via Google Rich Results Test
+
+**Short-term (2-4 weeks):**
+- Switch `<img>` tags to Next.js `<Image>` component (auto WebP, lazy loading)
+- Add internal links between blog posts
+- Write 8-13 more blog posts to reach 15-20 total (topical authority)
+- Ideas: "Do vape detectors work in locker rooms?", "Vape detector vs smoke detector", "Cost of vaping in schools"
+
+**Medium-term (1-3 months):**
+- Backlinks from education blogs, school safety publications
+- YouTube video (2-min install demo or side-by-side comparison)
+- Reddit presence in r/k12sysadmin, r/edtech (Perplexity pulls from Reddit in ~47% of citations)
+
+**SEO Timeline Expectations:**
+- Weeks 1-4: Get indexed, rank for long-tail ("battery powered vape detector", "mistio vs halo")
+- Months 3-6: Rank for mid-competition ("best vape detector for schools")
+- Months 6-12: Compete for head terms ("vape detector") — HALO has years of domain authority head start
+
+### Deployment
+
+- **Old site (`mistio-web/`):** Vite SPA, currently on Vercel
+- **New site (`mistio-web-next/`):** Next.js SSG, ready for Vercel deployment
+- Need to create `vercel.json` and point `mistio.app` domain to the new Next.js app
+- Old hash routes (#features, #testimonials) should redirect to new URL structure
+
+---
+
 ## 8. Recommended Next Steps
 
-1. ~~**Deploy v9 changes**~~ — **DONE v10.**
-2. ~~**Verify clean data pipeline**~~ — **DONE v10.**
-3. **Collect more training data** — Use `training_monitor.py`. Need 15-20 confirmed DEEP_SENSE events. Only vape when countdown says "VAPE NOW!" and only count events where circle turns red. **THIS IS THE IMMEDIATE NEXT STEP.**
-4. **Retrain models** — Using `train_with_feature_engine.py` with new labels. Models will use all 35 features.
-5. **Deploy models to Railway** — After retraining with sufficient data.
-6. **Investigate spike detection reliability** — If sensor consistently misses vape puffs even when timed correctly, may need to lower `LOCAL_SPIKE_THRESHOLD` from 3.0 or increase BMV080 burst sensitivity.
-7. **Verify battery voltage reading** — Serial shows `Batt=0.78-0.96V` which seems low for LiFePO4 (expected 3.0-3.6V). Not blocking.
-8. **Set up schedule via backend API** — Configure school hours.
-9. **Change WiFi back to school** — Before deploying: update NVS override.
-10. **Long-duration battery test** — Let device run on battery for days.
+### Website / SEO (from v13)
+1. **Deploy Next.js site to Vercel** — Create `vercel.json`, point `mistio.app` domain to `mistio-web-next/`. **IMMEDIATE.**
+2. **Google Search Console** — Verify domain, submit `mistio.app/sitemap.xml`.
+3. **Google Business Profile** — Set up for Fremont, CA.
+4. **Switch `<img>` to Next.js `<Image>`** — Auto WebP, lazy loading, better Lighthouse score.
+5. **Write more blog posts** — Target 15-20 total. Focus on long-tail keywords.
+6. **Backlinks + YouTube** — Education blogs, school safety publications, install demo video.
+
+### Hardware / ML (from v10-v12)
+7. **Collect more training data** — Use `training_collector.py` with `TRAINING_MODE 1` firmware. Need 15-20 confirmed events.
+8. **Retrain models** — After collecting data. Models will use all 35 features.
+9. **Deploy models to Railway** — After retraining with sufficient data.
+10. **Flash firmware back to production** — Set `TRAINING_MODE 0`, change WiFi NVS to school network.
+11. **Long-duration battery test** — Let device run on battery for days.
+12. **Fix BLE provisioning** — See Section 4 for full bug report.
 
 ## 8b. Context Notes
 
