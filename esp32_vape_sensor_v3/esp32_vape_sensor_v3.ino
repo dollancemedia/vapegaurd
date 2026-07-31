@@ -63,7 +63,7 @@
 //  CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-const char* FIRMWARE_VERSION = "3.8.0";
+const char* FIRMWARE_VERSION = "3.8.1";
 
 // ─── Training mode ─────────────────────────────────────────────────────────
 // Set to 1 for data collection: permanent 1Hz reads, no WiFi, no state machine.
@@ -326,7 +326,12 @@ String getISOTimestamp() {
       return String(buf);
     }
   }
-  return String(millis());
+  // No clock yet (NTP has not synced — common during STARTUP, before syncTime
+  // completes). Return empty rather than millis(): the backend compares
+  // timestamps as STRINGS, so "960040" sorts above "2026-..." because '9' > '2',
+  // and those rows crowd real data out of the newest-first dashboard query.
+  // Callers omit the field entirely and let the server stamp it on arrival.
+  return String();
 }
 
 // =============================================================================
@@ -793,7 +798,10 @@ void loop() {
           finalDoc["device_id"] = DEVICE_ID;
           finalDoc["org_id"]    = ORG_ID;
           finalDoc["duty_state"] = "deep_sense_complete";
-          finalDoc["timestamp"]  = getISOTimestamp();
+          {
+            String ts = getISOTimestamp();
+            if (ts.length() > 0) finalDoc["timestamp"] = ts;
+          }
           String finalPayload;
           serializeJson(finalDoc, finalPayload);
           secClient.stop();
@@ -1310,7 +1318,12 @@ bool postSensorData() {
 
   const char* stateNames[] = {"startup", "sniff", "deep_sense", "cooldown"};
   doc["duty_state"] = stateNames[currentState];
-  doc["timestamp"] = getISOTimestamp();
+  // Omit rather than send a placeholder when the clock is not set — the server
+  // stamps arrival time instead. See getISOTimestamp().
+  {
+    String ts = getISOTimestamp();
+    if (ts.length() > 0) doc["timestamp"] = ts;
+  }
 
   doc["temp_humidity_ratio"]  = (lastHumidity > 0) ? lastTemp / lastHumidity : 0;
   doc["gas_temp_interaction"] = lastGas * lastTemp;
@@ -1411,7 +1424,9 @@ bool postBatchData() {
       doc["sensor_type"]     = "multi_sensor";
       doc["bmv080_obstructed"] = s.bmvObstructed;
       doc["duty_state"]      = "batch_baseline";
-      doc["timestamp"]       = String(s.isoTimestamp);
+      // Ring-buffer entries captured before NTP synced have an empty stamp;
+      // omit so the server dates them on arrival.
+      if (s.isoTimestamp[0] != '\0') doc["timestamp"] = String(s.isoTimestamp);
       doc["baseline_pm25"]   = baselinePM25;
       doc["baseline_gas"]    = baselineGas;
 

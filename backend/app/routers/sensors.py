@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
@@ -11,6 +12,10 @@ from app.state_manager import state_manager
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# Timestamps are stored as ISO-8601 strings, so sorting is lexicographic.
+# Anything not matching this shape sorts unpredictably against real dates.
+_ISO_TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T")
 
 # Alert Configuration (Mock or Env based for now, ideally per-org in DB)
 # In a real app, fetch these from db.org_settings based on org_id
@@ -94,6 +99,16 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
                     payload[field] = float(val)
             except (ValueError, TypeError):
                 payload[field] = 0.0
+
+        # Reject non-ISO timestamps at the door. Firmware falls back to a
+        # millis() string when NTP has not synced yet (common during STARTUP),
+        # and those sort above real dates as strings. Stamping server-side here
+        # keeps the collection uniformly sortable no matter what firmware a
+        # device is running.
+        _ts = payload.get("timestamp")
+        if not (isinstance(_ts, str) and _ISO_TS_RE.match(_ts)):
+            payload["device_timestamp_raw"] = _ts   # keep the original for debugging
+            payload["timestamp"] = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
 
         # 2. Store Raw Sample (Async)
         try:
@@ -317,8 +332,15 @@ async def get_sensor_data(limit: int = 200):
     Fetches from 'samples' collection to show raw environmental data history.
     """
     try:
-        # Fetch from SAMPLES, not EVENTS, so we see the continuous stream
-        cursor = db.samples.find().sort("timestamp", -1).limit(limit)
+        # Fetch from SAMPLES, not EVENTS, so we see the continuous stream.
+        # Filter to real ISO timestamps IN THE QUERY, not after. Timestamps are
+        # strings, so a millis fallback like "960040" sorts above "2026-..."
+        # lexicographically ('9' > '2'); filtering afterwards let those rows
+        # consume the whole limit and the endpoint returned nothing.
+        cursor = (db.samples
+                  .find({"timestamp": {"$regex": r"^\d{4}-\d{2}-\d{2}T"}})
+                  .sort("timestamp", -1)
+                  .limit(limit))
         sensor_data = []
         async for doc in cursor:
             ts = doc.get("timestamp", "")
