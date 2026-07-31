@@ -32,7 +32,7 @@ cd frontend && npm install
 
 ### Model Training
 
-**The correct training command** (produces models compatible with the runtime 29-feature inference pipeline):
+**The correct training command** (produces models compatible with the runtime 35-feature inference pipeline):
 ```bash
 python backend/train_with_feature_engine.py \
   --labels-file backend/training/seed_event_labels.json \
@@ -59,7 +59,7 @@ python backend/train_from_built_dataset.py \
   --artifacts-dir backend/training_artifacts \
   --models-dir backend/models
 ```
-**Warning**: The two-step pipeline generates 185-feature window-statistics models, which are INCOMPATIBLE with the runtime's 29-feature `FEATURE_ORDER`. Only `train_with_feature_engine.py` (step 1 above) produces models that work at runtime.
+**Warning**: The two-step pipeline generates 185-feature window-statistics models, which are INCOMPATIBLE with the runtime's 35-feature `FEATURE_ORDER`. Only `train_with_feature_engine.py` (step 1 above) produces models that work at runtime.
 
 ## Architecture
 
@@ -70,7 +70,7 @@ ESP32-C6 sensors
   → DeviceStateManager (rolling 120-sample buffer, EWMA baselines)
   → Detector (state machine: IDLE → BASELINE → POTENTIAL → CONFIRMED → COOLDOWN)
   → FeatureEngine (30s window: deltas, slopes, AUC, ratios)
-  → EnsemblePredictor (XGBoost primary + RF/KNN fallbacks, soft voting)
+  → EnsemblePredictor (soft voting across XGBoost + RF + LogisticRegression)
   → Event stored in MongoDB
   → WebSocket broadcast to dashboard
 ```
@@ -98,14 +98,19 @@ ESP32-C6 sensors
 ### ML Models (`backend/models/`)
 - `xgb_model.joblib` — XGBoost (~871KB)
 - `rf_model.joblib` — Random Forest (~330KB)
-- `knn_model.joblib` — KNN (~10KB)
-- `svc_model.joblib` — SVM (~27KB)
+- `lr_model.joblib` — Logistic Regression (~2KB)
+
+Only these three are loaded (`MODELS` in `class_config.py`). knn/svc were removed — knn was a stale
+29-feature build labelled `clean_air`/`vape` and svc was never produced by the current pipeline.
 
 Active model is controlled by `backend/app/model_config.py` (`MODEL_TYPE = "rf"` etc.), which is written by `switch_model.py` — do not edit manually.
 
 `backend/app/class_config.py` defines two critical constants that **must stay in sync with training**:
-- `FEATURE_ORDER` — the 29-feature list passed to every model (order matters)
-- `CLASSIFICATIONS` — read from `backend/classifications.txt`; defaults to `["normal", "vape", "cologne", "hair spray", "cleaning"]`
+- `FEATURE_ORDER` — the 35-feature list passed to every model (order matters)
+- `CLASSIFICATIONS` — read from `backend/classifications.txt`, currently `["normal", "vape"]` (the only
+  classes the shipped models are trained on). Note `CLASS_ORDER` is a *reordering* of this list, not a copy:
+  `[CLASSIFICATIONS[1]] + CLASSIFICATIONS[2:] + [CLASSIFICATIONS[0], "other"]`. Adding names here creates
+  probability slots no model can fill, which is how bogus labels appeared in stored events.
 
 Models were trained with scikit-learn 1.3.2. Loading with a different version produces warnings and may trigger fallback to rule-based detection (low gas resistance + high PM2.5).
 
@@ -134,6 +139,6 @@ REACT_APP_CLERK_PUBLISHABLE_KEY=pk_live_...
 ## Known Issues
 - `validate_token()` in `auth.py` is a stub — all endpoints are effectively public
 - MongoDB timestamps are stored as **ISO-8601 strings** (e.g. `"2026-02-12T06:07:54.282Z"`), not BSON dates. BSON date range queries (`$gte`/`$lt` with `datetime` objects) return 0 results — always use string comparison or Python-side filtering. `no_cursor_timeout=True` is also banned on Atlas free tier (raises `OperationFailure` code 8000).
-- `build_training_dataset.py` generates 185-feature models; `train_with_feature_engine.py` generates the correct 29-feature models matching `FEATURE_ORDER`. Only the 29-feature models work with runtime inference.
+- `build_training_dataset.py` generates 185-feature models; `train_with_feature_engine.py` generates the correct 35-feature models matching `FEATURE_ORDER`. Only the 35-feature models work with runtime inference.
 - `clean_air_0001` label (Jan 21–22) has no corresponding samples data (samples collection starts Feb 2). It generates 0 training windows.
 - `landingpage/` is legacy; use `mistio-web/` for the landing page

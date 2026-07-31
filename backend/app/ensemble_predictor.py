@@ -62,9 +62,17 @@ class EnsemblePredictor:
                 val = 0.0
             feature_vector.append(val)
 
+        # ── Degenerate-window guard ──────────────────────────────────────────
+        # Answered here rather than in the caller so no code path can reach the
+        # models with a window that carries no evidence of a rise. detector.py
+        # has equivalent checks; this is the backstop.
+        reason = self._degenerate_reason(features, feature_vector)
+        if reason:
+            return self._normal_prediction(reason)
+
         # Reshape for sklearn (1, n_features)
         X = np.array([feature_vector])
-        
+
         # Collect probabilities
         sum_probs = np.zeros(len(CLASS_ORDER))
         valid_models = 0
@@ -172,6 +180,38 @@ class EnsemblePredictor:
             "status": status,
             "per_model": per_model_results,
             "confidence": top_prob * 100
+        }
+
+    @staticmethod
+    def _degenerate_reason(features, feature_vector):
+        """Why this window cannot be classified, or None if it looks real.
+
+        Two cases seen in production, both of which the models answer "vape":
+          empty_window — every feature zero (burst read returned nothing)
+          no_rise      — PM2.5 peak never meaningfully exceeded the baseline,
+                         which includes decay tails where the window opened
+                         after the plume had already passed (d_pm25_peak < 0).
+        """
+        if not any(abs(v) > 1e-9 for v in feature_vector):
+            return "empty_window"
+
+        d_peak = features.get("d_pm25_peak")
+        if d_peak is not None and d_peak < settings.MIN_D_PM25_PEAK:
+            return "no_rise"
+
+        return None
+
+    def _normal_prediction(self, reason):
+        """Confidently normal — reported without consulting a model."""
+        return {
+            "top_class": "normal",
+            "probs": {c: (1.0 if c == "normal" else 0.0) for c in CLASS_ORDER},
+            "top_prob": 1.0,
+            "margin": 1.0,
+            "status": "confirmed",
+            "per_model": {"skipped": reason},
+            "confidence": 0.0,
+            "rejected_reason": reason,
         }
 
     def _fallback_prediction(self):

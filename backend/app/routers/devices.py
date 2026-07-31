@@ -3,8 +3,13 @@ from app.database import db
 from app.auth import validate_token
 from app.state_manager import state_manager
 from typing import List, Optional, Dict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from pydantic import BaseModel
+
+try:
+    from zoneinfo import ZoneInfo          # stdlib on Python 3.9+
+except ImportError:                        # pragma: no cover
+    ZoneInfo = None
 
 router = APIRouter()
 
@@ -137,67 +142,232 @@ async def delete_device(device_id: str, user = Depends(validate_token)):
         }
     }
 
+# ── Schedule timezone handling ───────────────────────────────────────────────
+# The dashboard sets LOCAL wall-clock hours plus an IANA timezone; that pair is
+# the stored source of truth. The firmware is deliberately timezone-blind: it
+# runs on NTP UTC and compares against UTC values, so every conversion happens
+# here.
+#
+# The UTC window is recomputed on each GET rather than frozen at save time.
+# That is what makes DST self-correcting: when Pacific flips PDT->PST the
+# offset changes, and since the device re-fetches every 5 minutes it picks up
+# the new UTC window without anyone touching the schedule.
+
+def _utc_offset_minutes(tz_name: Optional[str], at: Optional[datetime] = None) -> int:
+    """DST-aware UTC offset for tz_name, in minutes. Positive = ahead of UTC."""
+    if not tz_name or ZoneInfo is None:
+        return 0
+    try:
+        at = at or datetime.now(dt_timezone.utc)
+        off = at.astimezone(ZoneInfo(tz_name)).utcoffset()
+        return int(off.total_seconds() // 60) if off else 0
+    except Exception:
+        return 0
+
+
+def _to_utc_window(start_min: int, end_min: int, days, tz_name, at=None):
+    """Convert a local wall-clock window to UTC.
+
+    Returns (utc_start_min, utc_end_min, utc_days, wraps_midnight, offset_min).
+
+    `utc_days` is keyed to the weekday the window *starts* on in UTC, which can
+    differ from the local weekday (e.g. 08:00 in Tokyo is 23:00 UTC the day
+    before). The firmware applies the same rule when the window wraps.
+    """
+    off = _utc_offset_minutes(tz_name, at)
+    u_start = start_min - off
+    u_end = end_min - off
+    shift = u_start // 1440              # floor division: correct for negatives
+    u_start_mod = u_start % 1440
+    u_end_mod = u_end % 1440
+    try:
+        u_days = sorted({(int(d) + shift) % 7 for d in (days or [])})
+    except (TypeError, ValueError):
+        u_days = []
+    return u_start_mod, u_end_mod, u_days, u_start_mod > u_end_mod, off
+
+
 class DeviceSchedule(BaseModel):
     enabled: bool = False
-    start_hour: int = 8
-    start_minute: int = 30
-    end_hour: int = 15
-    end_minute: int = 0
     timezone: Optional[str] = "America/Los_Angeles"
-    active_days: Optional[list] = [1, 2, 3, 4, 5]  # 0=Sun, 1=Mon, ..., 6=Sat
+
+    # Local wall-clock schedule — the source of truth. Older dashboards sent
+    # these as start_hour/start_minute/..., so both spellings are accepted.
+    local_start_hour: Optional[int] = None
+    local_start_minute: Optional[int] = None
+    local_end_hour: Optional[int] = None
+    local_end_minute: Optional[int] = None
+    local_active_days: Optional[list] = None
+
+    start_hour: Optional[int] = None
+    start_minute: Optional[int] = None
+    end_hour: Optional[int] = None
+    end_minute: Optional[int] = None
+    active_days: Optional[list] = None
+
     sniff_interval_sec: Optional[int] = 60
     deep_sense_sec: Optional[int] = 30
     heartbeat_interval: Optional[int] = 4
     cooldown_sec: Optional[int] = 20
+    # Detector knobs the firmware already parses in fetchSchedule()
+    spike_threshold: Optional[float] = None
+    gas_drop_ratio: Optional[float] = None
 
-@router.get("/{device_id}/schedule")
-async def get_device_schedule(device_id: str):
-    """Get the active-hours schedule for a device (used by ESP32 firmware)."""
-    doc = await db.device_schedules.find_one({"device_id": device_id})
+def _schedule_response(device_id: str, doc: Optional[dict]) -> dict:
+    """Build the schedule payload.
+
+    `start_hour`/`end_hour`/`active_days` are UTC — the firmware consumes these
+    directly and does no timezone math. `local_*` + `timezone` are what the
+    dashboard renders and edits.
+    """
+    tz = (doc or {}).get("timezone") or "America/Los_Angeles"
+
     if not doc:
-        # Default: no schedule restriction (always active)
+        # Nothing saved: hand the device a genuinely unrestricted UTC window
+        # rather than converting a local full-day (which would wrap and look
+        # like a real constraint). local_* are just sensible form defaults.
         return {
             "device_id": device_id,
             "enabled": False,
-            "start_hour": 0,
-            "start_minute": 0,
-            "end_hour": 23,
-            "end_minute": 59,
-            "timezone": "America/Los_Angeles",
-            "active_days": [1, 2, 3, 4, 5],
+            "start_hour": 0, "start_minute": 0,
+            "end_hour": 23, "end_minute": 59,
+            "active_days": [0, 1, 2, 3, 4, 5, 6],
+            "wraps_midnight": False,
+            "timezone": tz,
+            "utc_offset_minutes": _utc_offset_minutes(tz),
+            "local_start_hour": 8, "local_start_minute": 0,
+            "local_end_hour": 15, "local_end_minute": 0,
+            "local_active_days": [1, 2, 3, 4, 5],
             "sniff_interval_sec": 60,
             "deep_sense_sec": 30,
             "heartbeat_interval": 4,
-            "cooldown_sec": 20
+            "cooldown_sec": 20,
+            "spike_threshold": None,
+            "gas_drop_ratio": None,
         }
+
+    enabled = doc.get("enabled", False)
+    l_sh = doc.get("local_start_hour", doc.get("start_hour", 0)) or 0
+    l_sm = doc.get("local_start_minute", doc.get("start_minute", 0)) or 0
+    l_eh = doc.get("local_end_hour", doc.get("end_hour", 23))
+    l_eh = 23 if l_eh is None else l_eh
+    l_em = doc.get("local_end_minute", doc.get("end_minute", 59))
+    l_em = 59 if l_em is None else l_em
+    l_days = doc.get("local_active_days", doc.get("active_days")) or [1, 2, 3, 4, 5]
+
+    u_start, u_end, u_days, wraps, off = _to_utc_window(
+        l_sh * 60 + l_sm, l_eh * 60 + l_em, l_days, tz)
+
     return {
-        "device_id": doc["device_id"],
-        "enabled": doc.get("enabled", False),
-        "start_hour": doc.get("start_hour", 0),
-        "start_minute": doc.get("start_minute", 0),
-        "end_hour": doc.get("end_hour", 23),
-        "end_minute": doc.get("end_minute", 59),
-        "timezone": doc.get("timezone", "America/Los_Angeles"),
-        "active_days": doc.get("active_days", [1, 2, 3, 4, 5]),
+        "device_id": device_id,
+        "enabled": enabled,
+        # ── UTC: what the firmware uses ──
+        "start_hour": u_start // 60,
+        "start_minute": u_start % 60,
+        "end_hour": u_end // 60,
+        "end_minute": u_end % 60,
+        "active_days": u_days,
+        "wraps_midnight": wraps,
+        # ── Local: what the dashboard shows ──
+        "timezone": tz,
+        "utc_offset_minutes": off,
+        "local_start_hour": l_sh,
+        "local_start_minute": l_sm,
+        "local_end_hour": l_eh,
+        "local_end_minute": l_em,
+        "local_active_days": sorted(int(d) for d in l_days),
+        # ── Tuning knobs ──
         "sniff_interval_sec": doc.get("sniff_interval_sec", 60),
         "deep_sense_sec": doc.get("deep_sense_sec", 30),
         "heartbeat_interval": doc.get("heartbeat_interval", 4),
-        "cooldown_sec": doc.get("cooldown_sec", 20)
+        "cooldown_sec": doc.get("cooldown_sec", 20),
+        "spike_threshold": doc.get("spike_threshold"),
+        "gas_drop_ratio": doc.get("gas_drop_ratio"),
     }
+
+
+@router.get("/{device_id}/schedule")
+async def get_device_schedule(device_id: str):
+    """Active-hours schedule. UTC fields are for the ESP32, local_* for the UI.
+
+    UTC is derived on every request so a DST transition corrects itself without
+    the schedule being re-saved.
+    """
+    doc = await db.device_schedules.find_one({"device_id": device_id})
+    return _schedule_response(device_id, doc)
+
 
 @router.put("/{device_id}/schedule")
 async def update_device_schedule(device_id: str, schedule: DeviceSchedule):
-    """Set the active-hours schedule for a device (called from dashboard)."""
-    data = schedule.dict()
-    data["device_id"] = device_id
-    data["updated_at"] = datetime.utcnow().isoformat() + "Z"
+    """Store a schedule. The dashboard sends LOCAL hours plus an IANA timezone;
+    we persist that pair as the source of truth and cache a UTC snapshot for
+    debugging. Reads always recompute UTC, so the snapshot never goes stale in
+    a way that affects the device."""
+    s = schedule
+
+    def pick(new, old, default):
+        if new is not None:
+            return new
+        return old if old is not None else default
+
+    l_sh = pick(s.local_start_hour, s.start_hour, 8)
+    l_sm = pick(s.local_start_minute, s.start_minute, 0)
+    l_eh = pick(s.local_end_hour, s.end_hour, 15)
+    l_em = pick(s.local_end_minute, s.end_minute, 0)
+    l_days = pick(s.local_active_days, s.active_days, [1, 2, 3, 4, 5])
+
+    for name, val in (("hour", l_sh), ("hour", l_eh)):
+        if not (0 <= int(val) <= 23):
+            raise HTTPException(status_code=422, detail=f"{name} out of range: {val}")
+    for name, val in (("minute", l_sm), ("minute", l_em)):
+        if not (0 <= int(val) <= 59):
+            raise HTTPException(status_code=422, detail=f"{name} out of range: {val}")
+    if any(int(d) < 0 or int(d) > 6 for d in l_days):
+        raise HTTPException(status_code=422, detail="active_days must be 0-6 (0=Sun)")
+
+    tz = s.timezone or "America/Los_Angeles"
+    if ZoneInfo is not None and s.timezone:
+        try:
+            ZoneInfo(tz)
+        except Exception:
+            raise HTTPException(status_code=422, detail=f"Unknown timezone: {tz}")
+
+    u_start, u_end, u_days, wraps, off = _to_utc_window(
+        l_sh * 60 + l_sm, l_eh * 60 + l_em, l_days, tz)
+
+    data = {
+        "device_id": device_id,
+        "enabled": s.enabled,
+        "timezone": tz,
+        "local_start_hour": int(l_sh),
+        "local_start_minute": int(l_sm),
+        "local_end_hour": int(l_eh),
+        "local_end_minute": int(l_em),
+        "local_active_days": sorted(int(d) for d in l_days),
+        # Cached UTC snapshot — informational; GET recomputes.
+        "start_hour": u_start // 60,
+        "start_minute": u_start % 60,
+        "end_hour": u_end // 60,
+        "end_minute": u_end % 60,
+        "active_days": u_days,
+        "wraps_midnight": wraps,
+        "utc_offset_minutes": off,
+        "sniff_interval_sec": s.sniff_interval_sec,
+        "deep_sense_sec": s.deep_sense_sec,
+        "heartbeat_interval": s.heartbeat_interval,
+        "cooldown_sec": s.cooldown_sec,
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+    }
+    if s.spike_threshold is not None:
+        data["spike_threshold"] = s.spike_threshold
+    if s.gas_drop_ratio is not None:
+        data["gas_drop_ratio"] = s.gas_drop_ratio
 
     await db.device_schedules.update_one(
-        {"device_id": device_id},
-        {"$set": data},
-        upsert=True
-    )
-    return {"status": "success", "device_id": device_id, "schedule": data}
+        {"device_id": device_id}, {"$set": data}, upsert=True)
+
+    return {"status": "success", "device_id": device_id,
+            "schedule": _schedule_response(device_id, data)}
 
 @router.get("/", response_model=List[dict])
 async def get_device_summary(school: Optional[str] = None):

@@ -132,11 +132,54 @@ const TOGGLE_ROWS = [
 
 // ── Main component ────────────────────────────────────────────────────────────
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// Hours are entered as LOCAL wall-clock in the device's timezone. The backend
+// converts to UTC and the ESP32 runs purely on UTC, so DST never reaches the
+// firmware. The preview below is only a courtesy — the server is authoritative.
+const TIMEZONES = [
+  'America/Los_Angeles', 'America/Denver', 'America/Phoenix', 'America/Chicago',
+  'America/New_York', 'America/Anchorage', 'Pacific/Honolulu',
+  'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Madrid',
+  'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Kolkata', 'Asia/Dubai',
+  'Australia/Sydney', 'UTC',
+];
+
 const DEFAULT_SCHEDULE = {
-  enabled: false, start_hour: 8, start_minute: 0,
-  end_hour: 15, end_minute: 0, active_days: [1,2,3,4,5],
+  enabled: false,
+  timezone: 'America/Los_Angeles',
+  local_start_hour: 8, local_start_minute: 0,
+  local_end_hour: 15, local_end_minute: 0,
+  local_active_days: [1, 2, 3, 4, 5],
   sniff_interval_sec: 60, deep_sense_sec: 30,
   heartbeat_interval: 4, cooldown_sec: 20,
+};
+
+/** DST-aware UTC offset (minutes, positive = ahead of UTC) for an IANA zone. */
+const tzOffsetMinutes = (tz, at = new Date()) => {
+  try {
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+    const p = {};
+    dtf.formatToParts(at).forEach(({ type, value }) => { p[type] = value; });
+    const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day,
+                           (+p.hour) % 24, +p.minute, +p.second);
+    return Math.round((asUTC - at.getTime()) / 60000);
+  } catch {
+    return 0;
+  }
+};
+
+const pad2 = n => String(n).padStart(2, '0');
+
+/** Local HH:MM -> UTC HH:MM plus which day it lands on (-1, 0, +1). */
+const localToUtc = (hour, minute, offsetMin) => {
+  const total = hour * 60 + minute - offsetMin;
+  const dayShift = Math.floor(total / 1440);
+  const mod = ((total % 1440) + 1440) % 1440;
+  return { hour: Math.floor(mod / 60), minute: mod % 60, dayShift };
 };
 
 const Settings = () => {
@@ -224,7 +267,7 @@ const Settings = () => {
   }, [selectedDevice]);
 
   const handleScheduleSave = async () => {
-    if (schedule.enabled && schedule.active_days.length === 0) {
+    if (schedule.enabled && schedule.local_active_days.length === 0) {
       alert('No active days selected — the sensor will sleep until you update the schedule. Add at least one day.');
       return;
     }
@@ -244,10 +287,10 @@ const Settings = () => {
 
   const toggleDay = (day) => {
     setSchedule(prev => {
-      const days = prev.active_days.includes(day)
-        ? prev.active_days.filter(d => d !== day)
-        : [...prev.active_days, day].sort();
-      return { ...prev, active_days: days };
+      const days = prev.local_active_days.includes(day)
+        ? prev.local_active_days.filter(d => d !== day)
+        : [...prev.local_active_days, day].sort();
+      return { ...prev, local_active_days: days };
     });
   };
 
@@ -672,8 +715,8 @@ const Settings = () => {
                       <div>
                         <label style={{ fontSize: '0.65rem', fontWeight: 600, color: '#9ca3af', display: 'block', marginBottom: 4 }}>START</label>
                         <input type="time"
-                          value={`${String(schedule.start_hour).padStart(2,'0')}:${String(schedule.start_minute).padStart(2,'0')}`}
-                          onChange={e => { const [h,m] = e.target.value.split(':').map(Number); setSchedule(p => ({...p, start_hour: h, start_minute: m})); }}
+                          value={`${pad2(schedule.local_start_hour)}:${pad2(schedule.local_start_minute)}`}
+                          onChange={e => { const [h,m] = e.target.value.split(':').map(Number); setSchedule(p => ({...p, local_start_hour: h, local_start_minute: m})); }}
                           style={{
                             padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.1)',
                             fontFamily: 'var(--font-body)', fontSize: '0.88rem', fontWeight: 700,
@@ -685,8 +728,8 @@ const Settings = () => {
                       <div>
                         <label style={{ fontSize: '0.65rem', fontWeight: 600, color: '#9ca3af', display: 'block', marginBottom: 4 }}>END</label>
                         <input type="time"
-                          value={`${String(schedule.end_hour).padStart(2,'0')}:${String(schedule.end_minute).padStart(2,'0')}`}
-                          onChange={e => { const [h,m] = e.target.value.split(':').map(Number); setSchedule(p => ({...p, end_hour: h, end_minute: m})); }}
+                          value={`${pad2(schedule.local_end_hour)}:${pad2(schedule.local_end_minute)}`}
+                          onChange={e => { const [h,m] = e.target.value.split(':').map(Number); setSchedule(p => ({...p, local_end_hour: h, local_end_minute: m})); }}
                           style={{
                             padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.1)',
                             fontFamily: 'var(--font-body)', fontSize: '0.88rem', fontWeight: 700,
@@ -696,12 +739,51 @@ const Settings = () => {
                       </div>
                     </div>
 
+                    {/* Device timezone + what actually goes over the wire */}
+                    <div style={{ marginTop: 16 }}>
+                      <label style={{ fontSize: '0.65rem', fontWeight: 600, color: '#9ca3af', display: 'block', marginBottom: 6 }}>DEVICE TIMEZONE</label>
+                      <select
+                        value={schedule.timezone || 'America/Los_Angeles'}
+                        onChange={e => setSchedule(p => ({ ...p, timezone: e.target.value }))}
+                        style={{
+                          padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.1)',
+                          fontFamily: 'var(--font-body)', fontSize: '0.82rem', fontWeight: 600,
+                          color: '#1a1a1a', background: 'rgba(0,0,0,0.03)', outline: 'none',
+                          minWidth: 220, cursor: 'pointer',
+                        }}
+                      >
+                        {TIMEZONES.map(tz => (
+                          <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+                        ))}
+                      </select>
+                      {(() => {
+                        const off = tzOffsetMinutes(schedule.timezone || 'UTC');
+                        const us = localToUtc(schedule.local_start_hour, schedule.local_start_minute, off);
+                        const ue = localToUtc(schedule.local_end_hour, schedule.local_end_minute, off);
+                        const sign = off >= 0 ? '+' : '-';
+                        const ao = Math.abs(off);
+                        const shifted = us.dayShift !== 0 || ue.dayShift !== 0;
+                        return (
+                          <div style={{ marginTop: 8, fontSize: '0.7rem', color: '#9ca3af', lineHeight: 1.5 }}>
+                            Sent to the sensor as{' '}
+                            <strong style={{ color: '#1a1a1a' }}>
+                              {pad2(us.hour)}:{pad2(us.minute)}–{pad2(ue.hour)}:{pad2(ue.minute)} UTC
+                            </strong>
+                            {` · UTC${sign}${pad2(Math.floor(ao / 60))}:${pad2(ao % 60)}`}
+                            {shifted && ' · window crosses a UTC date boundary'}
+                            <br />
+                            Daylight saving is applied server-side on every fetch, so this shifts automatically.
+                          </div>
+                        );
+                      })()}
+                    </div>
+
                     {/* Active days */}
                     <div style={{ marginTop: 16 }}>
                       <label style={{ fontSize: '0.65rem', fontWeight: 600, color: '#9ca3af', display: 'block', marginBottom: 6 }}>ACTIVE DAYS</label>
                       <div style={{ display: 'flex', gap: 6 }}>
                         {DAY_LABELS.map((label, i) => {
-                          const active = schedule.active_days.includes(i);
+                          const active = schedule.local_active_days.includes(i);
                           return (
                             <button key={i} onClick={() => toggleDay(i)} style={{
                               width: 38, height: 38, borderRadius: 10,

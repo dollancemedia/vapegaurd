@@ -63,7 +63,7 @@
 //  CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-const char* FIRMWARE_VERSION = "3.7.0";
+const char* FIRMWARE_VERSION = "3.8.0";
 
 // ─── Training mode ─────────────────────────────────────────────────────────
 // Set to 1 for data collection: permanent 1Hz reads, no WiFi, no state machine.
@@ -134,7 +134,12 @@ const unsigned long SCHEDULE_FETCH_INTERVAL = 300000;
 #define MSA311_INT_PIN  5  // MSA311 INT1 → GPIO5 (wakes ESP32 from light sleep)
 #define SDA_PIN        19  // Feather ESP32-C6 Stemma QT SDA
 #define SCL_PIN        18  // Feather ESP32-C6 Stemma QT SCL
-#define BATT_PIN        1  // A1 — Feather ESP32-C6 battery voltage divider (2:1)
+// Battery: the Feather ESP32-C6 has NO analog battery divider (the board variant
+// declares no VBAT pin). Battery sensing is via the onboard MAX17048 fuel gauge
+// on the I2C bus at 0x36 — it shows up in the boot I2C scan.
+#define MAX17048_ADDR      0x36
+#define MAX17048_REG_VCELL 0x02
+#define MAX17048_REG_VER   0x08
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  State machine
@@ -230,6 +235,19 @@ float lastPM25 = 0, lastPM10 = 0, lastPM1 = 0;
 float lastTemp = 0, lastHumidity = 0, lastPressure = 0, lastGas = 0;
 bool  lastBmvObstructed = false;
 float lastBatteryVoltage = 0;
+bool  fuelGaugeAvailable = false;
+
+// ─── Live capture mode (toggled at runtime from the training studio) ────────
+// Duty cycling samples once per sniff interval (60s by default). A vape cloud
+// in a well-ventilated room can rise and clear inside that window, so training
+// captures either miss the event entirely or land a single ambiguous point
+// mid-plume. Live mode suspends duty cycling and samples at a full 1Hz so the
+// whole plume is recorded densely enough to label by hand.
+bool          liveMode = false;
+unsigned long lastLiveRead = 0;
+unsigned long lastLivePost = 0;
+unsigned long liveSampleCount = 0;
+const unsigned long LIVE_POST_INTERVAL_MS = 60000;
 
 // ─── Forward declarations ───────────────────────────────────────────────────
 // bool  connectWiFiManager(bool forcePortal);  // removed — BLE provisioning only
@@ -261,6 +279,10 @@ String getISOTimestamp();
 void  sleepHeavySensors();
 void  wakeHeavySensors();
 float readBatteryVoltage();
+void  initFuelGauge();
+void  handleSerialCommands();
+void  enterLiveMode();
+void  exitLiveMode();
 void  idleSleep(unsigned long durationMs);
 void  startBLEProvisioning();
 void  stopBLEProvisioning();
@@ -395,8 +417,7 @@ void setup() {
 
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
-  pinMode(BATT_PIN, INPUT);
-  analogReadResolution(12);
+  // Battery is read over I2C from the MAX17048 (see initFuelGauge) — no ADC pin.
 
   // MSA311 INT pin as input (hardware interrupt for tamper wakeup)
   pinMode(MSA311_INT_PIN, INPUT);
@@ -492,7 +513,8 @@ void setup() {
 // =============================================================================
 void loop() {
 
-  esp_task_wdt_reset();  // feed watchdog every loop iteration
+  esp_task_wdt_reset();     // feed watchdog every loop iteration
+  handleSerialCommands();   // training studio can toggle live mode at any time
 
 #if TRAINING_MODE
   {
@@ -521,6 +543,40 @@ void loop() {
 
   unsigned long now = millis();
   unsigned long elapsed = now - stateEnteredAt;
+
+  // ── LIVE CAPTURE MODE ────────────────────────────────────────────────────
+  // Toggled from the training studio. Samples at a full 1Hz with the BMV080
+  // laser continuous so a short-lived plume is captured densely enough to
+  // label by hand. Duty cycling, light sleep and the schedule are suspended.
+  if (liveMode) {
+    // Heap guard still applies, but NOT the no-POST reboot: live capture is
+    // useful without WiFi (the studio reads over serial), and rebooting every
+    // 5 minutes would destroy a long session.
+    if (ESP.getFreeHeap() < HEAP_MIN_BYTES) {
+      Serial.printf("REBOOT: heap critical %u < %u\n", ESP.getFreeHeap(), HEAP_MIN_BYTES);
+      delay(100);
+      ESP.restart();
+    }
+
+    if (now - lastLiveRead >= 1000) {
+      lastLiveRead = now;
+      readAllSensors();          // emits the SENSOR: line the studio parses
+      liveSampleCount++;
+
+      // Heartbeat only. POSTing every sample would flood the backend with
+      // training noise and isn't needed — the studio captures over serial.
+      if (wifiOn && (now - lastLivePost >= LIVE_POST_INTERVAL_MS)) {
+        lastLivePost = now;
+        postSensorData();
+      }
+      if (liveSampleCount % 60 == 0) {
+        Serial.printf("LIVE: %lu samples captured\n", liveSampleCount);
+      }
+    }
+    keepalivePulse();
+    delay(20);
+    return;
+  }
 
   // ── Health checks — reboot if device is stuck ──
   if (currentState != STATE_STARTUP) {
@@ -802,6 +858,78 @@ void enterState(SensorState newState) {
 }
 
 // =============================================================================
+//  SERIAL COMMAND INTERFACE (training studio)
+// =============================================================================
+// Line-oriented, non-blocking. Commands:
+//   LIVE:ON   — suspend duty cycling, sample continuously at 1Hz
+//   LIVE:OFF  — resume normal duty-cycled operation
+//   STATUS    — report current mode
+void enterLiveMode() {
+  if (liveMode) {
+    Serial.println("LIVE: ON (already)");
+    return;
+  }
+  liveMode = true;
+  liveSampleCount = 0;
+  lastLiveRead = 0;
+  lastLivePost = millis();
+
+  wakeHeavySensors();            // BMV080 -> continuous (blocks ~3s to settle)
+  if (wifiOn) esp_wifi_set_ps(WIFI_PS_NONE);
+  neoSet(0, 0, 255);             // blue = live capture
+  Serial.println("LIVE: ON — continuous 1Hz capture, duty cycling suspended");
+}
+
+void exitLiveMode() {
+  if (!liveMode) {
+    Serial.println("LIVE: OFF (already)");
+    return;
+  }
+  liveMode = false;
+  if (wifiOn) esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+  sleepHeavySensors();           // BMV080 -> duty cycle
+  neoOff();
+  enterState(STATE_SNIFF);
+  Serial.printf("LIVE: OFF — resumed duty cycling after %lu samples\n", liveSampleCount);
+}
+
+static void processSerialCommand(const char* cmd) {
+  if (strcasecmp(cmd, "LIVE:ON") == 0) {
+    enterLiveMode();
+  } else if (strcasecmp(cmd, "LIVE:OFF") == 0) {
+    exitLiveMode();
+  } else if (strcasecmp(cmd, "STATUS") == 0) {
+    const char* names[] = {"startup", "sniff", "deep_sense", "cooldown"};
+    Serial.printf("STATUS: live=%d state=%s fw=%s heap=%u\n",
+                  liveMode ? 1 : 0, names[currentState],
+                  FIRMWARE_VERSION, ESP.getFreeHeap());
+  } else {
+    Serial.printf("ERR: unknown command '%s'\n", cmd);
+  }
+}
+
+void handleSerialCommands() {
+  static char buf[48];
+  static uint8_t len = 0;
+
+  while (Serial.available()) {
+    char c = (char)Serial.read();
+    if (c == '\r') continue;
+    if (c == '\n') {
+      buf[len] = '\0';
+      if (len > 0) processSerialCommand(buf);
+      len = 0;
+      continue;
+    }
+    if (len < sizeof(buf) - 1) {
+      buf[len++] = c;
+    } else {
+      len = 0;  // overlong line, discard rather than truncate into a command
+    }
+  }
+}
+
+// =============================================================================
 //  BMV080 DUTY CYCLING — reset() stops laser, init() restarts it
 // =============================================================================
 void sleepHeavySensors() {
@@ -1062,10 +1190,15 @@ void initSensors() {
     if (bme680Available && msa311Available && bmv080Available) break;
   }
 
-  Serial.printf("Sensors: BME680=%s MSA311=%s BMV080=%s\n",
+  // Onboard MAX17048 battery fuel gauge (not part of the retry loop above —
+  // it is on the Feather itself, not an external Stemma QT sensor).
+  initFuelGauge();
+
+  Serial.printf("Sensors: BME680=%s MSA311=%s BMV080=%s FUELGAUGE=%s\n",
     bme680Available ? "YES" : "NO",
     msa311Available ? "YES" : "NO",
-    bmv080Available ? "YES" : "NO");
+    bmv080Available ? "YES" : "NO",
+    fuelGaugeAvailable ? "YES" : "NO");
 }
 
 // =============================================================================
@@ -1105,13 +1238,50 @@ void readAllSensors() {
 }
 
 // =============================================================================
-//  BATTERY VOLTAGE
+//  BATTERY VOLTAGE — MAX17048 fuel gauge (I2C 0x36)
 // =============================================================================
+// Direct register reads rather than a library: keeps flash small (we are already
+// at ~83% of the 1.9MB min_spiffs OTA slot).
+//
+// NOTE ON LiFePO4: only VCELL is used here. The MAX17048's ModelGauge SOC
+// register is calibrated for LiPo (3.0-4.2V) and reports near-0% for a LiFePO4
+// pack sitting at its normal 3.2-3.3V, so it is deliberately NOT reported.
+static bool max17048ReadReg16(uint8_t reg, uint16_t* out) {
+  Wire.beginTransmission(MAX17048_ADDR);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.requestFrom((uint8_t)MAX17048_ADDR, (uint8_t)2) != 2) return false;
+  // Read into separate locals — evaluation order of two Wire.read() calls
+  // inside one expression is unspecified in C++.
+  uint8_t hi = Wire.read();
+  uint8_t lo = Wire.read();
+  *out = ((uint16_t)hi << 8) | (uint16_t)lo;
+  return true;
+}
+
+void initFuelGauge() {
+  uint16_t ver = 0;
+  if (!max17048ReadReg16(MAX17048_REG_VER, &ver)) {
+    fuelGaugeAvailable = false;
+    Serial.println("MAX17048 not responding at 0x36 — battery reporting disabled");
+    return;
+  }
+  // MAX17048/MAX17049 silicon reports version 0x001_ (commonly 0x0012).
+  fuelGaugeAvailable = ((ver & 0xFFF0) == 0x0010);
+  if (fuelGaugeAvailable) {
+    Serial.printf("MAX17048 fuel gauge OK (version 0x%04X)\n", ver);
+  } else {
+    Serial.printf("Device at 0x36 is not a MAX17048 (version 0x%04X) — battery reporting disabled\n", ver);
+  }
+}
+
+// Returns pack voltage in volts, or 0.0 if the gauge is unavailable.
 float readBatteryVoltage() {
-  int raw = analogRead(BATT_PIN);
-  // ESP32-C6 12-bit ADC (0-4095), 3.3V ref, 2:1 voltage divider on Feather
-  float voltage = (raw / 4095.0f) * 3.3f * 2.0f;
-  return voltage;
+  if (!fuelGaugeAvailable) return 0.0f;
+  uint16_t raw = 0;
+  if (!max17048ReadReg16(MAX17048_REG_VCELL, &raw)) return 0.0f;
+  // MAX17048 VCELL LSB = 78.125 uV
+  return raw * 0.000078125f;
 }
 
 // =============================================================================
@@ -1135,6 +1305,7 @@ bool postSensorData() {
   doc["bmv080_obstructed"] = lastBmvObstructed;
   lastBatteryVoltage     = readBatteryVoltage();
   doc["battery_voltage"] = lastBatteryVoltage;
+  doc["battery_gauge_ok"] = fuelGaugeAvailable;
   doc["free_heap"]       = ESP.getFreeHeap();
 
   const char* stateNames[] = {"startup", "sniff", "deep_sense", "cooldown"};
@@ -1447,16 +1618,29 @@ bool isWithinSchedule() {
   struct tm tm;
   if (!getLocalTime(&tm)) return true;
 
-  if (!(activeDays & (1 << tm.tm_wday))) {
-    return false;
-  }
+  // Schedule values arrive from the backend ALREADY CONVERTED TO UTC, and
+  // getLocalTime() returns UTC here (NTP is synced with a zero offset), so the
+  // device performs no timezone or DST arithmetic. The backend recomputes the
+  // UTC window on every fetch, so DST transitions correct themselves within
+  // one 5-minute schedule refresh.
+  int nowMin   = tm.tm_hour * 60 + tm.tm_min;
+  int startMin = scheduleStartHour * 60 + scheduleStartMin;
+  int endMin   = scheduleEndHour * 60 + scheduleEndMin;
 
-  int localHour = (tm.tm_hour - 7 + 24) % 24; // UTC -> PDT
-  int nowMin    = localHour * 60 + tm.tm_min;
-  int startMin  = scheduleStartHour * 60 + scheduleStartMin;
-  int endMin    = scheduleEndHour * 60 + scheduleEndMin;
+  // A window whose UTC start is after its UTC end wraps past midnight — that
+  // happens whenever the local timezone pushes the window across a UTC date
+  // boundary (e.g. 08:00 in Tokyo is 23:00 UTC the previous day).
+  bool wraps = (startMin > endMin);
+  bool inWindow = wraps ? (nowMin >= startMin || nowMin <= endMin)
+                        : (nowMin >= startMin && nowMin <= endMin);
+  if (!inWindow) return false;
 
-  return (nowMin >= startMin && nowMin <= endMin);
+  // activeDays is a UTC-day mask keyed to the day the window STARTS. If we are
+  // in the post-midnight half of a wrapping window, it started yesterday UTC.
+  int dayIdx = tm.tm_wday;
+  if (wraps && nowMin <= endMin) dayIdx = (tm.tm_wday + 6) % 7;
+
+  return (activeDays & (1 << dayIdx)) != 0;
 }
 
 // =============================================================================

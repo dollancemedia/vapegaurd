@@ -198,6 +198,12 @@ async def receive_sensor_data(payload: Dict[str, Any], request: Request):
                 "gas_resistance": payload.get("gas_resistance"),
                 "temperature": payload.get("temperature"),
                 "sound_level": payload.get("sound_level", 0),
+                # Battery/health telemetry for live dashboard tiles
+                "battery_voltage": payload.get("battery_voltage"),
+                "battery_gauge_ok": payload.get("battery_gauge_ok"),
+                "free_heap": payload.get("free_heap"),
+                "wifi_rssi": payload.get("wifi_rssi"),
+                "duty_state": duty_state,
                 "prediction": {
                     "type": display_type,
                     "confidence": event_doc.get("top_prob", 0) * 100 if event_doc else 0,
@@ -328,6 +334,14 @@ async def get_sensor_data(limit: int = 200):
                 "pm10": doc.get("pm10", 0),
                 "temperature": doc.get("temperature", 0),
                 "gas_resistance": doc.get("gas_resistance", 0),
+                # Battery/health telemetry. None (not 0) when absent, so the
+                # dashboard can distinguish "no reading" from "flat battery".
+                "battery_voltage": doc.get("battery_voltage"),
+                "battery_gauge_ok": doc.get("battery_gauge_ok"),
+                "free_heap": doc.get("free_heap"),
+                "wifi_rssi": doc.get("wifi_rssi"),
+                "duty_state": doc.get("duty_state"),
+                "firmware_version": doc.get("firmware_version"),
                 "prediction": {
                     "type": doc.get("top_class", "normal"), # Samples usually don't have this
                     "confidence": doc.get("confidence", 0),

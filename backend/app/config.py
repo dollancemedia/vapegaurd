@@ -29,6 +29,16 @@ class Settings(BaseSettings):
     MIN_TOP_PROB: float = 0.40  # Lowered from 0.60
     MIN_MARGIN: float = 0.00    # Lowered from 0.15
 
+    # Degenerate-window guard.
+    # The current models were trained on ~10 vape events against 2 clean-air
+    # windows, so they answer "vape" to almost any input — an all-zero vector
+    # scores vape 0.58, and flat clean air scores 0.85. Until they are retrained
+    # on balanced data, windows carrying no real rise are answered directly
+    # instead of being handed to a model that cannot say "normal".
+    # Phase 1 only opens an event when d_pm25 >= D_PM25_SUS (10.0), so a genuine
+    # detection arrives here well above this floor; 2.0 is deliberately lenient.
+    MIN_D_PM25_PEAK: float = 2.0
+
     # Startup handling
     WARMUP_DURATION_SEC: int = 90
     CALIBRATION_DURATION_SEC: int = 60

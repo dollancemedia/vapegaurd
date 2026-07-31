@@ -3,12 +3,14 @@ import os
 import sys
 
 # Allowed models and their corresponding friendly names
+# Only models that actually exist in backend/models/ and match the current
+# 35-feature FEATURE_ORDER. knn/svc/l_svm were removed: knn was a stale
+# 29-feature build labelled clean_air/vape, and svc/linear_svc were never
+# produced by the current training pipeline.
 ALLOWED_MODELS = {
     "xgb": "XGBoost",
-    "knn": "K-Nearest Neighbors",
-    "svc": "Support Vector Classifier",
-    "l_svm": "Linear SVM",
-    "rf": "Random Forest"
+    "rf": "Random Forest",
+    "lr": "Logistic Regression"
 }
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "app", "model_config.py")

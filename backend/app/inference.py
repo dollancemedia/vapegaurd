@@ -50,15 +50,9 @@ def load_model():
     global _model, _load_error
     if _model is None:
         try:
-            if MODEL_TYPE == "knn":
-                filename = "knn_model.joblib"
-                model_name = "KNN"
-            elif MODEL_TYPE == "svc":
-                filename = "svc_model.joblib"
-                model_name = "SVC"
-            elif MODEL_TYPE == "l_svm":
-                filename = "linear_svc_model.joblib"
-                model_name = "Linear SVM"
+            if MODEL_TYPE == "lr":
+                filename = "lr_model.joblib"
+                model_name = "Logistic Regression"
             elif MODEL_TYPE == "rf":
                 filename = "rf_model.joblib"
                 model_name = "Random Forest"

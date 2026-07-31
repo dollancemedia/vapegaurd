@@ -291,8 +291,9 @@ class Detector:
 
         # Sanity check: if PM2.5 peak is at or below baseline, it's not vape
         d_pm25_peak = features.get('d_pm25_peak')
-        if d_pm25_peak is not None and d_pm25_peak <= 0:
-            print(f"[Detector] SKIP ML — d_pm25_peak={d_pm25_peak:.2f} (negative delta = not vape)")
+        if d_pm25_peak is not None and d_pm25_peak < settings.MIN_D_PM25_PEAK:
+            print(f"[Detector] SKIP ML — d_pm25_peak={d_pm25_peak:.2f} "
+                  f"(below MIN_D_PM25_PEAK={settings.MIN_D_PM25_PEAK} = no real rise)")
             event_doc = {
                 "event_id": event_id,
                 "device_id": device_id,
@@ -594,8 +595,9 @@ class Detector:
         )
 
         d_pm25_peak = features.get('d_pm25_peak')
-        if d_pm25_peak is not None and d_pm25_peak <= 0:
-            print(f"[Detector] SKIP ML (legacy) — d_pm25_peak={d_pm25_peak:.2f} (negative delta)")
+        if d_pm25_peak is not None and d_pm25_peak < settings.MIN_D_PM25_PEAK:
+            print(f"[Detector] SKIP ML (legacy) — d_pm25_peak={d_pm25_peak:.2f} "
+                  f"(below MIN_D_PM25_PEAK={settings.MIN_D_PM25_PEAK})")
             event_doc = {
                 "event_id": event_id,
                 "device_id": device_id,
