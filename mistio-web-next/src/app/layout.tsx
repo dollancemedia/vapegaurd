@@ -28,11 +28,11 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "Mistio" }],
   creator: "Mistio",
-  metadataBase: new URL("https://mistio.app"),
+  metadataBase: new URL("https://www.mistio.app"),
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://mistio.app",
+    url: "https://www.mistio.app",
     siteName: "Mistio",
     title: "Mistio - The Only Battery-Powered Vape Detector for Schools",
     description:
@@ -72,19 +72,12 @@ const jsonLd = {
     {
       "@type": "Organization",
       name: "Mistio",
-      url: "https://mistio.app",
-      logo: "https://mistio.app/logo.png",
+      url: "https://www.mistio.app",
+      logo: "https://www.mistio.app/logo.png",
       contactPoint: {
         "@type": "ContactPoint",
-        telephone: "+1-408-507-8922",
         email: "contact@mistio.app",
         contactType: "sales",
-      },
-      address: {
-        "@type": "PostalAddress",
-        addressLocality: "Fremont",
-        addressRegion: "CA",
-        addressCountry: "US",
       },
       sameAs: [
         "https://www.facebook.com/mistio",
@@ -108,7 +101,7 @@ const jsonLd = {
       additionalProperty: [
         { "@type": "PropertyValue", name: "Battery Life", value: "1 year" },
         { "@type": "PropertyValue", name: "Installation Time", value: "Under 1 minute" },
-        { "@type": "PropertyValue", name: "Connectivity", value: "Cellular" },
+        { "@type": "PropertyValue", name: "Connectivity", value: "WiFi" },
         { "@type": "PropertyValue", name: "Cameras or Microphones", value: "None" },
       ],
     },

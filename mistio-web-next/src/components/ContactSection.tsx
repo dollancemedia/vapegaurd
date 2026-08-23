@@ -1,6 +1,6 @@
 'use client';
 
-import { Mail, Phone, MapPin } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import { InlineWidget } from 'react-calendly';
 
 export const ContactSection = () => {
@@ -24,17 +24,6 @@ export const ContactSection = () => {
                 title="Email Us"
                 content="contact@mistio.app"
                 href="mailto:contact@mistio.app"
-              />
-              <ContactItem
-                icon={<Phone className="w-6 h-6" />}
-                title="Call Us"
-                content="(408) 507 8922"
-                href="tel:4085078922"
-              />
-              <ContactItem
-                icon={<MapPin className="w-6 h-6" />}
-                title="Headquarters"
-                content="Fremont, CA"
               />
             </div>
           </div>
