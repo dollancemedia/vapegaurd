@@ -29,7 +29,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description: post.description,
       type: 'article',
       publishedTime: post.date,
-      url: `https://mistio.app/blog/${slug}`,
+      url: `https://www.mistio.app/blog/${slug}`,
     },
     twitter: {
       card: 'summary_large_image',
@@ -44,21 +44,46 @@ export default async function BlogPost({ params }: Props) {
   const post = getPostBySlug(slug);
   if (!post) notFound();
 
+  const articleImage = post.image
+    ? `https://www.mistio.app${post.image}`
+    : 'https://www.mistio.app/logo.png';
+
   const articleSchema = {
     '@context': 'https://schema.org',
     '@type': 'Article',
     headline: post.title,
     description: post.description,
+    image: [articleImage],
     datePublished: post.date,
+    dateModified: post.date,
     author: {
       '@type': 'Organization',
       name: 'Mistio',
+      url: 'https://www.mistio.app',
     },
     publisher: {
       '@type': 'Organization',
       name: 'Mistio',
-      url: 'https://mistio.app',
+      url: 'https://www.mistio.app',
+      logo: {
+        '@type': 'ImageObject',
+        url: 'https://www.mistio.app/logo.png',
+      },
     },
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': `https://www.mistio.app/blog/${slug}`,
+    },
+  };
+
+  const breadcrumbSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://www.mistio.app' },
+      { '@type': 'ListItem', position: 2, name: 'Blog', item: 'https://www.mistio.app/blog' },
+      { '@type': 'ListItem', position: 3, name: post.title, item: `https://www.mistio.app/blog/${slug}` },
+    ],
   };
 
   return (
@@ -67,6 +92,10 @@ export default async function BlogPost({ params }: Props) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
       />
       <main className="pt-28 pb-20 bg-white min-h-screen">
         <article className="max-w-3xl mx-auto px-4">

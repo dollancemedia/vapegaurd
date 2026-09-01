@@ -1,5 +1,5 @@
 import { Navbar } from '@/components/Navbar';
-import { FAQ } from '@/components/FAQ';
+import { FAQ, faqs } from '@/components/FAQ';
 import { ContactSection } from '@/components/ContactSection';
 import { StackedCircularFooter } from '@/components/ui/stacked-circular-footer';
 import Link from 'next/link';
@@ -23,51 +23,78 @@ export const metadata: Metadata = {
     title: 'Vape Detectors for Schools — Mistio',
     description:
       'Battery-powered vape detection for K-12 schools. One year battery, under 1 minute install, zero false alarms from cologne or cleaning spray.',
-    url: 'https://mistio.app/schools',
+    url: 'https://www.mistio.app/schools',
   },
 };
 
-const schoolsJsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'WebPage',
-  name: 'Vape Detectors for Schools',
-  description:
-    'Mistio is a battery-powered vape detector for K-12 schools. No wiring, no false alarms, one year battery life.',
-  url: 'https://mistio.app/schools',
-  mainEntity: {
-    '@type': 'Product',
-    name: 'Mistio Vape Detector for Schools',
+const schoolsJsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: 'Vape Detectors for Schools',
     description:
-      'Battery-powered vape detection sensor for K-12 school bathrooms and locker rooms. Lasts one full year on a single battery. AI-powered to eliminate false alarms from cologne, deodorant, and cleaning products.',
-    brand: { '@type': 'Brand', name: 'Mistio' },
-    category: 'School Safety Equipment',
-    audience: {
-      '@type': 'EducationalAudience',
-      educationalRole: 'administrator',
+      'Mistio is a battery-powered vape detector for K-12 schools. No wiring, no false alarms, one year battery life.',
+    url: 'https://www.mistio.app/schools',
+    mainEntity: {
+      '@type': 'Product',
+      '@id': 'https://www.mistio.app/schools#product',
+      name: 'Mistio Vape Detector',
+      description:
+        'Battery-powered vape detection sensor for K-12 school bathrooms and locker rooms. Lasts one full year on a single battery. AI-powered to eliminate false alarms from cologne, deodorant, and cleaning products.',
+      brand: { '@type': 'Brand', name: 'Mistio' },
+      category: 'School Safety Equipment',
+      audience: {
+        '@type': 'EducationalAudience',
+        educationalRole: 'administrator',
+      },
+      offers: {
+        '@type': 'Offer',
+        availability: 'https://schema.org/InStock',
+        priceCurrency: 'USD',
+        url: 'https://www.mistio.app/schools',
+      },
+      additionalProperty: [
+        { '@type': 'PropertyValue', name: 'Battery Life', value: '1 year' },
+        { '@type': 'PropertyValue', name: 'Installation Time', value: 'Under 1 minute' },
+        { '@type': 'PropertyValue', name: 'Connectivity', value: 'WiFi' },
+        { '@type': 'PropertyValue', name: 'Cameras or Microphones', value: 'None' },
+        { '@type': 'PropertyValue', name: 'False Alarm Rate', value: 'Near zero (AI-filtered)' },
+      ],
     },
-    offers: {
-      '@type': 'Offer',
-      availability: 'https://schema.org/InStock',
-      priceCurrency: 'USD',
-    },
-    additionalProperty: [
-      { '@type': 'PropertyValue', name: 'Battery Life', value: '1 year' },
-      { '@type': 'PropertyValue', name: 'Installation Time', value: 'Under 1 minute' },
-      { '@type': 'PropertyValue', name: 'Connectivity', value: 'Cellular' },
-      { '@type': 'PropertyValue', name: 'Cameras or Microphones', value: 'None' },
-      { '@type': 'PropertyValue', name: 'False Alarm Rate', value: 'Near zero (AI-filtered)' },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://www.mistio.app' },
+      { '@type': 'ListItem', position: 2, name: 'Schools', item: 'https://www.mistio.app/schools' },
     ],
   },
-};
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: faq.answer,
+      },
+    })),
+  },
+];
 
 export default function SchoolsPage() {
   return (
     <>
       <Navbar />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schoolsJsonLd) }}
-      />
+      {schoolsJsonLd.map((block, i) => (
+        <script
+          key={i}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(block) }}
+        />
+      ))}
       <main className="pt-24">
         {/* Hero */}
         <section className="py-20 px-4 bg-white">
@@ -248,8 +275,8 @@ export default function SchoolsPage() {
                     <td className="px-6 py-4 text-sm text-slate-600">Yes</td>
                   </tr>
                   <tr>
-                    <td className="px-6 py-4 text-sm text-slate-600">WiFi / IT required</td>
-                    <td className="px-6 py-4 text-sm font-medium text-slate-900">No (cellular)</td>
+                    <td className="px-6 py-4 text-sm text-slate-600">Wired network drop required</td>
+                    <td className="px-6 py-4 text-sm font-medium text-slate-900">No (connects to existing WiFi)</td>
                     <td className="px-6 py-4 text-sm text-slate-600">Yes</td>
                   </tr>
                   <tr>
@@ -290,7 +317,7 @@ export default function SchoolsPage() {
                 { location: 'Locker rooms', desc: 'High-traffic, low-supervision areas.' },
                 { location: 'Stairwells', desc: 'Enclosed spaces that trap aerosol.' },
                 { location: 'Hallway alcoves', desc: 'Blind spots between classes.' },
-                { location: 'Portable classrooms', desc: 'No network access needed — cellular works anywhere.' },
+                { location: 'Portable classrooms', desc: 'Connects to WiFi in under a minute, no cable run needed.' },
                 { location: 'Outdoor shelters', desc: 'Covered areas near entrances.' },
               ].map((item) => (
                 <div key={item.location} className="p-5 rounded-xl border border-slate-200">

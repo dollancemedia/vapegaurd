@@ -8,25 +8,27 @@ export const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
 
   const navLinks = [
-    { name: 'Home', href: '#home' },
-    { name: 'Features', href: '#features' },
+    { name: 'Home', href: '/' },
+    { name: 'Features', href: '/#features' },
     { name: 'Schools', href: '/schools' },
     { name: 'Blog', href: '/blog' },
-    { name: 'Contact', href: '#contact' },
+    { name: 'Contact', href: '/#contact' },
   ];
 
   const handleScroll = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-    if (href.startsWith('/')) return;
-    e.preventDefault();
-    const targetId = href.replace('#', '');
+    const hashIndex = href.indexOf('#');
+    if (hashIndex === -1) return;
+
+    const targetId = href.slice(hashIndex + 1);
     const element = document.getElementById(targetId);
-    if (element) {
-      const offset = 80;
-      const elementPosition = element.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - offset;
-      window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
-      setIsOpen(false);
-    }
+    if (!element) return;
+
+    e.preventDefault();
+    const offset = 80;
+    const elementPosition = element.getBoundingClientRect().top;
+    const offsetPosition = elementPosition + window.pageYOffset - offset;
+    window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
+    setIsOpen(false);
   };
 
   return (

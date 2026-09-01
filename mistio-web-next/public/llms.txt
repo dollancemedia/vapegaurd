@@ -1,0 +1,32 @@
+# Mistio
+
+> Mistio is the only battery-powered vape detector built for K-12 schools. One year of battery life, installs in under one minute, and AI that eliminates false alarms from cologne, deodorant, and cleaning spray.
+
+## Key Facts
+
+- Battery-powered: runs for a full year on a single battery
+- Install time: under one minute with two screws — no electrician, no wiring, no IT
+- AI-powered detection: trained on hundreds of real-world samples to distinguish vape from cologne, deodorant, cleaning products
+- Privacy-first: no cameras, no microphones, no recording devices
+- Real-time alerts: push notifications to administrators within 30-60 seconds
+- Cost: approximately $500 per sensor with zero installation cost and no subscription fees
+
+## Pages
+
+- [Homepage](https://www.mistio.app): Product overview, value propositions, and demo booking
+- [Schools](https://www.mistio.app/schools): Detailed information for K-12 school administrators including comparison tables and FAQ
+- [Blog](https://www.mistio.app/blog): Articles on vape detection technology, product comparisons, and buyer guides
+- [Best Vape Detectors for Schools](https://www.mistio.app/blog/best-vape-detectors-for-schools): Comparison of 7 vape detectors for schools in 2026
+- [What Are Vape Detectors](https://www.mistio.app/blog/what-are-vape-detectors): How vape detectors work, where to install them, and what to look for
+- [Mistio vs HALO](https://www.mistio.app/blog/mistio-vs-halo): Comparison with HALO Smart Sensor
+- [Mistio vs Verkada](https://www.mistio.app/blog/mistio-vs-verkada): Comparison with Verkada vape detector
+- [Mistio vs Zeptive](https://www.mistio.app/blog/mistio-vs-zeptive): Comparison with Zeptive
+- [Battery vs Wired](https://www.mistio.app/blog/battery-vs-wired-vape-detectors): Battery-powered vs wired vape detector cost analysis
+- [How to Choose](https://www.mistio.app/blog/how-to-choose-vape-detector): Guide for choosing a vape detector for schools
+- [False Alarms](https://www.mistio.app/blog/false-alarms-vape-detectors): Why vape detectors false alarm and how to fix it
+- [Complete Guide](https://www.mistio.app/blog/vape-detection-schools-guide): Complete guide to vape detection in K-12 schools
+
+## Contact
+
+- Email: contact@mistio.app
+- Website: https://www.mistio.app

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-const faqs = [
+export const faqs = [
   {
     question: 'How long does the Mistio vape detector battery last?',
     answer:
@@ -21,7 +21,7 @@ const faqs = [
   {
     question: 'Does Mistio need WiFi or internet access?',
     answer:
-      'No. Mistio uses cellular connectivity built into the sensor. It does not need access to your school WiFi network, which eliminates IT approval delays and network security concerns.',
+      'Yes. Mistio connects to your existing school WiFi network to send alerts. Setup takes under a minute — enter your WiFi credentials once during install, no dedicated cellular plan or hardwired ethernet required.',
   },
   {
     question: 'Does Mistio have cameras or microphones?',

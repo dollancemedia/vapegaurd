@@ -1,5 +1,6 @@
 'use client';
 
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -22,7 +23,7 @@ function StackedCircularFooter() {
       <div className="container mx-auto px-4 md:px-6">
         <div className="flex flex-col items-center text-center">
           <div className="mb-8 p-4">
-            <img src="/logo.png" alt="Mistio Logo" className="h-32 w-auto brightness-0 invert" />
+            <Image src="/logo.png" alt="Mistio Logo" width={192} height={128} className="h-32 w-auto brightness-0 invert" />
           </div>
 
           <nav className="mb-8 flex flex-wrap justify-center gap-8 text-sm font-medium">
@@ -55,8 +56,8 @@ function StackedCircularFooter() {
             <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500">
               <p>&copy; 2026 Mistio. All rights reserved.</p>
               <div className="flex gap-6">
-                <a href="#" className="hover:text-slate-300">Privacy Policy</a>
-                <a href="#" className="hover:text-slate-300">Terms of Service</a>
+                <a href="/privacy-policy" className="hover:text-slate-300">Privacy Policy</a>
+                <a href="/terms-of-service" className="hover:text-slate-300">Terms of Service</a>
               </div>
             </div>
           </div>
