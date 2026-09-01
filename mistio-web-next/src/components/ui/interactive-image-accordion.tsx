@@ -19,7 +19,7 @@ const accordionItems: AccordionItemData[] = [
       'Staff responds 3 times, then stops responding altogether',
       'The detector becomes expensive wall decor'
     ],
-    imageUrl: 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=2064&auto=format&fit=crop',
+    imageUrl: '/images/false-alarms.jpg',
   },
   {
     id: 2,
@@ -29,7 +29,7 @@ const accordionItems: AccordionItemData[] = [
       'Bathrooms often lack ethernet, requiring new cable runs',
       'Weeks of procurement before a single sensor goes live'
     ],
-    imageUrl: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=2070&auto=format&fit=crop',
+    imageUrl: '/images/installation.jpg',
   },
   {
     id: 3,
@@ -39,7 +39,7 @@ const accordionItems: AccordionItemData[] = [
       'Sensors lose connection and miss real incidents',
       'IT spends hours troubleshooting dead zones'
     ],
-    imageUrl: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=2070&auto=format&fit=crop',
+    imageUrl: '/images/wifi-drops.jpg',
   },
   {
     id: 4,
@@ -49,7 +49,7 @@ const accordionItems: AccordionItemData[] = [
       'Electrician costs for every new sensor location',
       'IT overhead for network configuration and updates'
     ],
-    imageUrl: 'https://images.unsplash.com/photo-1555529902-5261145633bf?q=80&w=2070&auto=format&fit=crop',
+    imageUrl: '/images/hidden-costs.jpg',
   },
   {
     id: 5,
@@ -59,7 +59,7 @@ const accordionItems: AccordionItemData[] = [
       'Without reliable detection, there is zero accountability',
       'The vaping problem grows while the sensor sits ignored'
     ],
-    imageUrl: 'https://images.unsplash.com/photo-1596526131083-e8c633c948d2?q=80&w=1974&auto=format&fit=crop',
+    imageUrl: '/images/undetected.jpg',
   },
 ];
 
@@ -74,7 +74,7 @@ function AccordionItem({ item, isActive, onMouseEnter, onClick }: { item: Accord
         src={item.imageUrl}
         alt={item.title}
         className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 hover:scale-110"
-        onError={(e) => { (e.currentTarget as HTMLImageElement).src = 'https://placehold.co/400x450/0f172a/ffffff?text=Mistio'; }}
+        loading="lazy"
       />
       <div className={`absolute inset-0 bg-mistio-dark transition-opacity duration-300 ${isActive ? 'bg-opacity-60' : 'bg-opacity-40'}`} />
 
