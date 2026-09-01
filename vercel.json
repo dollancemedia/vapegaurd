@@ -1,9 +1,0 @@
-{
-  "framework": null,
-  "buildCommand": "if [ -f backend/package.json ]; then npm --prefix backend install && npm --prefix backend run build && rm -rf dist && cp -r backend/dist dist; else npm install && npm run build; fi",
-  "outputDirectory": "dist",
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.py" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
-}
