@@ -1,5 +1,6 @@
 import { Navbar } from '@/components/Navbar';
-import { FAQ, faqs } from '@/components/FAQ';
+import { FAQ } from '@/components/FAQ';
+import { faqs } from '@/lib/faqs';
 import { ContactSection } from '@/components/ContactSection';
 import { StackedCircularFooter } from '@/components/ui/stacked-circular-footer';
 import Link from 'next/link';
