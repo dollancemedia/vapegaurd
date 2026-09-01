@@ -76,7 +76,7 @@ function AccordionItem({ item, isActive, onMouseEnter, onClick }: { item: Accord
         className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 hover:scale-110"
         loading="lazy"
       />
-      <div className={`absolute inset-0 bg-mistio-dark transition-opacity duration-300 ${isActive ? 'bg-opacity-60' : 'bg-opacity-40'}`} />
+      <div className={`absolute inset-0 transition-opacity duration-300 ${isActive ? 'bg-mistio-dark/60' : 'bg-mistio-dark/40'}`} />
 
       <AnimatePresence mode="wait">
         {isActive && (

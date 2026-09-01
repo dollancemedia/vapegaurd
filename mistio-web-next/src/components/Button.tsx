@@ -14,7 +14,7 @@ export const Button = ({
   ...props
 }: ButtonProps) => {
   const variants = {
-    primary: 'bg-mistio-teal text-white hover:bg-opacity-90 shadow-md',
+    primary: 'bg-mistio-teal text-white hover:bg-mistio-teal/90 shadow-md',
     secondary: 'bg-white text-mistio-dark border border-gray-200 hover:bg-gray-50',
     ghost: 'bg-transparent text-gray-600 hover:text-mistio-teal hover:bg-gray-50',
     gradient: 'bg-gradient-to-r from-[#2DD4BF] to-[#0F766E] text-white shadow-lg hover:opacity-90 hover:shadow-xl transition-all duration-300',
