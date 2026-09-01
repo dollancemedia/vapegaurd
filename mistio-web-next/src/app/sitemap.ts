@@ -3,8 +3,10 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 
+export const dynamic = 'force-static';
+
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://mistio.app';
+  const baseUrl = 'https://www.mistio.app';
 
   const staticPages: MetadataRoute.Sitemap = [
     {
